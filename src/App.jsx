@@ -1,13 +1,45 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Beaker, Thermometer, Droplets, Clock, Info, CheckCircle2, ChevronRight, BookOpen, Plus, ArrowLeft, Beer, Save, Trash2, ChevronDown, ChevronUp, Play, Pause, SkipForward, History, CalendarClock, Scale, Package, Star, MessageSquare, Banknote, Wheat, Leaf, Cloud, RefreshCw, Moon, Sun, User, LogOut, Edit3, FileClock } from 'lucide-react';
+import { 
+  Beaker, Thermometer, Droplets, Clock, Info, CheckCircle2, 
+  ChevronRight, BookOpen, Plus, ArrowLeft, Beer, Save, 
+  Trash2, ChevronDown, ChevronUp, Play, Pause, SkipForward, 
+  History, CalendarClock, Scale, Package, Star, MessageSquare, 
+  Banknote, Wheat, Leaf, Cloud, RefreshCw, Moon, Sun, User, 
+  LogOut, Edit3, FileClock 
+} from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { 
+  getAuth, 
+  signInWithCustomToken, 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut 
+} from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-// --- FIREBASE SETUP ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+// --- FIREBASE SETUP BLINDADO ---
+let firebaseConfig = {
+  apiKey: "AIzaSyCGnXySz-WX7doAbY_p6BPd5umEX5QRHrw",
+  authDomain: "brewmaster-86405.firebaseapp.com",
+  projectId: "brewmaster-86405",
+  storageBucket: "brewmaster-86405.firebasestorage.app",
+  messagingSenderId: "891974847846",
+  appId: "1:891974847846:web:32fb973e8f774f28524ca7",
+  measurementId: "G-PY0EMY8PQV"
+};
+
+try {
+  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    firebaseConfig = JSON.parse(__firebase_config);
+  }
+} catch (e) {
+  console.error("Error leyendo config de firebase", e);
+}
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -67,21 +99,21 @@ const initialRecipes = [
   },
   {
     id: 'doble-hazy-ipa', category: 'Hazy IPA', name: "Nebulosa DDH - Doble Hazy IPA", targetVolume: 20, og: 1.080, fg: 1.018, abv: 8.2,
-    ingredients: { malts: [{ name: "Pilsen", amount: 6.0 }], hops: [{ name: "Galaxy", amount: 60 }], yeast: {name: 'Verdant'}, water: {strike: 25, sparge: 12} },
-    steps: [{ title: "Maceración Densa", desc: "66°C por 60 min", duration: 60 }], modifications: []
+    ingredients: { malts: [{ name: "Malta Pilsen", amount: 6.0, unit: 'kg' }], hops: [{ name: "Galaxy", amount: 60, unit: 'g' }], yeast: {name: 'Verdant', amount: 2, unit: 'sobre'}, water: {strike: 25, sparge: 12} },
+    steps: [{ id: 1, title: "Maceración Densa", desc: "66°C por 60 min", duration: 60 }], modifications: []
   },
   {
     id: 'triple-hazy-ipa', category: 'Hazy IPA', name: "Agujero Negro - Triple Hazy IPA", targetVolume: 20, og: 1.100, fg: 1.022, abv: 10.5,
-    ingredients: { malts: [{ name: "Pale Ale", amount: 8.0 }], hops: [{ name: "Citra", amount: 100 }], yeast: {name: 'Verdant'}, water: {strike: 28, sparge: 10} },
-    steps: [{ title: "Maceración al Límite", desc: "65°C por 75 min", duration: 75 }], modifications: []
+    ingredients: { malts: [{ name: "Malta Pale Ale", amount: 8.0, unit: 'kg' }], hops: [{ name: "Citra", amount: 100, unit: 'g' }], yeast: {name: 'Verdant', amount: 3, unit: 'sobre'}, water: {strike: 28, sparge: 10} },
+    steps: [{ id: 1, title: "Maceración al Límite", desc: "65°C por 75 min", duration: 75 }], modifications: []
   },
   {
     id: 'oatmeal-stout', category: 'Stout', name: "Expreso de Medianoche", targetVolume: 20, og: 1.058, fg: 1.016, abv: 5.5,
-    ingredients: { malts: [{ name: "Malta Chocolate", amount: 0.5 }], hops: [{ name: "Fuggles", amount: 40 }], yeast: {name: 'S-04'}, water: {strike: 18, sparge: 14} },
-    steps: [{ title: "Maceración Oscura", desc: "68°C por 60 min", duration: 60 }], modifications: []
+    ingredients: { malts: [{ name: "Malta Chocolate", amount: 0.5, unit: 'kg' }], hops: [{ name: "Fuggles", amount: 40, unit: 'g' }], yeast: {name: 'S-04', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} },
+    steps: [{ id: 1, title: "Maceración Oscura", desc: "68°C por 60 min", duration: 60 }], modifications: []
   },
-  { id: 'lager-premium', category: 'Lager', name: "Pilsner del Sur", targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, ingredients: { malts: [{name: 'Malta Pilsen', amount: 4.5}], hops: [{name: 'Saaz', amount: 30}], yeast: {name: 'W-34/70'}, water: {strike: 18, sparge: 14} }, steps: [] },
-  { id: 'amber-ale', category: 'Amber Ale', name: "Red Marzen", targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, ingredients: { malts: [{name: 'Malta Pale', amount: 5.0}], hops: [{name: 'Cascade', amount: 20}], yeast: {name: 'US-05'}, water: {strike: 18, sparge: 14} }, steps: [] }
+  { id: 'lager-premium', category: 'Lager', name: "Pilsner del Sur", targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, ingredients: { malts: [{name: 'Malta Pilsen', amount: 4.5, unit: 'kg'}], hops: [{name: 'Saaz', amount: 30, unit: 'g'}], yeast: {name: 'W-34/70', amount: 2, unit: 'sobre'}, water: {strike: 18, sparge: 14} }, steps: [] },
+  { id: 'amber-ale', category: 'Amber Ale', name: "Red Marzen", targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, ingredients: { malts: [{name: 'Malta Pale Ale', amount: 5.0, unit: 'kg'}], hops: [{name: 'Cascade', amount: 20, unit: 'g'}], yeast: {name: 'US-05', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} }, steps: [] }
 ];
 
 const initialInventory = [
@@ -123,8 +155,9 @@ function AutocompleteInput({ value, onChange, placeholder, category, inventory, 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [wrapperRef]);
 
-  const filtered = inventory.filter(i => i.category === category && i.name.toLowerCase().includes(value.toLowerCase()) && value.trim() !== '');
-  const exactMatch = inventory.some(i => i.category === category && i.name.toLowerCase() === value.toLowerCase().trim());
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
+  const filtered = safeInventory.filter(i => i.category === category && (i.name || '').toLowerCase().includes((value || '').toLowerCase()) && (value || '').trim() !== '');
+  const exactMatch = safeInventory.some(i => i.category === category && (i.name || '').toLowerCase() === (value || '').toLowerCase().trim());
 
   return (
     <div className="relative flex-1" ref={wrapperRef}>
@@ -132,11 +165,11 @@ function AutocompleteInput({ value, onChange, placeholder, category, inventory, 
         type="text" 
         placeholder={placeholder} 
         className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" 
-        value={value} 
+        value={value || ''} 
         onChange={e => { onChange(e.target.value); setShowDrop(true); }}
         onFocus={() => setShowDrop(true)}
       />
-      {showDrop && value.trim() !== '' && (
+      {showDrop && (value || '').trim() !== '' && (
         <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl max-h-48 overflow-y-auto">
           {filtered.map(item => (
             <div 
@@ -166,7 +199,6 @@ function AutocompleteInput({ value, onChange, placeholder, category, inventory, 
 function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryItem }) {
   const isEditing = !!initialData;
   
-  // BLINDAJE ANTICAÍDAS: Validamos que cada campo exista antes de mapearlo.
   const [formData, setFormData] = useState(() => {
     if (initialData) {
       const safeMalts = Array.isArray(initialData.ingredients?.malts) ? [...initialData.ingredients.malts] : [{ name: '', amount: 0 }];
@@ -226,9 +258,9 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
       targetVolume: Number(formData.targetVolume),
       og: formData.og, fg: formData.fg, abv: formData.abv,
       waterProfile: {
-        Ca: Number(formData.waterProfile.Ca), Mg: Number(formData.waterProfile.Mg),
-        SO4: Number(formData.waterProfile.SO4), Cl: Number(formData.waterProfile.Cl),
-        HCO3: Number(formData.waterProfile.HCO3)
+        Ca: Number(formData.waterProfile?.Ca || 0), Mg: Number(formData.waterProfile?.Mg || 0),
+        SO4: Number(formData.waterProfile?.SO4 || 0), Cl: Number(formData.waterProfile?.Cl || 0),
+        HCO3: Number(formData.waterProfile?.HCO3 || 0)
       },
       ingredients: {
         malts: formData.malts.filter(m => m.name !== '').map(m => ({...m, unit: 'kg', amount: Number(m.amount)})),
@@ -328,7 +360,7 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
             {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map((ion) => (
               <div key={ion}>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 text-center">{ion}</label>
-                <input type="number" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.waterProfile[ion]} onChange={e => setFormData({ ...formData, waterProfile: { ...formData.waterProfile, [ion]: e.target.value } })} />
+                <input type="number" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.waterProfile?.[ion] || 0} onChange={e => setFormData({ ...formData, waterProfile: { ...formData.waterProfile, [ion]: e.target.value } })} />
               </div>
             ))}
           </div>
@@ -349,12 +381,12 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
   );
 }
 
-// --- APLICACIÓN PRINCIPAL ---
-export default function App() {
+// --- APLICACIÓN PRINCIPAL (Capa Lógica) ---
+function MainApp() {
   const [user, setUser] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
 
   const [recipes, setRecipes] = useState([]);
   const [inventory, setInventory] = useState([]);
@@ -384,9 +416,9 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
+        await signInWithCustomToken(auth, __initial_auth_token).catch(() => signInAnonymously(auth));
       } else {
-        await signInAnonymously(auth);
+        await signInAnonymously(auth).catch(e => console.error("Anonymous auth failed", e));
       }
     };
     initAuth();
@@ -402,9 +434,9 @@ export default function App() {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setRecipes(data.recipes && data.recipes.length > 0 ? data.recipes : initialRecipes);
-        setInventory(data.inventory && data.inventory.length > 0 ? data.inventory : initialInventory);
-        setHistory(data.history || []);
+        setRecipes(Array.isArray(data.recipes) && data.recipes.length > 0 ? data.recipes : initialRecipes);
+        setInventory(Array.isArray(data.inventory) ? data.inventory : initialInventory);
+        setHistory(Array.isArray(data.history) ? data.history : []);
       } else {
         setDoc(docRef, { recipes: initialRecipes, inventory: initialInventory, history: [] });
         setRecipes(initialRecipes);
@@ -412,7 +444,10 @@ export default function App() {
         setHistory([]);
       }
       setIsDataLoaded(true);
-    }, (error) => console.error("Error cargando base de datos:", error));
+    }, (error) => {
+      console.error("Error cargando base de datos:", error);
+      setIsDataLoaded(true); // Evitar quedarse en loading si Firebase falla por permisos/rutas
+    });
     
     return () => unsubscribe();
   }, [user]);
@@ -472,6 +507,7 @@ export default function App() {
   }, [brewState.isRunning, brewState.timeLeft]);
 
   const formatTime = (seconds) => {
+    if (isNaN(seconds) || seconds < 0) return "00:00";
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
@@ -480,20 +516,20 @@ export default function App() {
   const calculateCostForRecipe = (recipe, targetVolume) => {
       let neto = 0;
       (recipe.ingredients?.malts || []).forEach(m => {
-        const item = inventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === m.name.toLowerCase() || m.name.toLowerCase().includes(i.name.toLowerCase())));
-        neto += m.amount * (item ? item.price : defaultPrices.malta);
+        const item = inventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === (m.name || '').toLowerCase() || (m.name || '').toLowerCase().includes(i.name.toLowerCase())));
+        neto += (Number(m.amount) || 0) * (item ? Number(item.price) : defaultPrices.malta);
       });
       (recipe.ingredients?.hops || []).forEach(h => {
-        const item = inventory.find(i => i.category === 'Lúpulo' && h.name.toLowerCase().includes(i.name.toLowerCase()));
-        neto += h.amount * (item ? item.price : defaultPrices.lupulo);
+        const item = inventory.find(i => i.category === 'Lúpulo' && (h.name || '').toLowerCase().includes(i.name.toLowerCase()));
+        neto += (Number(h.amount) || 0) * (item ? Number(item.price) : defaultPrices.lupulo);
       });
       
       const yeastObj = recipe.ingredients?.yeast;
       if (yeastObj) {
-         const yeastName = typeof yeastObj === 'string' ? yeastObj : yeastObj.name;
-         const yeastAmount = typeof yeastObj === 'string' ? 1 : (yeastObj.amount || 1);
+         const yeastName = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
+         const yeastAmount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
          const yItem = inventory.find(i => i.category === 'Levadura' && yeastName.toLowerCase().includes(i.name.toLowerCase()));
-         neto += yeastAmount * (yItem ? yItem.price : defaultPrices.levadura);
+         neto += yeastAmount * (yItem ? Number(yItem.price) : defaultPrices.levadura);
       }
       return neto + (neto * 0.19);
   };
@@ -506,11 +542,11 @@ export default function App() {
 
   if (!isDataLoaded) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <div className="text-center text-amber-600 animate-pulse">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center text-amber-500 animate-pulse">
           <Beaker size={64} className="mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-slate-800">Conectando a la Nube...</h2>
-          <p className="text-slate-500 font-bold">Cargando tu cervecería ☁️</p>
+          <h2 className="text-2xl font-black">Conectando a la Nube...</h2>
+          <p className="font-bold text-sm mt-2 tracking-widest uppercase">Cargando tu cervecería</p>
         </div>
       </div>
     );
@@ -554,9 +590,11 @@ export default function App() {
 
   // 1. Vista de Lista (DASHBOARD)
   const renderList = () => {
-    const grouped = recipes.reduce((acc, recipe) => {
-      if (!acc[recipe.category]) acc[recipe.category] = [];
-      acc[recipe.category].push(recipe);
+    const safeRecipes = Array.isArray(recipes) ? recipes : [];
+    const grouped = safeRecipes.reduce((acc, recipe) => {
+      const cat = recipe.category || 'Sin Categoría';
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(recipe);
       return acc;
     }, {});
 
@@ -564,13 +602,13 @@ export default function App() {
       <div className="space-y-8 animate-fadeIn">
         <div className="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 gap-4">
           <div className="flex items-center">
-            <p className="text-slate-600 dark:text-slate-400 font-medium">Tienes <span className="text-amber-600 font-bold">{recipes.length} recetas</span> guardadas.</p>
+            <p className="text-slate-600 dark:text-slate-400 font-medium">Tienes <span className="text-amber-600 font-bold">{safeRecipes.length} recetas</span> guardadas.</p>
             <button 
               onClick={() => {
-                const existingIds = recipes.map(r => r.id);
+                const existingIds = safeRecipes.map(r => r.id);
                 const missing = initialRecipes.filter(r => !existingIds.includes(r.id));
                 if(missing.length > 0) {
-                    const updated = [...recipes, ...missing];
+                    const updated = [...safeRecipes, ...missing];
                     setRecipes(updated);
                     updateCloudData({ recipes: updated });
                 }
@@ -602,7 +640,7 @@ export default function App() {
               </h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {grouped[category].map(recipe => {
-                  const recipeHistory = history.filter(h => h.recipeName === recipe.name);
+                  const recipeHistory = Array.isArray(history) ? history.filter(h => h.recipeName === recipe.name) : [];
                   const brewCount = recipeHistory.length;
                   const ratedHistory = recipeHistory.filter(h => h.tasting && h.tasting.rating > 0);
                   const avgRating = ratedHistory.length > 0 
@@ -614,7 +652,7 @@ export default function App() {
                       key={recipe.id} 
                       onClick={() => {
                         setSelectedRecipe(recipe);
-                        setTargetVol(recipe.targetVolume);
+                        setTargetVol(recipe.targetVolume || 20);
                         setCompletedSteps([]);
                         setActiveTab('recipe');
                         setView('recipe');
@@ -623,7 +661,7 @@ export default function App() {
                     >
                       <div>
                         <div className="flex justify-between items-start mb-3">
-                          <span className={`inline-block px-3 py-1 rounded text-xs font-bold ${theme.badge}`}>{recipe.category}</span>
+                          <span className={`inline-block px-3 py-1 rounded text-xs font-bold ${theme.badge}`}>{recipe.category || 'Sin Estilo'}</span>
                           
                           {brewCount > 0 && (
                             <div className="flex items-center gap-2 text-xs font-bold">
@@ -639,12 +677,12 @@ export default function App() {
                           )}
                         </div>
                         
-                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors">{recipe.name}</h3>
+                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors">{recipe.name || 'Sin Nombre'}</h3>
                       </div>
                       <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4">
-                        <span className="flex items-center gap-1"><Droplets size={16} className="text-blue-500"/> {recipe.targetVolume}L</span>
-                        <span className="flex items-center gap-1"><Thermometer size={16} className="text-red-500"/> {recipe.abv}%</span>
-                        <span className="flex items-center gap-1"><Clock size={16} className="text-slate-400"/> DO: {recipe.og}</span>
+                        <span className="flex items-center gap-1"><Droplets size={16} className="text-blue-500"/> {recipe.targetVolume || 0}L</span>
+                        <span className="flex items-center gap-1"><Thermometer size={16} className="text-red-500"/> {recipe.abv || 0}%</span>
+                        <span className="flex items-center gap-1"><Clock size={16} className="text-slate-400"/> DO: {recipe.og || '-'}</span>
                       </div>
                     </div>
                   );
@@ -677,7 +715,7 @@ export default function App() {
     const updateInvItem = (id, field, value) => {
       const newInv = [...inventory];
       const index = newInv.findIndex(inv => inv.id === id);
-      newInv[index][field] = Number(value);
+      newInv[index][field] = Number(value) || 0;
       setInventory(newInv);
       updateCloudData({ inventory: newInv });
     }
@@ -737,6 +775,8 @@ export default function App() {
 
         {['Malta', 'Lúpulo', 'Levadura'].map(category => {
            const catIcon = category === 'Malta' ? <Wheat size={18} className="text-amber-500"/> : category === 'Lúpulo' ? <Leaf size={18} className="text-green-500"/> : <Beaker size={18} className="text-blue-500"/>;
+           const categoryItems = Array.isArray(inventory) ? inventory.filter(i => i.category === category) : [];
+           
            return (
             <div key={category} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden mb-8">
               <div className="bg-gray-50 dark:bg-slate-800/50 px-6 py-4 border-b dark:border-slate-800 font-black text-slate-800 dark:text-white text-lg flex items-center gap-2">
@@ -753,7 +793,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-                    {inventory.filter(i => i.category === category).map((item) => (
+                    {categoryItems.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 group transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.name}</td>
                         <td className="px-6 py-4">
@@ -791,9 +831,9 @@ export default function App() {
     if (!selectedRecipe) return null;
 
     const theme = getThemeForCategory(selectedRecipe.category);
-    const scaleFactor = targetVol / selectedRecipe.targetVolume;
+    const scaleFactor = (targetVol || 1) / (selectedRecipe.targetVolume || 1);
     
-    // SAFE PARSING DE RECETA (Anticaídas)
+    // SAFE PARSING DE RECETA
     const safeMalts = Array.isArray(selectedRecipe.ingredients?.malts) ? selectedRecipe.ingredients.malts : [];
     const safeHops = Array.isArray(selectedRecipe.ingredients?.hops) ? selectedRecipe.ingredients.hops : [];
     const safeYeast = typeof selectedRecipe.ingredients?.yeast === 'string' 
@@ -803,12 +843,12 @@ export default function App() {
     const scaledRecipe = {
       ...selectedRecipe,
       ingredients: {
-        malts: safeMalts.map(m => ({ ...m, amount: (m.amount * scaleFactor).toFixed(2) })),
-        hops: safeHops.map(h => ({ ...h, amount: Math.round(h.amount * scaleFactor) })),
+        malts: safeMalts.map(m => ({ ...m, amount: ((Number(m.amount) || 0) * scaleFactor).toFixed(2) })),
+        hops: safeHops.map(h => ({ ...h, amount: Math.round((Number(h.amount) || 0) * scaleFactor) })),
         yeast: safeYeast,
         water: {
-          strike: ((selectedRecipe.ingredients?.water?.strike || 15) * scaleFactor).toFixed(1),
-          sparge: ((selectedRecipe.ingredients?.water?.sparge || 15) * scaleFactor).toFixed(1)
+          strike: ((Number(selectedRecipe.ingredients?.water?.strike) || 15) * scaleFactor).toFixed(1),
+          sparge: ((Number(selectedRecipe.ingredients?.water?.sparge) || 15) * scaleFactor).toFixed(1)
         }
       }
     };
@@ -816,19 +856,19 @@ export default function App() {
     const calculateCost = () => {
       let neto = 0; let allFound = true;
       scaledRecipe.ingredients.malts.forEach(m => {
-        const item = inventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === m.name.toLowerCase() || m.name.toLowerCase().includes(i.name.toLowerCase())));
-        if (item) neto += m.amount * item.price; else { neto += m.amount * defaultPrices.malta; allFound = false; }
+        const item = inventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === (m.name || '').toLowerCase() || (m.name || '').toLowerCase().includes(i.name.toLowerCase())));
+        if (item) neto += (Number(m.amount) || 0) * Number(item.price); else { neto += (Number(m.amount) || 0) * defaultPrices.malta; allFound = false; }
       });
       scaledRecipe.ingredients.hops.forEach(h => {
-        const item = inventory.find(i => i.category === 'Lúpulo' && h.name.toLowerCase().includes(i.name.toLowerCase()));
-        if (item) neto += h.amount * item.price; else { neto += h.amount * defaultPrices.lupulo; allFound = false; }
+        const item = inventory.find(i => i.category === 'Lúpulo' && (h.name || '').toLowerCase().includes(i.name.toLowerCase()));
+        if (item) neto += (Number(h.amount) || 0) * Number(item.price); else { neto += (Number(h.amount) || 0) * defaultPrices.lupulo; allFound = false; }
       });
       
-      const yItem = inventory.find(i => i.category === 'Levadura' && scaledRecipe.ingredients.yeast.name.toLowerCase().includes(i.name.toLowerCase()));
-      if (yItem) neto += scaledRecipe.ingredients.yeast.amount * yItem.price; else { neto += scaledRecipe.ingredients.yeast.amount * defaultPrices.levadura; allFound = false; }
+      const yItem = inventory.find(i => i.category === 'Levadura' && (scaledRecipe.ingredients.yeast.name || '').toLowerCase().includes(i.name.toLowerCase()));
+      if (yItem) neto += (Number(scaledRecipe.ingredients.yeast.amount) || 0) * Number(yItem.price); else { neto += (Number(scaledRecipe.ingredients.yeast.amount) || 0) * defaultPrices.levadura; allFound = false; }
       
       const iva = neto * 0.19; const totalConIva = neto + iva;
-      return { neto, iva, totalConIva, perLiter: totalConIva / targetVol, allFound };
+      return { neto, iva, totalConIva, perLiter: totalConIva / (targetVol || 1), allFound };
     };
     const costInfo = calculateCost();
 
@@ -839,8 +879,8 @@ export default function App() {
       if (totalWaterLiters <= 0) return null;
 
       const diff = {
-        Ca: Math.max(0, target.Ca - baseWater.Ca), Mg: Math.max(0, target.Mg - baseWater.Mg),
-        SO4: Math.max(0, target.SO4 - baseWater.SO4), Cl: Math.max(0, target.Cl - baseWater.Cl)
+        Ca: Math.max(0, (Number(target.Ca) || 0) - baseWater.Ca), Mg: Math.max(0, (Number(target.Mg) || 0) - baseWater.Mg),
+        SO4: Math.max(0, (Number(target.SO4) || 0) - baseWater.SO4), Cl: Math.max(0, (Number(target.Cl) || 0) - baseWater.Cl)
       };
 
       const epsomGrams = (diff.Mg * totalWaterLiters) / 99; const epsomSO4Contributed = (epsomGrams * 390) / totalWaterLiters || 0;
@@ -852,7 +892,7 @@ export default function App() {
         Ca: Math.round(baseWater.Ca + cacl2CaContributed + gypsumCaContributed), Mg: Math.round(baseWater.Mg + diff.Mg),
         SO4: Math.round(baseWater.SO4 + epsomSO4Contributed + remainingSO4), Cl: Math.round(baseWater.Cl + diff.Cl)
       };
-      return { totalWater: totalWaterLiters, gypsum: gypsumGrams.toFixed(1), cacl2: cacl2Grams.toFixed(1), epsom: epsomGrams.toFixed(1), finalEstimates };
+      return { totalWater: totalWaterLiters.toFixed(1), gypsum: gypsumGrams.toFixed(1), cacl2: cacl2Grams.toFixed(1), epsom: epsomGrams.toFixed(1), finalEstimates };
     };
     const saltAdditions = calculateSalts();
 
@@ -874,9 +914,9 @@ export default function App() {
         <div className={`${theme.header} text-white p-6 md:p-10 rounded-t-3xl shadow-lg flex flex-col md:flex-row justify-between items-start md:items-end relative overflow-hidden`}>
           <div className="relative z-10">
             <span className="bg-white/20 px-4 py-1.5 rounded-full text-sm font-black tracking-wider uppercase mb-4 inline-block shadow-sm backdrop-blur-md">
-              {scaledRecipe.category}
+              {scaledRecipe.category || 'Sin Categoría'}
             </span>
-            <h2 className="text-4xl md:text-5xl font-black mb-3 leading-tight drop-shadow-md">{scaledRecipe.name}</h2>
+            <h2 className="text-4xl md:text-5xl font-black mb-3 leading-tight drop-shadow-md">{scaledRecipe.name || 'Receta Sin Nombre'}</h2>
             <div className="flex flex-wrap gap-3 mt-5 font-bold text-white/90">
               <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10"><Thermometer size={18}/> ABV: {scaledRecipe.abv}%</span>
               <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10"><Clock size={18}/> DO: {scaledRecipe.og}</span>
@@ -890,9 +930,9 @@ export default function App() {
               <input 
                 type="number" 
                 value={targetVol}
-                onChange={(e) => setTargetVol(Number(e.target.value))}
+                onChange={(e) => setTargetVol(Number(e.target.value) || 0)}
                 className="w-24 p-2 bg-white text-slate-800 rounded-xl text-center focus:ring-4 focus:ring-white/50 outline-none text-2xl font-black shadow-inner"
-                min="10" max="40"
+                min="1"
               />
               <span className="text-white font-black text-2xl">L</span>
             </div>
@@ -913,7 +953,7 @@ export default function App() {
           <button onClick={() => setActiveTab('tips')} className={`flex-1 min-w-[100px] py-4 font-bold text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'tips' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
             <Info size={18} /> Tips
           </button>
-          {(scaledRecipe.modifications && scaledRecipe.modifications.length > 0) && (
+          {(Array.isArray(scaledRecipe.modifications) && scaledRecipe.modifications.length > 0) && (
             <button onClick={() => setActiveTab('history')} className={`flex-1 min-w-[100px] py-4 font-bold text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'history' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
               <FileClock size={18} /> Cambios
             </button>
@@ -969,8 +1009,8 @@ export default function App() {
                   <ul className="space-y-4">
                     {scaledRecipe.ingredients.malts.map((malt, idx) => (
                       <li key={idx} className="flex justify-between items-center text-base border-b border-amber-100 dark:border-amber-900/30 pb-3">
-                        <span className="font-bold text-slate-700 dark:text-slate-300">{malt.name}</span>
-                        <span className="bg-white dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-3 py-1 rounded-lg font-black shadow-sm">{malt.amount} {malt.unit}</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{malt.name || 'Malta'}</span>
+                        <span className="bg-white dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-3 py-1 rounded-lg font-black shadow-sm">{malt.amount} {malt.unit || 'kg'}</span>
                       </li>
                     ))}
                     <li className="flex justify-between items-center pt-3 mt-2 border-t border-dashed border-amber-300 dark:border-amber-800/50">
@@ -992,12 +1032,14 @@ export default function App() {
                     {scaledRecipe.ingredients.hops.map((hop, idx) => (
                       <li key={idx} className="flex flex-col border-b border-green-100 dark:border-green-900/30 pb-3 last:border-0">
                         <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-slate-800 dark:text-slate-200 text-lg">{hop.name}</span>
-                          <span className="bg-white dark:bg-slate-800 border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-3 py-1 rounded-lg font-black shadow-sm">{hop.amount} {hop.unit}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 text-lg">{hop.name || 'Lúpulo'}</span>
+                          <span className="bg-white dark:bg-slate-800 border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-3 py-1 rounded-lg font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
                         </div>
-                        <span className="text-green-700 dark:text-green-300 font-bold text-xs flex items-center gap-1.5 bg-green-100/50 dark:bg-green-900/40 w-fit px-2.5 py-1 rounded-md border border-green-200/50 dark:border-green-800">
-                          <Clock size={14}/> {hop.time} <span className="mx-1">•</span> <span className="uppercase tracking-wider">{hop.stage}</span>
-                        </span>
+                        {hop.time && (
+                          <span className="text-green-700 dark:text-green-300 font-bold text-xs flex items-center gap-1.5 bg-green-100/50 dark:bg-green-900/40 w-fit px-2.5 py-1 rounded-md border border-green-200/50 dark:border-green-800">
+                            <Clock size={14}/> {hop.time} <span className="mx-1">•</span> <span className="uppercase tracking-wider">{hop.stage || 'Hervor'}</span>
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -1010,7 +1052,7 @@ export default function App() {
                  </div>
                  <div>
                    <h4 className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs mb-1">Levadura Recomendada</h4>
-                   <p className="text-slate-800 dark:text-white font-black text-2xl">{scaledRecipe.ingredients.yeast.amount} <span className="text-lg font-bold text-slate-500">{scaledRecipe.ingredients.yeast.unit}</span> de <span className="text-amber-600 dark:text-amber-500">{scaledRecipe.ingredients.yeast.name}</span></p>
+                   <p className="text-slate-800 dark:text-white font-black text-2xl">{scaledRecipe.ingredients.yeast.amount} <span className="text-lg font-bold text-slate-500">{scaledRecipe.ingredients.yeast.unit || 'sobre'}</span> de <span className="text-amber-600 dark:text-amber-500">{scaledRecipe.ingredients.yeast.name || 'Genérica'}</span></p>
                  </div>
               </div>
             </div>
@@ -1026,7 +1068,7 @@ export default function App() {
                 </div>
                 <button 
                   onClick={() => {
-                    const firstStep = scaledRecipe.steps[0] || {};
+                    const firstStep = (scaledRecipe.steps && scaledRecipe.steps[0]) ? scaledRecipe.steps[0] : {};
                     setBrewState({ stepIdx: 0, timeLeft: firstStep.duration ? firstStep.duration * 60 : 0, isRunning: false, currentScaledRecipe: scaledRecipe });
                     setView('brew');
                   }}
@@ -1036,49 +1078,50 @@ export default function App() {
                 </button>
               </div>
 
-              {scaledRecipe.steps?.map((step) => (
-                <div key={step.id} className="flex flex-col group">
+              {(scaledRecipe.steps || []).map((step, idx) => (
+                <div key={step.id || idx} className="flex flex-col group">
                   <div 
-                    onClick={() => toggleStep(step.id)}
-                    className={`p-6 rounded-t-2xl md:rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-5 ${completedSteps.includes(step.id) ? 'border-green-400 bg-green-50/50 dark:bg-green-900/20 opacity-70' : 'border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:border-amber-300 dark:hover:border-amber-600'} ${expandedStep === step.id ? 'rounded-b-none border-b-0' : ''}`}
+                    onClick={() => toggleStep(step.id || idx)}
+                    className={`p-6 rounded-t-2xl md:rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-5 ${completedSteps.includes(step.id || idx) ? 'border-green-400 bg-green-50/50 dark:bg-green-900/20 opacity-70' : 'border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:border-amber-300 dark:hover:border-amber-600'} ${expandedStep === (step.id || idx) ? 'rounded-b-none border-b-0' : ''}`}
                   >
-                    <button className={`mt-1 rounded-full flex-shrink-0 transition-colors ${completedSteps.includes(step.id) ? 'text-green-500' : 'text-gray-300 dark:text-slate-600 group-hover:text-amber-400'}`}>
-                      <CheckCircle2 size={32} className={completedSteps.includes(step.id) ? 'fill-green-100 dark:fill-green-900' : ''} />
+                    <button className={`mt-1 rounded-full flex-shrink-0 transition-colors ${completedSteps.includes(step.id || idx) ? 'text-green-500' : 'text-gray-300 dark:text-slate-600 group-hover:text-amber-400'}`}>
+                      <CheckCircle2 size={32} className={completedSteps.includes(step.id || idx) ? 'fill-green-100 dark:fill-green-900' : ''} />
                     </button>
                     <div className="flex-1">
-                      <h3 className={`font-black text-xl ${completedSteps.includes(step.id) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-slate-800 dark:text-white'}`}>
-                        {step.id}. {step.title}
+                      <h3 className={`font-black text-xl ${completedSteps.includes(step.id || idx) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-slate-800 dark:text-white'}`}>
+                        {idx + 1}. {step.title || 'Paso de Cocción'}
                       </h3>
-                      <p className={`text-base mt-2 leading-relaxed font-medium ${completedSteps.includes(step.id) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
-                        {step.desc}
+                      <p className={`text-base mt-2 leading-relaxed font-medium ${completedSteps.includes(step.id || idx) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
+                        {step.desc || ''}
                       </p>
                     </div>
-                    {step.details && (
+                    {step.details && typeof step.details === 'string' && (
                       <button 
-                        onClick={(e) => toggleStepDetails(e, step.id)}
+                        onClick={(e) => toggleStepDetails(e, step.id || idx)}
                         className="ml-auto text-gray-400 hover:text-amber-600 p-2 flex flex-col items-center justify-center transition-colors bg-gray-50 dark:bg-slate-800 rounded-lg"
                         title="Ver detalle del paso"
                       >
-                        {expandedStep === step.id ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+                        {expandedStep === (step.id || idx) ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
                         <span className="text-[10px] font-bold mt-1 uppercase tracking-wider">Detalle</span>
                       </button>
                     )}
                   </div>
                   
-                  {expandedStep === step.id && step.details && (
+                  {expandedStep === (step.id || idx) && step.details && typeof step.details === 'string' && (
                     <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-2 border-t-0 border-slate-200 dark:border-slate-700 rounded-b-2xl text-slate-800 dark:text-slate-200 animate-fadeIn text-base shadow-inner">
                       <h4 className="font-black flex items-center gap-2 mb-4 text-amber-700 dark:text-amber-500"><Info size={20}/> Guía Técnica:</h4>
                       <div className="pl-6 space-y-3 border-l-4 border-amber-300 dark:border-amber-700 font-medium">
-                         {step.details.split(/(\d+\.\s)/).filter(Boolean).reduce((acc, curr, i, arr) => {
-                            if (i % 2 === 0) acc.push(<p key={i} className="pl-3"><strong>{curr}</strong>{arr[i+1]}</p>);
-                            return acc;
-                         }, [])}
-                         {!step.details.match(/\d+\.\s/) && <p className="pl-3">{step.details}</p>}
+                         <p className="pl-3">{step.details}</p>
                       </div>
                     </div>
                   )}
                 </div>
               ))}
+              {(!scaledRecipe.steps || scaledRecipe.steps.length === 0) && (
+                <div className="p-8 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
+                  <p className="font-bold italic">No hay pasos detallados para esta receta.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -1101,12 +1144,12 @@ export default function App() {
                     {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
                       <div key={ion} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col">
                         <span className="block font-black text-slate-400 text-xs uppercase tracking-wider mb-1">{ion}</span>
-                        <span className="text-blue-600 dark:text-blue-400 font-black text-2xl">{scaledRecipe.waterProfile[ion]}</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-black text-2xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white p-6 rounded-xl text-center text-slate-500 font-bold border border-blue-100 relative z-10">
+                  <div className="bg-white dark:bg-slate-800 p-6 rounded-xl text-center text-slate-500 font-bold border border-blue-100 dark:border-slate-700 relative z-10">
                     No hay un perfil estricto para esta receta.
                   </div>
                 )}
@@ -1120,8 +1163,8 @@ export default function App() {
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">{ion}</label>
                         <input 
                           type="number" 
-                          value={baseWater[ion]} 
-                          onChange={(e) => setBaseWater({...baseWater, [ion]: Number(e.target.value)})}
+                          value={baseWater[ion] || 0} 
+                          onChange={(e) => setBaseWater({...baseWater, [ion]: Number(e.target.value) || 0})}
                           className="w-full p-4 border border-gray-200 dark:border-slate-700 rounded-2xl text-center font-black text-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 dark:bg-slate-800 text-slate-800 dark:text-white transition-colors"
                         />
                       </div>
@@ -1129,7 +1172,7 @@ export default function App() {
                  </div>
               </div>
 
-              {saltAdditions && (
+              {saltAdditions && scaledRecipe.waterProfile && (
                 <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-6 md:p-10 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-md">
                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                      <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl flex items-center gap-3">
@@ -1165,7 +1208,7 @@ export default function App() {
                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-amber-200 dark:border-slate-700 shadow-sm">
                      <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-4 text-center">Perfil Final Estimado</h5>
                      <div className="flex justify-around text-lg font-bold">
-                       <span className="text-slate-500">Ca: <span className={saltAdditions.finalEstimates.Ca >= scaledRecipe.waterProfile.Ca ? 'text-green-600' : 'text-amber-600'}>{saltAdditions.finalEstimates.Ca}</span></span>
+                       <span className="text-slate-500">Ca: <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-600' : 'text-amber-600'}>{saltAdditions.finalEstimates.Ca}</span></span>
                        <span className="text-slate-500">Mg: <span className="text-green-600">{saltAdditions.finalEstimates.Mg}</span></span>
                        <span className="text-slate-500">SO4: <span className="text-green-600">{saltAdditions.finalEstimates.SO4}</span></span>
                        <span className="text-slate-500">Cl: <span className="text-green-600">{saltAdditions.finalEstimates.Cl}</span></span>
@@ -1179,13 +1222,13 @@ export default function App() {
           {/* TAB: TIPS */}
           {activeTab === 'tips' && (
             <div className="space-y-6 animate-fadeIn">
-              {scaledRecipe.tips?.map((tip, idx) => (
+              {Array.isArray(scaledRecipe.tips) && scaledRecipe.tips.map((tip, idx) => (
                 <div key={idx} className="bg-slate-50 dark:bg-slate-800 border-l-4 border-amber-500 shadow-sm p-6 rounded-r-2xl">
                   <h3 className="text-xl font-black text-slate-800 dark:text-white mb-3 flex items-center gap-2">
-                    💡 {tip.title}
+                    💡 {tip.title || 'Tip'}
                   </h3>
                   <p className="text-slate-600 dark:text-slate-300 text-base leading-relaxed font-medium">
-                    {tip.desc}
+                    {tip.desc || ''}
                   </p>
                 </div>
               ))}
@@ -1200,7 +1243,7 @@ export default function App() {
             <div className="space-y-4 animate-fadeIn">
               <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-6 border-b border-gray-200 dark:border-slate-700 pb-3">Historial de Modificaciones</h3>
               <div className="border-l-4 border-slate-300 dark:border-slate-600 ml-4 pl-6 space-y-8">
-                {scaledRecipe.modifications?.map((mod, idx) => (
+                {Array.isArray(scaledRecipe.modifications) && scaledRecipe.modifications.map((mod, idx) => (
                   <div key={idx} className="relative">
                     <div className="absolute -left-[37px] top-1 bg-white dark:bg-slate-900 border-4 border-slate-300 dark:border-slate-600 w-5 h-5 rounded-full"></div>
                     <span className="text-xs font-bold text-slate-400 tracking-wider uppercase block mb-1">{mod.date}</span>
@@ -1220,8 +1263,12 @@ export default function App() {
   const renderBrewSession = () => {
     if (!brewState.currentScaledRecipe) return null;
     const recipe = brewState.currentScaledRecipe;
-    const step = recipe.steps[brewState.stepIdx];
-    const isLastStep = brewState.stepIdx === recipe.steps.length - 1;
+    const stepsArray = Array.isArray(recipe.steps) && recipe.steps.length > 0 ? recipe.steps : [{ title: "Cocción Genérica", desc: "Sigue tu instinto cervecero.", duration: 60 }];
+    
+    // Protection against out-of-bounds index
+    const safeStepIdx = Math.min(brewState.stepIdx, stepsArray.length - 1);
+    const step = stepsArray[safeStepIdx];
+    const isLastStep = safeStepIdx === stepsArray.length - 1;
 
     const handleNextStep = () => {
       if (isLastStep) {
@@ -1229,30 +1276,30 @@ export default function App() {
 
         let currentInventory = JSON.parse(JSON.stringify(inventory));
         (recipe.ingredients?.malts || []).forEach(m => {
-            const item = currentInventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === m.name.toLowerCase() || m.name.toLowerCase().includes(i.name.toLowerCase())));
-            if (item) item.stock = Math.max(0, item.stock - Number(m.amount));
+            const item = currentInventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === (m.name || '').toLowerCase() || (m.name || '').toLowerCase().includes(i.name.toLowerCase())));
+            if (item) item.stock = Math.max(0, Number(item.stock) - (Number(m.amount) || 0));
         });
         (recipe.ingredients?.hops || []).forEach(h => {
-            const item = currentInventory.find(i => i.category === 'Lúpulo' && h.name.toLowerCase().includes(i.name.toLowerCase()));
-            if (item) item.stock = Math.max(0, item.stock - Number(h.amount));
+            const item = currentInventory.find(i => i.category === 'Lúpulo' && (h.name || '').toLowerCase().includes(i.name.toLowerCase()));
+            if (item) item.stock = Math.max(0, Number(item.stock) - (Number(h.amount) || 0));
         });
         const yeastObj = recipe.ingredients?.yeast;
         if (yeastObj) {
-            const yeastName = typeof yeastObj === 'string' ? yeastObj : yeastObj.name;
-            const yeastAmount = typeof yeastObj === 'string' ? 1 : (yeastObj.amount || 1);
+            const yeastName = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
+            const yeastAmount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
             const yItem = currentInventory.find(i => i.category === 'Levadura' && yeastName.toLowerCase().includes(i.name.toLowerCase()));
-            if (yItem) yItem.stock = Math.max(0, yItem.stock - Number(yeastAmount));
+            if (yItem) yItem.stock = Math.max(0, Number(yItem.stock) - yeastAmount);
         }
 
         const newHistoryItem = {
           id: 'hist-' + Date.now(),
-          recipeName: recipe.name,
+          recipeName: recipe.name || 'Sin Nombre',
           date: new Date().toLocaleDateString(),
-          volume: recipe.targetVolume,
-          og: recipe.og,
-          fg: recipe.fg,
-          abv: recipe.abv,
-          totalCost: totalCost,
+          volume: recipe.targetVolume || targetVol || 0,
+          og: recipe.og || '-',
+          fg: recipe.fg || '-',
+          abv: recipe.abv || '-',
+          totalCost: totalCost || 0,
           notes: "Producción completada. Insumos descontados."
         };
         
@@ -1264,11 +1311,11 @@ export default function App() {
         setView('history');
 
       } else {
-        const nextStep = recipe.steps[brewState.stepIdx + 1];
+        const nextStep = stepsArray[safeStepIdx + 1];
         setBrewState({
           ...brewState,
-          stepIdx: brewState.stepIdx + 1,
-          timeLeft: nextStep.duration ? nextStep.duration * 60 : 0,
+          stepIdx: safeStepIdx + 1,
+          timeLeft: nextStep.duration ? Number(nextStep.duration) * 60 : 0,
           isRunning: false
         });
       }
@@ -1280,18 +1327,18 @@ export default function App() {
 
         <div className="flex justify-between items-center border-b border-slate-700/50 pb-6 mb-8 relative z-10">
           <h2 className="text-2xl md:text-3xl font-black flex items-center gap-3 text-amber-500">
-            <Beaker size={32} /> Cocinando: <span className="text-white drop-shadow-sm">{recipe.name}</span>
+            <Beaker size={32} /> Cocinando: <span className="text-white drop-shadow-sm">{recipe.name || 'Lote'}</span>
           </h2>
           <span className="bg-slate-800 text-slate-300 px-4 py-2 rounded-full font-black text-sm tracking-wider uppercase border border-slate-700 shadow-inner">
-            Paso {brewState.stepIdx + 1} de {recipe.steps.length}
+            Paso {safeStepIdx + 1} de {stepsArray.length}
           </span>
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center text-center space-y-8 relative z-10">
-          <h3 className="text-4xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-md">{step?.title}</h3>
-          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl font-medium leading-relaxed">{step?.desc}</p>
+          <h3 className="text-4xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-md">{step?.title || 'Proceso'}</h3>
+          <p className="text-xl md:text-2xl text-slate-300 max-w-3xl font-medium leading-relaxed">{step?.desc || ''}</p>
           
-          {step?.details && (
+          {step?.details && typeof step.details === 'string' && (
              <div className="bg-slate-800/80 backdrop-blur-md p-6 md:p-8 rounded-2xl text-left max-w-3xl border border-slate-600/50 text-lg text-slate-200 w-full shadow-2xl">
                <span className="font-black flex items-center gap-2 mb-3 text-amber-400 uppercase tracking-wider text-sm"><Info size={20}/> Detalle Técnico</span>
                <p className="leading-relaxed">{step.details}</p>
@@ -1382,13 +1429,13 @@ export default function App() {
                       <Beer size={32} />
                     </div>
                     <div className="w-full pr-8 md:pr-0">
-                      <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3">{h.recipeName}</h3>
+                      <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3">{h.recipeName || 'Lote Sin Nombre'}</h3>
                       
                       <div className="flex flex-wrap gap-2 mb-4">
                         <span className="bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-3 py-1.5 rounded-lg text-sm text-slate-600 dark:text-slate-300 font-bold flex items-center gap-1.5"><CalendarClock size={16}/> {h.date}</span>
-                        <span className="bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5"><Droplets size={16}/> {h.volume} L</span>
-                        <span className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5">💰 Total: {formatCurrency(h.totalCost || 0)}</span>
-                        <span className="bg-emerald-100 dark:bg-emerald-800/50 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5 text-xs uppercase tracking-wider">🏷️ x Litro: {formatCurrency((h.totalCost || 0) / (h.volume || 1))}</span>
+                        <span className="bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5"><Droplets size={16}/> {h.volume || 0} L</span>
+                        <span className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5">💰 Total: {formatCurrency(h.totalCost)}</span>
+                        <span className="bg-emerald-100 dark:bg-emerald-800/50 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5 text-xs uppercase tracking-wider">🏷️ x Litro: {formatCurrency((Number(h.totalCost) || 0) / (Number(h.volume) || 1))}</span>
                       </div>
                       
                       <div className="flex gap-6 text-sm text-slate-500 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4 mt-2">
@@ -1406,11 +1453,11 @@ export default function App() {
                             <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Evaluación Final:</span>
                             <div className="flex items-center">
                               {[1,2,3,4,5].map(star => (
-                                <Star key={star} size={18} className={star <= h.tasting.rating ? "fill-amber-400 text-amber-400" : "text-gray-300 dark:text-slate-600"} />
+                                <Star key={star} size={18} className={(Number(h.tasting.rating) || 0) >= star ? "fill-amber-400 text-amber-400" : "text-gray-300 dark:text-slate-600"} />
                               ))}
                             </div>
                          </div>
-                         <p className="text-slate-700 dark:text-slate-300 text-sm font-medium italic leading-relaxed">"{h.tasting.notes}"</p>
+                         <p className="text-slate-700 dark:text-slate-300 text-sm font-medium italic leading-relaxed">"{h.tasting.notes || ''}"</p>
                        </div>
                      ) : (
                        <div className="text-center py-5">
@@ -1532,5 +1579,50 @@ export default function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+// --- ESCUDO ANTI-FALLOS (ERROR BOUNDARY) ---
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
+    console.error("Detectado por ErrorBoundary:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#050608] text-white p-6 md:p-10 flex flex-col items-center justify-center font-sans">
+          <div className="bg-red-500/10 border border-red-500 p-8 md:p-12 rounded-3xl max-w-3xl w-full shadow-2xl">
+            <h2 className="text-3xl md:text-4xl font-black text-red-500 mb-4 tracking-tighter">¡Escudo Activado!</h2>
+            <p className="text-slate-300 text-lg mb-6 leading-relaxed">
+              La aplicación bloqueó un fallo crítico proveniente de tu base de datos.<br/><br/>
+              <strong>Por favor, toma una captura del texto rojo de abajo y envíamela:</strong>
+            </p>
+            <div className="bg-black/80 p-6 rounded-2xl overflow-auto text-xs font-mono text-red-400 border border-red-900/50 shadow-inner max-h-64">
+              {this.state.error && this.state.error.toString()}
+              <br/><br/>
+              {this.state.errorInfo && this.state.errorInfo.componentStack}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Envolvemos toda la aplicación en el escudo
+export default function SafeApp() {
+  return (
+    <ErrorBoundary>
+      <MainApp />
+    </ErrorBoundary>
   );
 }
