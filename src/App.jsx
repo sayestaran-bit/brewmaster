@@ -5,7 +5,7 @@ import {
   Trash2, ChevronDown, ChevronUp, Play, Pause, SkipForward, 
   History, CalendarClock, Scale, Package, Star, MessageSquare, 
   Banknote, Wheat, Leaf, Cloud, RefreshCw, Moon, Sun, User, 
-  LogOut, Edit3, FileClock 
+  LogOut, Edit3, FileClock, Eye, EyeOff
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -17,7 +17,8 @@ import {
   onAuthStateChanged, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signOut 
+  signOut,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
@@ -84,36 +85,75 @@ const getThemeForCategory = (category = '') => {
   };
 };
 
-// --- DATOS PRECARGADOS POR DEFECTO ---
+// --- DATOS PRECARGADOS DE ALTA FIDELIDAD TÉCNICA ---
 const initialRecipes = [
   {
-    id: 'hazy-tamango', category: 'Hazy IPA', name: "Jugosa Hazy IPA (Estilo Tamango)", targetVolume: 20, og: 1.065, fg: 1.015, abv: 6.5,
+    id: 'hazy-tamango-pro', category: 'Hazy IPA', name: "Jugosa Hazy IPA (Estilo Tamango)", targetVolume: 20, og: 1.065, fg: 1.015, abv: 6.5,
     waterProfile: { Ca: 120, Mg: 15, SO4: 75, Cl: 200, HCO3: 50 },
     ingredients: {
       malts: [ { name: "Malta Pilsen", amount: 4.5, unit: "kg" }, { name: "Avena en hojuelas", amount: 1.0, unit: "kg" }, { name: "Trigo en hojuelas", amount: 0.8, unit: "kg" } ],
-      hops: [ { name: "Magnum", amount: 10, unit: "g", time: "60 min", stage: "Hervor" }, { name: "Citra", amount: 50, unit: "g", time: "20 min a 80°C", stage: "Whirlpool" }, { name: "Mosaic", amount: 50, unit: "g", time: "20 min a 80°C", stage: "Whirlpool" }, { name: "Citra", amount: 60, unit: "g", time: "Día 2-3", stage: "Dry Hop 1" }, { name: "Mosaic", amount: 60, unit: "g", time: "Día 7", stage: "Dry Hop 2" } ],
+      hops: [ { name: "Magnum", amount: 10, unit: "g", time: "60 min", stage: "Hervor" }, { name: "Citra", amount: 50, unit: "g", time: "20 min", stage: "Whirlpool a 80°C" }, { name: "Mosaic", amount: 50, unit: "g", time: "20 min", stage: "Whirlpool a 80°C" }, { name: "Citra", amount: 60, unit: "g", time: "Día 2", stage: "Dry Hop 1" }, { name: "Mosaic", amount: 60, unit: "g", time: "Día 7", stage: "Dry Hop 2" } ],
       yeast: { name: "Lallemand Verdant IPA", amount: 1, unit: "sobre" }, water: { strike: 22, sparge: 12 }
     },
-    steps: [ { id: 1, title: "Maceración", desc: "Macerar a 67°C por 60 min.", details: "Primero calienta el agua en la Guten a 70°C.", duration: 60 }, { id: 2, title: "Lavado", desc: "Lavar con agua a 75°C.", details: "Lava suavemente con agua a 75-78°C.", duration: 15 }, { id: 3, title: "Hervor", desc: "Hervir 60 min. Agregar lúpulo.", details: "Configura la Guten a 100°C.", duration: 60 }, { id: 4, title: "Whirlpool", desc: "Enfriar a 80°C. Agregar lúpulos.", details: "Pasa agua por el serpentín hasta 80°C.", duration: 20 }, { id: 5, title: "Fermentación", desc: "Fermentar a 19°C.", details: "Traspasa al fermentador oxigenando bien." } ],
-    tips: [ { title: "Oxidación", desc: "Evita abrir el fermentador innecesariamente para proteger el aroma." } ], modifications: []
+    steps: [ 
+      { id: 1, title: "Maceración y Ajuste de Agua", desc: "Macerar a 67°C por 60 min. Buscar sedosidad extrema.", details: "1. Calienta los 22L de agua en la Guten a 71°C.\n2. Agrega tus sales (Cloruro de Calcio principalmente) para llegar al perfil.\n3. Incorpora los granos lentamente removiendo para evitar grumos, la avena tiende a apelmazarse.\n4. Mide el pH a los 10 min: el objetivo es 5.2 - 5.3 para extraer mejor los sabores y evitar astringencia.", duration: 60 }, 
+      { id: 2, title: "Lavado (Sparge)", desc: "Lavar suavemente con 12L a 75°C.", details: "Realiza un lavado lento. Es CRÍTICO no superar los 76°C ni que el pH suba de 5.8 al final del lavado, o extraerás taninos de las cáscaras que rasparán en la garganta y arruinarán la experiencia 'jugosa'.", duration: 15 }, 
+      { id: 3, title: "Hervor Controlado", desc: "Hervir 60 min. Adición de amargor limpio.", details: "1. Lleva el mosto a ebullición vigorosa.\n2. Minuto 60 (al romper hervor): Agrega los 10g de Magnum. Es poco, pero da la columna vertebral de amargor limpio.\n3. Faltando 10 minutos: Agrega nutriente de levadura si tienes.", duration: 60 }, 
+      { id: 4, title: "Whirlpool / Hop Stand Crítico", desc: "Enfriar a 80°C e incorporar lúpulos de aroma.", details: "¡Fase clave! Apaga el elemento calentador y haz circular agua fría por tu serpentín hasta bajar exactamente a 80°C.\nDetén el enfriado, agrega Citra y Mosaic, y mantén un remolino suave por 20 minutos. Al estar a 80°C, no sumarás amargor (IBUs) pero extraerás todos los aceites tropicales.", duration: 20 }, 
+      { id: 5, title: "Fermentación y Biotransformación", desc: "Inocular a 18°C. Dry Hop activo.", details: "1. Enfría a 18°C y traspasa al fermentador oxigenando muy bien el mosto.\n2. Inocula la Verdant IPA.\n3. DÍA 2-3 (Alta actividad): Agrega el primer Dry Hop. La levadura activa procesará los aceites del lúpulo creando sabores a mango y durazno (Biotransformación).\n4. Deja subir la temperatura a 20°C para descanso de diacetilo.\n5. DÍA 7: Agrega el segundo Dry Hop." },
+      { id: 6, title: "Maduración y Envasado", desc: "Cold Crash extremo y purga de O2.", details: "1. Baja la temperatura a 2°C (Cold Crash) por 48hrs para precipitar lúpulo y levadura excesiva.\n2. Envasa. PURGA con CO2 todo lo que puedas. El oxígeno es el enemigo mortal de esta cerveza." }
+    ],
+    tips: [ 
+      { title: "Miedo al Oxígeno", desc: "Las Hazy IPAs mueren en días si se exponen al oxígeno. Evita abrir la tapa del fermentador para mirar. Usa un sistema de purga de CO2 al embotellar o embarrilar. Una Hazy oxidada se vuelve marrón y con sabor a cartón." },
+      { title: "El Secreto del Agua", desc: "Para que sea verdaderamente 'Jugosa' y sedosa, necesitas más Cloruros que Sulfatos. Apunta a un ratio de 2.5:1 o 3:1 de Cloruro sobre Sulfato. Esto envuelve el amargor y da esa sensación de jugo de frutas en boca." }
+    ], modifications: []
   },
   {
-    id: 'doble-hazy-ipa', category: 'Hazy IPA', name: "Nebulosa DDH - Doble Hazy IPA", targetVolume: 20, og: 1.080, fg: 1.018, abv: 8.2,
-    ingredients: { malts: [{ name: "Malta Pilsen", amount: 6.0, unit: 'kg' }], hops: [{ name: "Galaxy", amount: 60, unit: 'g' }], yeast: {name: 'Verdant', amount: 2, unit: 'sobre'}, water: {strike: 25, sparge: 12} },
-    steps: [{ id: 1, title: "Maceración Densa", desc: "66°C por 60 min", duration: 60 }], modifications: []
+    id: 'doble-hazy-ipa-pro', category: 'Hazy IPA', name: "Nebulosa DDH - Doble Hazy", targetVolume: 20, og: 1.080, fg: 1.018, abv: 8.2,
+    ingredients: { malts: [{ name: "Malta Pilsen", amount: 6.0, unit: 'kg' }, { name: "Trigo Maltedo", amount: 1.5, unit: 'kg' }], hops: [{ name: "Galaxy", amount: 100, unit: 'g' }], yeast: {name: 'Verdant', amount: 2, unit: 'sobre'}, water: {strike: 25, sparge: 12} },
+    steps: [
+      { id: 1, title: "Maceración Densa", desc: "66°C por 60 min. Cuidado con atascos.", details: "Al tener una carga de granos tan alta (7.5kg para 20L), la recirculación debe ser muy lenta al inicio para no compactar la cama de granos en tu equipo.", duration: 60 },
+      { id: 2, title: "Whirlpool Masivo", desc: "Bajar a 78°C e incorporar Galaxy.", details: "El Galaxy aporta notas a maracuyá intensas. Mantenlo a 78°C durante 30 minutos enteros para saturar el mosto de aceites esenciales.", duration: 30 }
+    ], 
+    tips: [
+      { title: "Tasa de Inoculación", desc: "Es una cerveza de alta densidad (1.080). Un solo sobre de levadura sufrirá estrés y generará alcoholes fusel (sabor a solvente o quemado). Asegúrate de usar 2 sobres bien hidratados." }
+    ], modifications: []
   },
   {
-    id: 'triple-hazy-ipa', category: 'Hazy IPA', name: "Agujero Negro - Triple Hazy IPA", targetVolume: 20, og: 1.100, fg: 1.022, abv: 10.5,
-    ingredients: { malts: [{ name: "Malta Pale Ale", amount: 8.0, unit: 'kg' }], hops: [{ name: "Citra", amount: 100, unit: 'g' }], yeast: {name: 'Verdant', amount: 3, unit: 'sobre'}, water: {strike: 28, sparge: 10} },
-    steps: [{ id: 1, title: "Maceración al Límite", desc: "65°C por 75 min", duration: 75 }], modifications: []
+    id: 'triple-hazy-ipa-pro', category: 'Hazy IPA', name: "Agujero Negro - Triple Hazy", targetVolume: 20, og: 1.100, fg: 1.022, abv: 10.5,
+    ingredients: { malts: [{ name: "Malta Pale Ale", amount: 8.0, unit: 'kg' }, { name: "Maltodextrina", amount: 0.5, unit: 'kg' }], hops: [{ name: "Citra", amount: 150, unit: 'g' }], yeast: {name: 'Verdant', amount: 3, unit: 'sobre'}, water: {strike: 28, sparge: 10} },
+    steps: [
+      { id: 1, title: "Maceración al Límite", desc: "65°C por 90 min para alta fermentabilidad.", details: "Necesitas extraer cada gota de azúcar. Macera 90 minutos para asegurar la conversión enzimática total. Agrega la maltodextrina en el hervor, no en el macerado.", duration: 90 }
+    ], tips: [ { title: "Cuidado con la Fermentación", desc: "A 10.5% ABV, la levadura genera mucho calor. Controla estrictamente la temperatura a 18°C los primeros 4 días o sabrá a alcohol puro." } ], modifications: []
   },
   {
-    id: 'oatmeal-stout', category: 'Stout', name: "Expreso de Medianoche", targetVolume: 20, og: 1.058, fg: 1.016, abv: 5.5,
-    ingredients: { malts: [{ name: "Malta Chocolate", amount: 0.5, unit: 'kg' }], hops: [{ name: "Fuggles", amount: 40, unit: 'g' }], yeast: {name: 'S-04', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} },
-    steps: [{ id: 1, title: "Maceración Oscura", desc: "68°C por 60 min", duration: 60 }], modifications: []
+    id: 'oatmeal-stout-pro', category: 'Stout', name: "Expreso de Medianoche", targetVolume: 20, og: 1.058, fg: 1.016, abv: 5.5,
+    waterProfile: { Ca: 50, Mg: 10, SO4: 50, Cl: 50, HCO3: 150 },
+    ingredients: { 
+      malts: [{ name: "Malta Pale Ale", amount: 4.0, unit: 'kg' }, { name: "Avena", amount: 0.8, unit: 'kg' }, { name: "Cebada Tostada (Roasted Barley)", amount: 0.3, unit: 'kg' }, { name: "Malta Chocolate", amount: 0.2, unit: 'kg' }], 
+      hops: [{ name: "Fuggles", amount: 40, unit: 'g', time: "60 min", stage: "Hervor" }], 
+      yeast: {name: 'S-04', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} 
+    },
+    steps: [
+      { id: 1, title: "Maceración Base", desc: "68°C por 50 min. Solo maltas claras y avena.", details: "TRUCO PRO: Macera a 68°C para dejar azúcares residuales y dar cuerpo dulce. NO agregues las maltas oscuras (Chocolate y Cebada Tostada) todavía. Si las pones desde el principio, el pH caerá mucho y extraerás astringencia.", duration: 50 },
+      { id: 2, title: "Adición de Maltas Oscuras", desc: "Minuto 50: Añadir maltas oscuras.", details: "Espolvorea la malta Chocolate y la Cebada Tostada por encima de la cama de granos y remueve solo la capa superior. Déjalo reposar 10 minutos más antes de hacer el Mash Out. Esto extrae el color y aroma a café, pero deja la acidez y astringencia atrás.", duration: 10 },
+      { id: 3, title: "Fermentación Inglesa", desc: "Fermentar a 19°C.", details: "La levadura S-04 aportará un ligero perfil afrutado inglés que combina perfecto con el chocolate." }
+    ], tips: [ { title: "Carbonatación", desc: "Apunta a una carbonatación baja (1.8 a 2.0 volúmenes de CO2). Mucho gas destruye la sensación cremosa que aporta la avena." } ], modifications: []
   },
-  { id: 'lager-premium', category: 'Lager', name: "Pilsner del Sur", targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, ingredients: { malts: [{name: 'Malta Pilsen', amount: 4.5, unit: 'kg'}], hops: [{name: 'Saaz', amount: 30, unit: 'g'}], yeast: {name: 'W-34/70', amount: 2, unit: 'sobre'}, water: {strike: 18, sparge: 14} }, steps: [] },
-  { id: 'amber-ale', category: 'Amber Ale', name: "Red Marzen", targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, ingredients: { malts: [{name: 'Malta Pale Ale', amount: 5.0, unit: 'kg'}], hops: [{name: 'Cascade', amount: 20, unit: 'g'}], yeast: {name: 'US-05', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} }, steps: [] }
+  { 
+    id: 'lager-premium-pro', category: 'Lager', name: "Pilsner del Sur", targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, 
+    ingredients: { malts: [{name: 'Malta Pilsen', amount: 4.5, unit: 'kg'}, {name: 'Carapils', amount: 0.2, unit: 'kg'}], hops: [{name: 'Magnum', amount: 15, unit: 'g'}, {name: 'Saaz', amount: 30, unit: 'g'}], yeast: {name: 'W-34/70', amount: 2, unit: 'sobre'}, water: {strike: 18, sparge: 14} }, 
+    steps: [
+      { id: 1, title: "Maceración Escalonada", desc: "Escalón proteico y sacarificación.", details: "Comienza a 52°C por 15 min (mejora retención de espuma). Luego sube a 64°C por 45 min para un mosto altamente fermentable y seco.", duration: 60 },
+      { id: 2, title: "Hervor Largo", desc: "Hervir 90 min.", details: "La malta Pilsen contiene precursores de DMS (olor a maíz cocido). Hiérvela destapada por 90 minutos para evaporarlos.", duration: 90 },
+      { id: 3, title: "Fermentación Fría y Diacetilo", desc: "Inocular a 10°C.", details: "1. Oxigena al máximo y fermenta a 10-12°C.\n2. Cuando falten 4 puntos de densidad para terminar, SUbE a 16°C por 3 días (Descanso de Diacetilo).\n3. Lagering: Guarda en frío a 1°C por 4 semanas mínimo." }
+    ], tips: [], modifications: [] 
+  },
+  { 
+    id: 'amber-ale-pro', category: 'Amber Ale', name: "Red Marzen Americana", targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, 
+    ingredients: { malts: [{name: 'Malta Pale Ale', amount: 4.0, unit: 'kg'}, {name: 'Caramelo 60L', amount: 0.5, unit: 'kg'}, {name: 'Melanoidina', amount: 0.3, unit: 'kg'}], hops: [{name: 'Cascade', amount: 20, unit: 'g'}], yeast: {name: 'US-05', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} }, 
+    steps: [{ id: 1, title: "Maceración", desc: "66°C por 60 min", duration: 60 }], tips: [], modifications: [] 
+  }
 ];
 
 const initialInventory = [
@@ -123,6 +163,10 @@ const initialInventory = [
   { id: 'inv-m3', category: 'Malta', name: 'Avena en hojuelas', stock: 5, unit: 'kg', price: 1500 },
   { id: 'inv-m4', category: 'Malta', name: 'Trigo en hojuelas', stock: 5, unit: 'kg', price: 1500 },
   { id: 'inv-m5', category: 'Malta', name: 'Malta Chocolate', stock: 2, unit: 'kg', price: 2500 },
+  { id: 'inv-m6', category: 'Malta', name: 'Cebada Tostada', stock: 2, unit: 'kg', price: 2800 },
+  { id: 'inv-m7', category: 'Malta', name: 'Carapils', stock: 2, unit: 'kg', price: 2200 },
+  { id: 'inv-m8', category: 'Malta', name: 'Caramelo 60L', stock: 3, unit: 'kg', price: 2200 },
+  { id: 'inv-m9', category: 'Malta', name: 'Melanoidina', stock: 1, unit: 'kg', price: 3000 },
   
   // LÚPULOS
   { id: 'inv-h1', category: 'Lúpulo', name: 'Citra', stock: 500, unit: 'g', price: 80 },
@@ -407,10 +451,13 @@ function MainApp() {
   const [showInvForm, setShowInvForm] = useState(false);
   const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0 });
 
+  // Mejoras de Autenticación
   const [authEmail, setAuthEmail] = useState('');
   const [authPass, setAuthPass] = useState('');
   const [authError, setAuthError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
 
   // --- FIREBASE: Autenticación ---
   useEffect(() => {
@@ -470,6 +517,7 @@ function MainApp() {
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
+    setResetMessage('');
     try {
       if (isRegistering) {
         await createUserWithEmailAndPassword(auth, authEmail, authPass);
@@ -478,7 +526,30 @@ function MainApp() {
       }
       setView('list');
     } catch (err) {
-      setAuthError('Error: Verifica tus credenciales.');
+      console.error(err);
+      if (err.code === 'auth/email-already-in-use') setAuthError('Este correo ya está registrado.');
+      else if (err.code === 'auth/weak-password') setAuthError('La contraseña debe tener al menos 6 caracteres.');
+      else if (err.code === 'auth/invalid-email') setAuthError('El formato del correo es inválido.');
+      else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') setAuthError('Correo o contraseña incorrectos.');
+      else setAuthError('Error: Verifica tus credenciales.');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setAuthError('');
+    setResetMessage('');
+    if (!authEmail) {
+       setAuthError('Por favor, ingresa tu correo electrónico arriba para recuperar tu contraseña.');
+       return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, authEmail);
+      setResetMessage('¡Enlace de recuperación enviado! Revisa tu bandeja de entrada o spam.');
+    } catch (err) {
+      console.error(err);
+      if (err.code === 'auth/user-not-found') setAuthError('No hay ninguna cuenta con este correo.');
+      else if (err.code === 'auth/invalid-email') setAuthError('El formato del correo es inválido.');
+      else setAuthError('Error al enviar correo de recuperación.');
     }
   };
 
@@ -572,15 +643,26 @@ function MainApp() {
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Contraseña</label>
-            <input type="password" required className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500" value={authPass} onChange={e => setAuthPass(e.target.value)} />
+            <div className="relative">
+              <input type={showPassword ? "text" : "password"} required className="w-full p-3 pr-12 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500" value={authPass} onChange={e => setAuthPass(e.target.value)} />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-slate-400 hover:text-amber-500 transition-colors">
+                {showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}
+              </button>
+            </div>
+            {!isRegistering && (
+              <div className="text-right mt-2">
+                <button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-500 hover:text-amber-500 transition-colors">¿Olvidaste tu contraseña?</button>
+              </div>
+            )}
           </div>
           {authError && <p className="text-red-500 text-sm font-medium bg-red-50 dark:bg-red-900/30 p-3 rounded-lg">{authError}</p>}
+          {resetMessage && <p className="text-emerald-500 text-sm font-medium bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg">{resetMessage}</p>}
           <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 dark:bg-amber-600 dark:hover:bg-amber-500 text-white p-4 rounded-xl font-black transition-colors shadow-lg">
             {isRegistering ? 'Registrar y Entrar' : 'Entrar'}
           </button>
         </form>
         <div className="mt-6 text-center">
-          <button onClick={() => setIsRegistering(!isRegistering)} className="text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors">
+          <button onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setResetMessage(''); }} className="text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors">
             {isRegistering ? '¿Ya tienes cuenta? Inicia Sesión' : '¿No tienes cuenta? Regístrate'}
           </button>
         </div>
@@ -605,24 +687,27 @@ function MainApp() {
             <p className="text-slate-600 dark:text-slate-400 font-medium">Tienes <span className="text-amber-600 font-bold">{safeRecipes.length} recetas</span> guardadas.</p>
             <button 
               onClick={() => {
+                // Inyecta las recetas de alta fidelidad si no están
                 const existingIds = safeRecipes.map(r => r.id);
                 const missing = initialRecipes.filter(r => !existingIds.includes(r.id));
                 if(missing.length > 0) {
                     const updated = [...safeRecipes, ...missing];
                     setRecipes(updated);
                     updateCloudData({ recipes: updated });
+                } else {
+                    alert("¡Ya tienes todas las recetas maestras actualizadas en tu perfil!");
                 }
               }} 
-              className="text-xs text-blue-500 hover:text-blue-600 underline ml-3 font-bold"
+              className="text-xs text-blue-500 hover:text-blue-600 underline ml-3 font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded"
             >
               ¿Faltan recetas base?
             </button>
           </div>
           <div className="flex flex-wrap gap-2 w-full md:w-auto justify-center">
-            <button onClick={() => setView('inventory')} className="flex-1 md:flex-none justify-center bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors">
+            <button onClick={() => setView('inventory')} className="flex-1 md:flex-none justify-center bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
               <Package size={18} /> Inventario
             </button>
-            <button onClick={() => setView('history')} className="flex-1 md:flex-none justify-center bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors">
+            <button onClick={() => setView('history')} className="flex-1 md:flex-none justify-center bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
               <History size={18} /> Historial
             </button>
             <button onClick={() => setView('add')} className="flex-1 md:flex-none justify-center bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
@@ -650,21 +735,29 @@ function MainApp() {
                   return (
                     <div 
                       key={recipe.id} 
-                      onClick={() => {
-                        setSelectedRecipe(recipe);
-                        setTargetVol(recipe.targetVolume || 20);
-                        setCompletedSteps([]);
-                        setActiveTab('recipe');
-                        setView('recipe');
-                      }}
-                      className={`bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm hover:shadow-lg border-2 border-transparent hover:${theme.border} cursor-pointer transition-all group flex flex-col justify-between`}
+                      className={`bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm hover:shadow-lg border-2 border-transparent hover:${theme.border} transition-all group flex flex-col justify-between relative`}
                     >
-                      <div>
+                      <button 
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           if(window.confirm(`¿Seguro que deseas eliminar la receta: ${recipe.name}?`)) {
+                             const newRecipes = recipes.filter(r => r.id !== recipe.id);
+                             setRecipes(newRecipes);
+                             updateCloudData({ recipes: newRecipes });
+                           }
+                         }}
+                         className="absolute top-4 right-4 text-gray-300 dark:text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1"
+                         title="Eliminar receta"
+                      >
+                         <Trash2 size={18}/>
+                      </button>
+
+                      <div className="cursor-pointer" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setView('recipe'); }}>
                         <div className="flex justify-between items-start mb-3">
                           <span className={`inline-block px-3 py-1 rounded text-xs font-bold ${theme.badge}`}>{recipe.category || 'Sin Estilo'}</span>
                           
                           {brewCount > 0 && (
-                            <div className="flex items-center gap-2 text-xs font-bold">
+                            <div className="flex items-center gap-2 text-xs font-bold mr-6">
                               <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 px-2 py-1 rounded-lg flex items-center gap-1">
                                 <CalendarClock size={12} /> {brewCount} {brewCount === 1 ? 'Lote' : 'Lotes'}
                               </span>
@@ -677,9 +770,9 @@ function MainApp() {
                           )}
                         </div>
                         
-                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors">{recipe.name || 'Sin Nombre'}</h3>
+                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors pr-6">{recipe.name || 'Sin Nombre'}</h3>
                       </div>
-                      <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4">
+                      <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4 cursor-pointer" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setView('recipe'); }}>
                         <span className="flex items-center gap-1"><Droplets size={16} className="text-blue-500"/> {recipe.targetVolume || 0}L</span>
                         <span className="flex items-center gap-1"><Thermometer size={16} className="text-red-500"/> {recipe.abv || 0}%</span>
                         <span className="flex items-center gap-1"><Clock size={16} className="text-slate-400"/> DO: {recipe.og || '-'}</span>
@@ -1111,7 +1204,13 @@ function MainApp() {
                     <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-2 border-t-0 border-slate-200 dark:border-slate-700 rounded-b-2xl text-slate-800 dark:text-slate-200 animate-fadeIn text-base shadow-inner">
                       <h4 className="font-black flex items-center gap-2 mb-4 text-amber-700 dark:text-amber-500"><Info size={20}/> Guía Técnica:</h4>
                       <div className="pl-6 space-y-3 border-l-4 border-amber-300 dark:border-amber-700 font-medium">
-                         <p className="pl-3">{step.details}</p>
+                         {step.details.split(/(?=\d+\.\s)/).filter(Boolean).map((part, i) => {
+                            const match = part.match(/^(\d+\.\s)(.*)/);
+                            if (match) {
+                               return <p key={i} className="pl-3 mb-2"><strong>{match[1]}</strong>{match[2]}</p>;
+                            }
+                            return <p key={i} className="pl-3 mb-2">{part}</p>;
+                         })}
                       </div>
                     </div>
                   )}
@@ -1341,7 +1440,15 @@ function MainApp() {
           {step?.details && typeof step.details === 'string' && (
              <div className="bg-slate-800/80 backdrop-blur-md p-6 md:p-8 rounded-2xl text-left max-w-3xl border border-slate-600/50 text-lg text-slate-200 w-full shadow-2xl">
                <span className="font-black flex items-center gap-2 mb-3 text-amber-400 uppercase tracking-wider text-sm"><Info size={20}/> Detalle Técnico</span>
-               <p className="leading-relaxed">{step.details}</p>
+               <div className="leading-relaxed">
+                  {step.details.split(/(?=\d+\.\s)/).filter(Boolean).map((part, i) => {
+                     const match = part.match(/^(\d+\.\s)(.*)/);
+                     if (match) {
+                        return <p key={i} className="mb-2"><strong>{match[1]}</strong>{match[2]}</p>;
+                     }
+                     return <p key={i} className="mb-2">{part}</p>;
+                  })}
+               </div>
              </div>
           )}
 
