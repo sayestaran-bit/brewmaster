@@ -481,13 +481,17 @@ function MainApp() {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setRecipes(Array.isArray(data.recipes) && data.recipes.length > 0 ? data.recipes : initialRecipes);
-        setInventory(Array.isArray(data.inventory) ? data.inventory : initialInventory);
+        setRecipes(Array.isArray(data.recipes) ? data.recipes : []);
+        setInventory(Array.isArray(data.inventory) ? data.inventory : []);
         setHistory(Array.isArray(data.history) ? data.history : []);
       } else {
-        setDoc(docRef, { recipes: initialRecipes, inventory: initialInventory, history: [] });
-        setRecipes(initialRecipes);
-        setInventory(initialInventory);
+        // LÓGICA MAESTRA: Solo damos las recetas a usuarios registrados
+        const seedRecipes = user.isAnonymous ? [] : initialRecipes;
+        const seedInventory = user.isAnonymous ? [] : initialInventory;
+
+        setDoc(docRef, { recipes: seedRecipes, inventory: seedInventory, history: [] });
+        setRecipes(seedRecipes);
+        setInventory(seedInventory);
         setHistory([]);
       }
       setIsDataLoaded(true);
@@ -526,12 +530,13 @@ function MainApp() {
       }
       setView('list');
     } catch (err) {
-      console.error(err);
-      if (err.code === 'auth/email-already-in-use') setAuthError('Este correo ya está registrado.');
+      console.error("Error de Auth:", err);
+      if (err.code === 'auth/email-already-in-use') setAuthError('Este correo ya está registrado. Intenta iniciar sesión.');
       else if (err.code === 'auth/weak-password') setAuthError('La contraseña debe tener al menos 6 caracteres.');
       else if (err.code === 'auth/invalid-email') setAuthError('El formato del correo es inválido.');
       else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') setAuthError('Correo o contraseña incorrectos.');
-      else setAuthError('Error: Verifica tus credenciales.');
+      else if (err.code === 'auth/operation-not-allowed') setAuthError('Error: El método de Correo/Contraseña está apagado en Firebase Console.');
+      else setAuthError(`Error: ${err.message}`);
     }
   };
 
@@ -685,23 +690,25 @@ function MainApp() {
         <div className="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 gap-4">
           <div className="flex items-center">
             <p className="text-slate-600 dark:text-slate-400 font-medium">Tienes <span className="text-amber-600 font-bold">{safeRecipes.length} recetas</span> guardadas.</p>
-            <button 
-              onClick={() => {
-                // Inyecta las recetas de alta fidelidad si no están
-                const existingIds = safeRecipes.map(r => r.id);
-                const missing = initialRecipes.filter(r => !existingIds.includes(r.id));
-                if(missing.length > 0) {
-                    const updated = [...safeRecipes, ...missing];
-                    setRecipes(updated);
-                    updateCloudData({ recipes: updated });
-                } else {
-                    alert("¡Ya tienes todas las recetas maestras actualizadas en tu perfil!");
-                }
-              }} 
-              className="text-xs text-blue-500 hover:text-blue-600 underline ml-3 font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded"
-            >
-              ¿Faltan recetas base?
-            </button>
+            {user && !user.isAnonymous && (
+              <button 
+                onClick={() => {
+                  // Inyecta las recetas de alta fidelidad si no están
+                  const existingIds = safeRecipes.map(r => r.id);
+                  const missing = initialRecipes.filter(r => !existingIds.includes(r.id));
+                  if(missing.length > 0) {
+                      const updated = [...safeRecipes, ...missing];
+                      setRecipes(updated);
+                      updateCloudData({ recipes: updated });
+                  } else {
+                      alert("¡Ya tienes todas las recetas maestras actualizadas en tu perfil!");
+                  }
+                }} 
+                className="text-xs text-blue-500 hover:text-blue-600 underline ml-3 font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded"
+              >
+                ¿Faltan recetas base?
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap gap-2 w-full md:w-auto justify-center">
             <button onClick={() => setView('inventory')} className="flex-1 md:flex-none justify-center bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
@@ -715,6 +722,18 @@ function MainApp() {
             </button>
           </div>
         </div>
+
+        {user && user.isAnonymous && (
+          <div className="bg-amber-500/10 border border-amber-500/20 p-6 md:p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-center gap-6 shadow-inner text-center md:text-left">
+             <div>
+                <h3 className="font-black text-amber-500 text-xl mb-1 flex items-center justify-center md:justify-start gap-2"><Beaker size={24}/> Modo Invitado Activo</h3>
+                <p className="text-slate-400 text-sm font-medium">Crea una cuenta gratuita para desbloquear la biblioteca de recetas maestras (Hazy IPAs, Stouts, Lagers) y gestionar tu bodega de insumos en la nube.</p>
+             </div>
+             <button onClick={() => setView('auth')} className="bg-amber-500 text-slate-900 px-8 py-4 rounded-2xl font-black shadow-[0_10px_30px_rgba(245,158,11,0.3)] hover:bg-amber-400 transition-all whitespace-nowrap active:scale-95">
+                Crear Cuenta Pro
+             </button>
+          </div>
+        )}
 
         {Object.keys(grouped).map(category => {
           const theme = getThemeForCategory(category);
