@@ -306,7 +306,7 @@ function AutocompleteInput({ value, onChange, placeholder, category, inventory, 
               onClick={() => { onChange(item.name); setShowDrop(false); }}
             >
               <span>{item.name}</span>
-              <span className="text-gray-400 text-xs">{item.stock} {item.unit}</span>
+              <span className="text-gray-400 text-xs">{Number(item.stock).toLocaleString('es-CL', {maximumFractionDigits: 4})} {item.unit}</span>
             </div>
           ))}
           {!exactMatch && (
@@ -594,7 +594,7 @@ function MainApp() {
   const [inventory, setInventory] = useState([]);
   const [history, setHistory] = useState([]);
 
-  const [view, setView] = useState('dashboard'); 
+  const [view, setView] = useState('auth'); // Empieza siempre en Auth
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [activeTab, setActiveTab] = useState('recipe');
   const [targetVol, setTargetVol] = useState(20);
@@ -631,16 +631,24 @@ function MainApp() {
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
-  // --- FIREBASE: Autenticación ---
+  // --- FIREBASE: Autenticación Estricta ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) setUser(currentUser);
-      else {
-        try {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-          else await signInAnonymously(auth);
-        } catch (error) { console.error("Error auth anónima:", error); }
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        try { await signInWithCustomToken(auth, __initial_auth_token); } catch(e) {}
       }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        setView(prev => prev === 'auth' ? 'dashboard' : prev); // Redirige al dash si estaba en el login
+      } else {
+        setUser(null);
+        setView('auth'); // Fuerza bloqueo al cerrar sesión o entrar sin cuenta
+      }
+      setIsDataLoaded(true);
     });
     return () => unsubscribe();
   }, []);
@@ -717,7 +725,7 @@ function MainApp() {
     } catch (err) { setAuthError('Error al enviar correo.'); }
   };
 
-  const handleLogout = async () => { await signOut(auth); setView('dashboard'); };
+  const handleLogout = async () => { await signOut(auth); setView('auth'); };
 
   const handleAddInventoryItem = (name, category) => {
     const unit = category === 'Levadura' ? 'sobre' : category === 'Lúpulo' ? 'g' : 'kg';
@@ -813,7 +821,7 @@ function MainApp() {
         <div className="text-center mb-6">
           <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-600 p-4 rounded-full inline-block mb-3"><User size={40}/></div>
           <h2 className="text-2xl font-black text-slate-800 dark:text-white">{isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}</h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Guarda tus recetas y métricas en la nube.</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Acceso restringido. Por favor, identifícate para entrar a la plataforma.</p>
         </div>
         <form onSubmit={handleAuthSubmit} className="space-y-4">
           <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Electrónico</label><input type="email" required className="w-full p-3 border dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500" value={authEmail} onChange={e => setAuthEmail(e.target.value)} /></div>
@@ -839,6 +847,11 @@ function MainApp() {
           <button type="button" onClick={handleGoogleSignIn} className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold p-3 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-sm">
             <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
             Google
+          </button>
+          
+          {/* Botón explícito para entrar como invitado */}
+          <button type="button" onClick={async () => { await signInAnonymously(auth); setView('dashboard'); }} className="text-sm text-amber-600 dark:text-amber-500 font-bold mt-2 hover:underline transition-colors flex justify-center items-center gap-2">
+             <Eye size={16}/> Continuar como Invitado temporal
           </button>
         </div>
 
@@ -1014,7 +1027,7 @@ function MainApp() {
               </div>
             </div>
 
-            {/* ALERTAS DE STOCK (La Nueva Función) */}
+            {/* ALERTAS DE STOCK */}
             <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm flex-1">
               <h3 className="font-black text-slate-800 dark:text-white mb-5 flex items-center gap-2"><AlertTriangle size={20} className="text-red-500"/> Alertas de Stock</h3>
               {lowStockItems.length === 0 ? (
@@ -1030,7 +1043,7 @@ function MainApp() {
                         <span className="font-bold text-slate-700 dark:text-slate-300 block truncate text-sm">{item.name}</span>
                         <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">{item.category}</span>
                       </div>
-                      <span className="font-black text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded-md text-xs shrink-0 whitespace-nowrap">{item.stock} {item.unit}</span>
+                      <span className="font-black text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded-md text-xs shrink-0 whitespace-nowrap">{Number(item.stock).toLocaleString('es-CL', {maximumFractionDigits: 4})} {item.unit}</span>
                     </li>
                   ))}
                   {lowStockItems.length > 4 && (
@@ -1039,6 +1052,42 @@ function MainApp() {
                 </ul>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* NUEVO: TABLA DE ÚLTIMOS LOTES COCINADOS */}
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm mt-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-black text-slate-800 dark:text-white flex items-center gap-2"><Beer size={20} className="text-amber-500"/> Últimos Lotes Cocinados</h3>
+            <button onClick={() => setView('history')} className="text-sm font-bold text-blue-500 hover:text-blue-600 transition-colors flex items-center gap-1">Ver todo el historial <ChevronRight size={16}/></button>
+          </div>
+          
+          <div className="overflow-x-auto">
+             <table className="w-full text-left text-sm whitespace-nowrap">
+               <thead className="text-xs text-slate-400 uppercase bg-gray-50 dark:bg-slate-800/50 rounded-xl">
+                 <tr>
+                   <th className="px-4 py-3 rounded-l-xl">Fecha</th>
+                   <th className="px-4 py-3">Receta</th>
+                   <th className="px-4 py-3">Estilo</th>
+                   <th className="px-4 py-3">Volumen</th>
+                   <th className="px-4 py-3">ABV</th>
+                   <th className="px-4 py-3 rounded-r-xl">Costo Total</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-gray-50 dark:divide-slate-800/50">
+                 {filteredHistory.sort((a,b) => (b.timestamp||0) - (a.timestamp||0)).slice(0, 5).map(h => (
+                   <tr key={h.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer" onClick={() => setView('history')}>
+                     <td className="px-4 py-4 font-medium text-slate-500">{h.date}</td>
+                     <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200">{h.recipeName}</td>
+                     <td className="px-4 py-4"><span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs font-bold text-slate-600 dark:text-slate-300">{h.category}</span></td>
+                     <td className="px-4 py-4 font-bold text-blue-600 dark:text-blue-400">{h.volume} L</td>
+                     <td className="px-4 py-4 font-bold text-red-500">{h.abv}%</td>
+                     <td className="px-4 py-4 font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(h.totalCost)}</td>
+                   </tr>
+                 ))}
+               </tbody>
+             </table>
+             {filteredHistory.length === 0 && <p className="text-center text-slate-400 py-6 font-medium italic">No hay cocciones recientes en este periodo.</p>}
           </div>
         </div>
 
@@ -1166,7 +1215,10 @@ function MainApp() {
     const updateInvItem = (id, field, value) => {
       const newInv = [...inventory];
       const index = newInv.findIndex(inv => inv.id === id);
-      newInv[index][field] = Number(value) || 0;
+      // Aplicar redondeo a 4 decimales cuando se cambia el stock para evitar errores de coma flotante visuales
+      newInv[index][field] = field === 'stock' 
+        ? Number(Number(value).toFixed(4)) 
+        : Number(value) || 0;
       setInventory(newInv);
       updateCloudData({ inventory: newInv });
     }
@@ -1235,12 +1287,12 @@ function MainApp() {
               </div>
               <div className="p-0 overflow-x-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="text-xs text-slate-400 uppercase bg-white dark:bg-slate-900">
+                  <thead className="text-xs text-slate-400 uppercase bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800">
                     <tr>
-                      <th className="px-6 py-4 font-bold tracking-wider">Ingrediente</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Stock Actual</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Costo Unidad</th>
-                      <th className="px-6 py-4 w-10 text-center"></th>
+                      <th className="px-6 py-4 font-bold tracking-wider text-left w-1/3">Ingrediente</th>
+                      <th className="px-6 py-4 font-bold tracking-wider text-left w-1/4">Stock Actual</th>
+                      <th className="px-6 py-4 font-bold tracking-wider text-left w-1/4">Costo Unidad</th>
+                      <th className="px-6 py-4 text-center w-16">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
@@ -1249,15 +1301,15 @@ function MainApp() {
                         <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.name}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center">
-                            <input type="number" value={item.stock} onChange={(e) => updateInvItem(item.id, 'stock', e.target.value)} className="w-20 p-2 border border-gray-200 dark:border-slate-700 rounded-lg text-center mr-2 focus:ring-2 focus:ring-blue-500 outline-none font-medium bg-white dark:bg-slate-800 dark:text-white"/>
-                            <span className="text-gray-400 font-bold">{item.unit}</span>
+                            <input type="number" value={item.stock} onChange={(e) => updateInvItem(item.id, 'stock', e.target.value)} className="w-24 p-2 border border-gray-200 dark:border-slate-700 rounded-lg text-center mr-2 focus:ring-2 focus:ring-blue-500 outline-none font-medium bg-white dark:bg-slate-800 dark:text-white transition-all"/>
+                            <span className="text-gray-400 font-bold w-6">{item.unit}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                            <div className="flex items-center text-gray-400">
                             <span className="mr-1">$</span>
-                            <input type="number" value={item.price} onChange={(e) => updateInvItem(item.id, 'price', e.target.value)} className="w-24 p-2 border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800"/>
-                            <span className="text-xs ml-2">/ {item.unit}</span>
+                            <input type="number" value={item.price} onChange={(e) => updateInvItem(item.id, 'price', e.target.value)} className="w-24 p-2 border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 transition-all"/>
+                            <span className="text-xs ml-2 w-8">/ {item.unit}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
@@ -1804,7 +1856,8 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
               });
-              if (item) item.stock = Math.max(0, Number(item.stock) - (Number(m.amount) || 0));
+              // Redondeo seguro a 4 decimales al descontar de inventario
+              if (item) item.stock = Number((Math.max(0, Number(item.stock) - (Number(m.amount) || 0))).toFixed(4));
           });
           (recipe.ingredients?.hops || []).forEach(h => {
               const hName = (h.name || '').toLowerCase();
@@ -1812,7 +1865,7 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Lúpulo' && iName && hName.includes(iName);
               });
-              if (item) item.stock = Math.max(0, Number(item.stock) - (Number(h.amount) || 0));
+              if (item) item.stock = Number((Math.max(0, Number(item.stock) - (Number(h.amount) || 0))).toFixed(4));
           });
           const yeastObj = recipe.ingredients?.yeast;
           if (yeastObj) {
@@ -1823,7 +1876,7 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Levadura' && iName && yName.includes(iName);
               });
-              if (yItem) yItem.stock = Math.max(0, Number(yItem.stock) - yeastAmount);
+              if (yItem) yItem.stock = Number((Math.max(0, Number(yItem.stock) - yeastAmount)).toFixed(4));
           }
 
           const newHistoryItem = {
@@ -2079,9 +2132,11 @@ function MainApp() {
             {/* Controles Derecha */}
             <div className="relative z-10 flex flex-col items-start md:items-end gap-4 w-full md:w-auto shrink-0">
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={forceSyncCloud} disabled={isSaving} title="Forzar Sincronización Manual" className="flex items-center gap-2 text-xs font-black bg-slate-800/80 hover:bg-slate-700 px-4 py-2.5 rounded-full border border-slate-600 backdrop-blur-sm transition-colors disabled:cursor-wait shadow-sm">
-                  {isSaving ? <><RefreshCw size={14} className="animate-spin text-amber-400" /><span className="text-amber-400">GUARDANDO...</span></> : <><Cloud size={14} className="text-emerald-400" /><span className="text-emerald-400">NUBE SINC.</span></>}
-                </button>
+                {user && (
+                  <button onClick={forceSyncCloud} disabled={isSaving} title="Forzar Sincronización Manual" className="flex items-center gap-2 text-xs font-black bg-slate-800/80 hover:bg-slate-700 px-4 py-2.5 rounded-full border border-slate-600 backdrop-blur-sm transition-colors disabled:cursor-wait shadow-sm">
+                    {isSaving ? <><RefreshCw size={14} className="animate-spin text-amber-400" /><span className="text-amber-400">GUARDANDO...</span></> : <><Cloud size={14} className="text-emerald-400" /><span className="text-emerald-400">NUBE SINC.</span></>}
+                  </button>
+                )}
                 
                 <button onClick={() => setDarkMode(!darkMode)} className="flex items-center justify-center w-10 h-10 bg-slate-800/80 hover:bg-slate-700 rounded-full border border-slate-600 backdrop-blur-sm transition-colors shadow-sm text-slate-300 hover:text-amber-300">
                   {darkMode ? <Sun size={16} /> : <Moon size={16} />}
@@ -2091,14 +2146,14 @@ function MainApp() {
                   <button onClick={handleLogout} className="flex items-center gap-2 text-xs font-bold bg-red-900/30 hover:bg-red-900/50 text-red-300 px-4 py-2.5 rounded-full border border-red-800/50 backdrop-blur-sm transition-colors shadow-sm">
                     <LogOut size={14} /> Salir ({user.email?.split('@')[0]})
                   </button>
-                ) : (
-                  <button onClick={() => setView('auth')} className="flex items-center gap-2 text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-full border border-amber-500 backdrop-blur-sm transition-colors shadow-sm">
-                    <User size={14} /> Iniciar Sesión
+                ) : user && user.isAnonymous ? (
+                  <button onClick={handleLogout} className="flex items-center gap-2 text-xs font-bold bg-red-900/30 hover:bg-red-900/50 text-red-300 px-4 py-2.5 rounded-full border border-red-800/50 backdrop-blur-sm transition-colors shadow-sm">
+                    <LogOut size={14} /> Salir (Invitado)
                   </button>
-                )}
+                ) : null}
               </div>
 
-              {view !== 'dashboard' && (
+              {user && view !== 'dashboard' && view !== 'auth' && (
                 <button onClick={() => setView('dashboard')} className="bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-xl font-bold transition-all border border-white/10 backdrop-blur-md flex items-center gap-2 hover:scale-105 shadow-sm w-full md:w-auto justify-center">
                   <LayoutDashboard size={18}/> Dashboard
                 </button>
@@ -2106,8 +2161,8 @@ function MainApp() {
             </div>
           </div>
 
-          {/* Menú Principal Global */}
-          {view !== 'auth' && (
+          {/* Menú Principal Global - Solo visible si hay usuario autenticado */}
+          {user && view !== 'auth' && (
             <div className="flex bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-x-auto mb-8">
                <button onClick={() => setView('dashboard')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'dashboard' ? 'text-blue-500 border-b-4 border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                  <TrendingUp size={18}/> Métricas
@@ -2124,23 +2179,26 @@ function MainApp() {
             </div>
           )}
 
-          {/* CONTENEDOR DE VISTAS */}
+          {/* CONTENEDOR DE VISTAS ESTRICTAS */}
           <main className="transition-all duration-300 ease-in-out">
-            {view === 'auth' && renderAuth()}
-            {view === 'dashboard' && renderDashboard()}
-            {view === 'list' && renderList()}
-            {view === 'recipe' && renderRecipeView()}
-            {view === 'add' && <RecipeForm onSave={(newRecipe) => { 
-               const newRecipesList = [...recipes, newRecipe];
-               setRecipes(newRecipesList); updateCloudData({ recipes: newRecipesList }); setView('list'); 
-            }} onCancel={() => setView('list')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} />}
-            {view === 'edit' && <RecipeForm initialData={selectedRecipe} onSave={(updatedRecipe) => { 
-               const newRecipesList = recipes.map(r => r.id === updatedRecipe.id ? updatedRecipe : r);
-               setRecipes(newRecipesList); setSelectedRecipe(updatedRecipe); updateCloudData({ recipes: newRecipesList }); setView('recipe'); 
-            }} onCancel={() => setView('recipe')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} />}
-            {view === 'brew' && renderBrewSession()}
-            {view === 'history' && renderHistory()}
-            {view === 'inventory' && renderInventory()}
+            {!user || view === 'auth' ? renderAuth() : (
+              <>
+                {view === 'dashboard' && renderDashboard()}
+                {view === 'list' && renderList()}
+                {view === 'recipe' && renderRecipeView()}
+                {view === 'add' && <RecipeForm onSave={(newRecipe) => { 
+                   const newRecipesList = [...recipes, newRecipe];
+                   setRecipes(newRecipesList); updateCloudData({ recipes: newRecipesList }); setView('list'); 
+                }} onCancel={() => setView('list')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} />}
+                {view === 'edit' && <RecipeForm initialData={selectedRecipe} onSave={(updatedRecipe) => { 
+                   const newRecipesList = recipes.map(r => r.id === updatedRecipe.id ? updatedRecipe : r);
+                   setRecipes(newRecipesList); setSelectedRecipe(updatedRecipe); updateCloudData({ recipes: newRecipesList }); setView('recipe'); 
+                }} onCancel={() => setView('recipe')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} />}
+                {view === 'brew' && renderBrewSession()}
+                {view === 'history' && renderHistory()}
+                {view === 'inventory' && renderInventory()}
+              </>
+            )}
           </main>
 
         </div>
