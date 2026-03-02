@@ -7,7 +7,7 @@ import {
   Banknote, Wheat, Leaf, Cloud, RefreshCw, Moon, Sun, User, 
   LogOut, Edit3, FileClock, Eye, EyeOff, Activity, Palette, ListOrdered,
   Sparkles, Loader2, BrainCircuit, Wand2, TrendingUp, BarChart3, PieChart,
-  LayoutDashboard
+  LayoutDashboard, Filter
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -47,7 +47,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Sanitizamos el ID de la app para que Firebase no genere errores de ruta
+// Sanitizamos el ID de la app
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'brewmaster-pro-v1';
 const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
@@ -56,78 +56,70 @@ const apiKey = "";
 
 const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-  const payload = {
-    contents: [{ parts: [{ text: prompt }] }],
-  };
-  
-  if (systemInstruction) {
-    payload.systemInstruction = { parts: [{ text: systemInstruction }] };
-  }
-  if (isJson) {
-    payload.generationConfig = { responseMimeType: "application/json" };
-  }
+  const payload = { contents: [{ parts: [{ text: prompt }] }] };
+  if (systemInstruction) payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+  if (isJson) payload.generationConfig = { responseMimeType: "application/json" };
 
   const delays = [1000, 2000, 4000, 8000, 16000];
-  
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      
       const result = await response.json();
       const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      
       return isJson ? JSON.parse(text) : text;
     } catch (error) {
-      if (attempt === 4) {
-        throw new Error("No se pudo contactar a la IA después de varios intentos. Verifica tu conexión.");
-      }
+      if (attempt === 4) throw new Error("No se pudo contactar a la IA después de varios intentos. Verifica tu conexión.");
       await new Promise(resolve => setTimeout(resolve, delays[attempt]));
     }
   }
 };
 
-// --- FORMATO DE MONEDA (CLP) ---
+// --- FORMATO DE MONEDA & FECHAS ---
 const formatCurrency = (val) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(val) || 0);
 
-// --- MOTOR DE ESTILOS VISUALES DINÁMICOS (Soporte Dark Mode) ---
+const parseDateToTimestamp = (dateStr) => {
+  if (!dateStr) return 0;
+  const parts = dateStr.split(/[-/]/);
+  if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+  return Date.now();
+};
+
+// --- SIMULADOR DE COLOR SRM A HEX ---
+const getSrmColor = (srm) => {
+  const srmColors = {
+    1: '#FFE699', 2: '#FFD878', 3: '#FFCA5A', 4: '#FFBF42', 5: '#FBB123',
+    6: '#F8A600', 7: '#F39C00', 8: '#EA8F00', 9: '#E58500', 10: '#DE7C00',
+    11: '#D77200', 12: '#CF6900', 13: '#CB6200', 14: '#C35900', 15: '#BB5100',
+    16: '#B54C00', 17: '#B04500', 18: '#A63E00', 19: '#A13700', 20: '#9B3200',
+    21: '#962D00', 22: '#8E2900', 23: '#882300', 24: '#821E00', 25: '#7B1A00',
+    30: '#5E0B00', 35: '#4C0500', 40: '#380000'
+  };
+  if (!srm || srm <= 0) return '#FFD878';
+  const keys = Object.keys(srmColors).map(Number);
+  const closest = keys.reduce((prev, curr) => Math.abs(curr - srm) < Math.abs(prev - srm) ? curr : prev);
+  return srmColors[closest];
+};
+
+// --- MOTOR DE ESTILOS VISUALES DINÁMICOS ---
 const getThemeForCategory = (category = '') => {
   const cat = category.toLowerCase();
   if (cat.includes('hazy') || cat.includes('ipa') || cat.includes('pale ale')) {
-    return { 
-      bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-900 dark:text-orange-300', border: 'border-orange-300 dark:border-orange-700', icon: 'text-orange-500', 
-      badge: 'bg-orange-100 text-orange-800 dark:bg-orange-800/50 dark:text-orange-200', header: 'bg-gradient-to-r from-orange-500 to-amber-500', colorBase: '#f97316'
-    };
+    return { bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-900 dark:text-orange-300', border: 'border-orange-300 dark:border-orange-700', icon: 'text-orange-500', badge: 'bg-orange-100 text-orange-800 dark:bg-orange-800/50 dark:text-orange-200', header: 'bg-gradient-to-r from-orange-500 to-amber-500', colorBase: '#f97316' };
   }
   if (cat.includes('lager') || cat.includes('pilsner') || cat.includes('blonde')) {
-    return { 
-      bg: 'bg-yellow-50 dark:bg-yellow-900/20', text: 'text-yellow-900 dark:text-yellow-300', border: 'border-yellow-400 dark:border-yellow-700', icon: 'text-yellow-500', 
-      badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200', header: 'bg-gradient-to-r from-yellow-400 to-amber-400 text-slate-900', colorBase: '#eab308'
-    };
+    return { bg: 'bg-yellow-50 dark:bg-yellow-900/20', text: 'text-yellow-900 dark:text-yellow-300', border: 'border-yellow-400 dark:border-yellow-700', icon: 'text-yellow-500', badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200', header: 'bg-gradient-to-r from-yellow-400 to-amber-400 text-slate-900', colorBase: '#eab308' };
   }
   if (cat.includes('amber') || cat.includes('red') || cat.includes('scotch')) {
-    return { 
-      bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-900 dark:text-red-300', border: 'border-red-300 dark:border-red-700', icon: 'text-red-600', 
-      badge: 'bg-red-100 text-red-800 dark:bg-red-800/50 dark:text-red-200', header: 'bg-gradient-to-r from-red-700 to-orange-600', colorBase: '#dc2626'
-    };
+    return { bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-900 dark:text-red-300', border: 'border-red-300 dark:border-red-700', icon: 'text-red-600', badge: 'bg-red-100 text-red-800 dark:bg-red-800/50 dark:text-red-200', header: 'bg-gradient-to-r from-red-700 to-orange-600', colorBase: '#dc2626' };
   }
   if (cat.includes('stout') || cat.includes('porter') || cat.includes('dark')) {
-    return { 
-      bg: 'bg-stone-100 dark:bg-stone-800/40', text: 'text-stone-900 dark:text-stone-300', border: 'border-stone-400 dark:border-stone-600', icon: 'text-stone-700 dark:text-stone-400', 
-      badge: 'bg-stone-200 text-stone-800 dark:bg-stone-700 dark:text-stone-300', header: 'bg-gradient-to-r from-stone-800 to-stone-600', colorBase: '#44403c'
-    };
+    return { bg: 'bg-stone-100 dark:bg-stone-800/40', text: 'text-stone-900 dark:text-stone-300', border: 'border-stone-400 dark:border-stone-600', icon: 'text-stone-700 dark:text-stone-400', badge: 'bg-stone-200 text-stone-800 dark:bg-stone-700 dark:text-stone-300', header: 'bg-gradient-to-r from-stone-800 to-stone-600', colorBase: '#44403c' };
   }
-  return { 
-    bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-900 dark:text-amber-300', border: 'border-amber-300 dark:border-amber-700', icon: 'text-amber-500', 
-    badge: 'bg-amber-100 text-amber-800 dark:bg-amber-800/50 dark:text-amber-200', header: 'bg-gradient-to-r from-amber-600 to-yellow-600', colorBase: '#f59e0b'
-  };
+  return { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-900 dark:text-amber-300', border: 'border-amber-300 dark:border-amber-700', icon: 'text-amber-500', badge: 'bg-amber-100 text-amber-800 dark:bg-amber-800/50 dark:text-amber-200', header: 'bg-gradient-to-r from-amber-600 to-yellow-600', colorBase: '#f59e0b' };
 };
 
-// --- DATOS PRECARGADOS DE ALTA FIDELIDAD TÉCNICA ---
+// --- DATOS PRECARGADOS ---
 const initialRecipes = [
   {
     id: 'hazy-tamango-pro', category: 'Hazy IPA', name: "Jugosa Hazy IPA (Estilo Tamango)", targetVolume: 20, og: 1.065, fg: 1.015, abv: 6.5, ibu: 42, colorSRM: 5,
@@ -138,17 +130,17 @@ const initialRecipes = [
       yeast: { name: "Lallemand Verdant IPA", amount: 1, unit: "sobre" }, water: { strike: 22, sparge: 12 }
     },
     steps: [ 
-      { id: 1, title: "Maceración y Ajuste de Agua", desc: "Macerar a 67°C por 60 min. Buscar sedosidad extrema.", details: "1. Calienta los 22L de agua en la Guten a 71°C.\n2. Agrega tus sales (Cloruro de Calcio principalmente) para llegar al perfil.\n3. Incorpora los granos lentamente removiendo para evitar grumos, la avena tiende a apelmazarse.\n4. Mide el pH a los 10 min: el objetivo es 5.2 - 5.3 para extraer mejor los sabores y evitar astringencia.", duration: 60 }, 
-      { id: 2, title: "Lavado (Sparge)", desc: "Lavar suavemente con 12L a 75°C.", details: "Realiza un lavado lento. Es CRÍTICO no superar los 76°C ni que el pH suba de 5.8 al final del lavado, o extraerás taninos de las cáscaras que rasparán en la garganta y arruinarán la experiencia 'jugosa'.", duration: 15 }, 
-      { id: 3, title: "Hervor Controlado", desc: "Hervir 60 min. Adición de amargor limpio.", details: "1. Lleva el mosto a ebullición vigorosa.\n2. Minuto 60 (al romper hervor): Agrega los 10g de Magnum. Es poco, pero da la columna vertebral de amargor limpio.\n3. Faltando 10 minutos: Agrega nutriente de levadura si tienes.", duration: 60 }, 
-      { id: 4, title: "Whirlpool / Hop Stand Crítico", desc: "Enfriar a 80°C e incorporar lúpulos de aroma.", details: "¡Fase clave! Apaga el elemento calentador y haz circular agua fría por tu serpentín hasta bajar exactamente a 80°C.\nDetén el enfriado, agrega Citra y Mosaic, y mantén un remolino suave por 20 minutos. Al estar a 80°C, no sumarás amargor (IBUs) pero extraerás todos los aceites tropicales.", duration: 20 }, 
-      { id: 5, title: "Fermentación y Biotransformación", desc: "Inocular a 18°C. Dry Hop activo.", details: "1. Enfría a 18°C y traspasa al fermentador oxigenando muy bien el mosto.\n2. Inocula la Verdant IPA.\n3. DÍA 2-3 (Alta actividad): Agrega el primer Dry Hop. La levadura activa procesará los aceites del lúpulo creando sabores a mango y durazno (Biotransformación).\n4. Deja subir la temperatura a 20°C para descanso de diacetilo.\n5. DÍA 7: Agrega el segundo Dry Hop." },
-      { id: 6, title: "Maduración y Envasado", desc: "Cold Crash extremo y purga de O2.", details: "1. Baja la temperatura a 2°C (Cold Crash) por 48hrs para precipitar lúpulo y levadura excesiva.\n2. Envasa. PURGA con CO2 todo lo que puedas. El oxígeno es el enemigo mortal de esta cerveza." }
+      { id: 1, title: "Maceración y Ajuste de Agua", desc: "Macerar a 67°C por 60 min. Buscar sedosidad extrema.", details: "1. Calienta el agua en la Guten a 71°C.\n2. Agrega tus sales para llegar al perfil.\n3. Incorpora los granos lentamente removiendo para evitar grumos, la avena tiende a apelmazarse.\n4. Mide el pH a los 10 min: el objetivo es 5.2 - 5.3.", duration: 60 }, 
+      { id: 2, title: "Lavado (Sparge)", desc: "Lavar suavemente con 12L a 75°C.", details: "Realiza un lavado lento. Es CRÍTICO no superar los 76°C ni que el pH suba de 5.8 al final del lavado, o extraerás taninos de las cáscaras.", duration: 15 }, 
+      { id: 3, title: "Hervor Controlado", desc: "Hervir 60 min. Adición de amargor limpio.", details: "Lleva el mosto a ebullición vigorosa. Al romper hervor, agrega los 10g de Magnum para dar la columna vertebral de amargor limpio.", duration: 60 }, 
+      { id: 4, title: "Whirlpool / Hop Stand Crítico", desc: "Enfriar a 80°C e incorporar lúpulos de aroma.", details: "¡Fase clave! Enfría a 80°C exactos. Agrega Citra y Mosaic, y mantén un remolino suave por 20 minutos. Así no sumarás IBUs pero extraerás todos los aceites tropicales.", duration: 20 },
+      { id: 5, title: "Fermentación y Biotransformación", desc: "Inocular a 18°C. Dry Hop activo.", details: "1. Enfría a 18°C y traspasa al fermentador oxigenando muy bien el mosto.\n2. Inocula la Verdant IPA.\n3. DÍA 2-3 (Alta actividad): Agrega el primer Dry Hop para biotransformación.\n4. Deja subir la temperatura a 20°C para descanso de diacetilo.\n5. DÍA 7: Agrega el segundo Dry Hop." },
+      { id: 6, title: "Maduración y Envasado", desc: "Cold Crash extremo y purga de O2.", details: "1. Baja la temperatura a 2°C (Cold Crash) por 48hrs.\n2. Envasa purgando todo con CO2." }
     ],
     tips: [ 
-      { title: "Miedo al Oxígeno", desc: "Las Hazy IPAs mueren en días si se exponen al oxígeno. Evita abrir la tapa del fermentador para mirar. Usa un sistema de purga de CO2 al embotellar o embarrilar. Una Hazy oxidada se vuelve marrón y con sabor a cartón." },
-      { title: "El Secreto del Agua", desc: "Para que sea verdaderamente 'Jugosa' y sedosa, necesitas más Cloruros que Sulfatos. Apunta a un ratio de 2.5:1 o 3:1 de Cloruro sobre Sulfato. Esto envuelve el amargor y da esa sensación de jugo de frutas en boca." },
-      { title: "Biotransformación", desc: "Añadir lúpulo durante la fermentación activa (Día 2-3) permite que la levadura Verdant IPA convierta el geraniol del lúpulo en citronelol, potenciando los sabores a cítricos y frutas de carozo." }
+      { title: "Miedo al Oxígeno", desc: "Las Hazy IPAs mueren en días si se exponen al oxígeno. Evita abrir la tapa del fermentador para mirar. Usa un sistema de purga de CO2." },
+      { title: "El Secreto del Agua", desc: "Para que sea verdaderamente 'Jugosa' y sedosa, necesitas más Cloruros que Sulfatos. Apunta a un ratio de 2.5:1 o 3:1 de Cloruro sobre Sulfato." },
+      { title: "Biotransformación", desc: "Añadir lúpulo durante la fermentación activa (Día 2-3) permite que la levadura Verdant IPA convierta el geraniol del lúpulo en citronelol, potenciando sabores cítricos." }
     ], modifications: []
   },
   {
@@ -160,11 +152,11 @@ const initialRecipes = [
       yeast: {name: 'Verdant', amount: 2, unit: 'sobres'}, water: {strike: 25, sparge: 12} 
     },
     steps: [
-      { id: 1, title: "Maceración Densa", desc: "66°C por 60 min. Cuidado con atascos.", details: "Al tener una carga de granos tan alta (8.5kg para 20L), la recirculación debe ser muy lenta al inicio para no compactar la cama de granos en tu equipo Guten.", duration: 60 },
+      { id: 1, title: "Maceración Densa", desc: "66°C por 60 min. Cuidado con atascos.", details: "Al tener una carga de granos tan alta (8.5kg para 20L), la recirculación debe ser muy lenta al inicio para no compactar la cama de granos en tu equipo.", duration: 60 },
       { id: 2, title: "Lavado Controlado", desc: "Lavar con 12L a 75°C.", details: "No te apresures. Lava lentamente para extraer todos los azúcares posibles de esa gran cama de granos.", duration: 20 },
       { id: 3, title: "Hervor", desc: "Hervir 60 min.", details: "Añade el Magnum al inicio. Vigila posibles derrames (boil-overs) por la alta densidad del mosto.", duration: 60 },
       { id: 4, title: "Whirlpool Masivo", desc: "Bajar a 78°C e incorporar Galaxy y Citra.", details: "El Galaxy aporta notas a maracuyá intensas. Mantenlo a 78°C durante 30 minutos enteros para saturar el mosto de aceites esenciales.", duration: 30 },
-      { id: 5, title: "Fermentación Doble", desc: "Inocular a 18°C con DOS sobres.", details: "Oxigena el doble de lo normal. La alta densidad estresará a la levadura si no tiene el oxígeno y la cantidad de células suficientes.", duration: 0 }
+      { id: 5, title: "Fermentación Doble", desc: "Inocular a 18°C con DOS sobres.", details: "Oxigena el doble de lo normal. La alta densidad estresará a la levadura si no tiene el oxígeno y la cantidad de células suficientes." }
     ], 
     tips: [
       { title: "Tasa de Inoculación (Pitch Rate)", desc: "Es una cerveza de alta densidad (1.080). Un solo sobre de levadura sufrirá estrés y generará alcoholes fusel (sabor a solvente o quemado). Asegúrate de usar 2 sobres bien hidratados." },
@@ -454,28 +446,17 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
     onSave(recipeToSave);
   };
 
-  const updateStep = (idx, field, value) => {
-    const newSteps = [...formData.steps];
-    newSteps[idx][field] = value;
-    setFormData({...formData, steps: newSteps});
+  const updateArray = (arrayName, idx, field, value) => {
+    const newArr = [...formData[arrayName]]; newArr[idx][field] = value;
+    setFormData({...formData, [arrayName]: newArr});
   };
-  const removeStep = (idx) => {
-    const newSteps = formData.steps.filter((_, i) => i !== idx);
-    setFormData({...formData, steps: newSteps});
-  };
-
-  const updateTip = (idx, field, value) => {
-    const newTips = [...formData.tips];
-    newTips[idx][field] = value;
-    setFormData({...formData, tips: newTips});
-  };
-  const removeTip = (idx) => {
-    const newTips = formData.tips.filter((_, i) => i !== idx);
-    setFormData({...formData, tips: newTips});
+  const removeArrayItem = (arrayName, idx) => {
+    const newArr = formData[arrayName].filter((_, i) => i !== idx);
+    setFormData({...formData, [arrayName]: newArr});
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 animate-fadeIn">
+    <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-800 animate-fadeIn">
       <div className="flex justify-between items-center border-b border-gray-200 dark:border-slate-700 pb-4 mb-6">
         <h2 className="text-2xl font-black text-slate-800 dark:text-white">{isEditing ? 'Editar Receta' : 'Crear Nueva Receta'}</h2>
         <button onClick={onCancel} className="text-gray-500 hover:text-red-500 font-bold transition-colors">Cancelar</button>
@@ -483,98 +464,74 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
 
       {/* --- ASISTENTE IA --- */}
       {!isEditing && (
-        <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-2xl border border-amber-200 dark:border-amber-900/30 mb-8">
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 p-6 rounded-2xl border border-amber-200 dark:border-amber-800/30 mb-8 shadow-sm">
           <label className="block text-sm font-black text-amber-800 dark:text-amber-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Sparkles size={20} /> ✨ Generador de Recetas IA
+            <Sparkles size={20} /> ✨ Generador Cervecero IA
           </label>
           <div className="flex flex-col md:flex-row gap-3">
-            <input 
-              type="text" 
-              placeholder="Ej: Una IPA muy lupulada con notas a mango y 7% ABV" 
-              className="flex-1 p-4 border border-amber-200 dark:border-amber-800/50 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400" 
-              value={iaPrompt}
-              onChange={e => setIaPrompt(e.target.value)}
-              disabled={isGeneratingIA}
-            />
-            <button 
-              onClick={handleAIGenerate} 
-              disabled={isGeneratingIA}
-              className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black px-6 py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50"
-            >
-               {isGeneratingIA ? <><Loader2 className="animate-spin" size={20}/> Procesando...</> : <><Wand2 size={20}/> Generar Magia</>}
+            <input type="text" placeholder="Ej: Una IPA muy lupulada con notas a mango y 7% ABV" className="flex-1 p-4 border border-amber-200 dark:border-amber-800/50 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={iaPrompt} onChange={e => setIaPrompt(e.target.value)} disabled={isGeneratingIA} />
+            <button onClick={handleAIGenerate} disabled={isGeneratingIA} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black px-6 py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50">
+               {isGeneratingIA ? <Loader2 className="animate-spin" size={20}/> : <Wand2 size={20}/>} {isGeneratingIA ? 'Magia en proceso...' : 'Generar Receta'}
             </button>
           </div>
-          <p className="text-xs text-amber-700 dark:text-amber-600 mt-3 font-medium">Describe tu cerveza ideal y el Asistente Cervecero construirá la formulación completa de granos, lúpulos y perfil de agua.</p>
         </div>
       )}
 
       <div className="space-y-6">
         <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Nombre</label>
-            <input type="text" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Ej: Mi primera Stout" />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Estilo</label>
-            <input type="text" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Ej: Stout, Hazy IPA..." />
-          </div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre</label><input type="text" className="w-full p-3 border dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-amber-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Estilo</label><input type="text" className="w-full p-3 border dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-amber-500" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} /></div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">Vol (L)</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.targetVolume} onChange={e => setFormData({...formData, targetVolume: e.target.value})} /></div>
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">ABV (%)</label><input type="number" step="0.1" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.abv} onChange={e => setFormData({...formData, abv: e.target.value})} /></div>
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">D. Orig.</label><input type="number" step="0.001" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.og} onChange={e => setFormData({...formData, og: e.target.value})} /></div>
-          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">D. Final</label><input type="number" step="0.001" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.fg} onChange={e => setFormData({...formData, fg: e.target.value})} /></div>
-          <div><label className="block text-[10px] font-bold text-orange-500 uppercase">IBU</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800 focus:ring-2 focus:ring-orange-500" value={formData.ibu} onChange={e => setFormData({...formData, ibu: e.target.value})} placeholder="Amargor" /></div>
-          <div><label className="block text-[10px] font-bold text-amber-700 dark:text-amber-500 uppercase">Color (SRM)</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.colorSRM} onChange={e => setFormData({...formData, colorSRM: e.target.value})} placeholder="Color" /></div>
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">Vol (L)</label><input type="number" className="w-full p-3 border dark:border-slate-700 rounded-xl dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.targetVolume} onChange={e => setFormData({...formData, targetVolume: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">ABV (%)</label><input type="number" step="0.1" className="w-full p-3 border dark:border-slate-700 rounded-xl dark:bg-slate-800 focus:ring-2 focus:ring-red-500 outline-none" value={formData.abv} onChange={e => setFormData({...formData, abv: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">D. Orig.</label><input type="number" step="0.001" className="w-full p-3 border dark:border-slate-700 rounded-xl dark:bg-slate-800 focus:ring-2 focus:ring-amber-500 outline-none" value={formData.og} onChange={e => setFormData({...formData, og: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">D. Final</label><input type="number" step="0.001" className="w-full p-3 border dark:border-slate-700 rounded-xl dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none" value={formData.fg} onChange={e => setFormData({...formData, fg: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-orange-500 uppercase">IBU</label><input type="number" className="w-full p-3 border dark:border-slate-700 rounded-xl dark:bg-slate-800 focus:ring-2 focus:ring-orange-500 outline-none" value={formData.ibu} onChange={e => setFormData({...formData, ibu: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-amber-700 dark:text-amber-500 uppercase">Color (SRM)</label><input type="number" className="w-full p-3 border dark:border-slate-700 rounded-xl dark:bg-slate-800 focus:ring-2 focus:ring-amber-600 outline-none" value={formData.colorSRM} onChange={e => setFormData({...formData, colorSRM: e.target.value})} /></div>
         </div>
 
         <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
            <h3 className="font-black text-lg mb-3 text-slate-800 dark:text-white flex items-center gap-2"><Wheat size={20} className="text-amber-500"/> Granos (kg)</h3>
            {formData.malts.map((m, i) => (
               <div key={i} className="flex gap-2 mb-2 relative">
-                <AutocompleteInput value={m.name} onChange={val => { const newM = [...formData.malts]; newM[i].name = val; setFormData({...formData, malts: newM}) }} placeholder="Buscar malta..." category="Malta" inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                <input type="number" step="0.1" placeholder="Kg" className="w-24 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={m.amount} onChange={e => { const newM = [...formData.malts]; newM[i].amount = e.target.value; setFormData({...formData, malts: newM}) }} />
+                <AutocompleteInput value={m.name} onChange={val => updateArray('malts', i, 'name', val)} placeholder="Buscar malta..." category="Malta" inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                <input type="number" step="0.1" placeholder="Kg" className="w-24 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={m.amount} onChange={e => updateArray('malts', i, 'amount', e.target.value)} />
               </div>
            ))}
-           <button onClick={() => setFormData({...formData, malts: [...formData.malts, {name:'', amount:0}]})} className="text-sm text-amber-600 font-bold hover:text-amber-800 transition-colors bg-amber-50 dark:bg-amber-900/30 px-3 py-2 rounded-lg mt-1">+ Añadir fila</button>
+           <button onClick={() => setFormData({...formData, malts: [...formData.malts, {name:'', amount:0}]})} className="text-sm text-amber-600 font-bold hover:text-amber-800 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 rounded-lg mt-1">+ Añadir fila</button>
         </div>
 
         <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
            <h3 className="font-black text-lg mb-3 text-slate-800 dark:text-white flex items-center gap-2"><Leaf size={20} className="text-green-500"/> Lúpulos (g)</h3>
            {formData.hops.map((h, i) => (
               <div key={i} className="flex gap-2 mb-2 relative">
-                <AutocompleteInput value={h.name} onChange={val => { const newH = [...formData.hops]; newH[i].name = val; setFormData({...formData, hops: newH}) }} placeholder="Buscar lúpulo..." category="Lúpulo" inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                <input type="number" placeholder="Gramos" className="w-20 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={h.amount} onChange={e => { const newH = [...formData.hops]; newH[i].amount = e.target.value; setFormData({...formData, hops: newH}) }} />
-                <input type="text" placeholder="Min/DryHop" className="w-32 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={h.time} onChange={e => { const newH = [...formData.hops]; newH[i].time = e.target.value; setFormData({...formData, hops: newH}) }} />
-                <input type="text" placeholder="Etapa" className="w-32 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 hidden md:block" value={h.stage} onChange={e => { const newH = [...formData.hops]; newH[i].stage = e.target.value; setFormData({...formData, hops: newH}) }} />
+                <AutocompleteInput value={h.name} onChange={val => updateArray('hops', i, 'name', val)} placeholder="Buscar lúpulo..." category="Lúpulo" inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                <input type="number" placeholder="Gramos" className="w-20 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={h.amount} onChange={e => updateArray('hops', i, 'amount', e.target.value)} />
+                <input type="text" placeholder="Tiempo/Etapa" className="w-32 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={h.time} onChange={e => updateArray('hops', i, 'time', e.target.value)} />
+                <input type="text" placeholder="Etapa" className="w-32 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 hidden md:block" value={h.stage} onChange={e => updateArray('hops', i, 'stage', e.target.value)} />
               </div>
            ))}
-           <button onClick={() => setFormData({...formData, hops: [...formData.hops, {name:'', amount:0, time:'', stage:'Hervor'}]})} className="text-sm text-green-600 font-bold hover:text-green-800 transition-colors bg-green-50 dark:bg-green-900/30 px-3 py-2 rounded-lg mt-1">+ Añadir fila</button>
+           <button onClick={() => setFormData({...formData, hops: [...formData.hops, {name:'', amount:0, time:'', stage:'Hervor'}]})} className="text-sm text-green-600 font-bold hover:text-green-800 bg-green-50 dark:bg-green-900/30 px-3 py-2 rounded-lg mt-1">+ Añadir fila</button>
         </div>
 
         <div className="border-t border-gray-200 dark:border-slate-700 pt-4 grid md:grid-cols-3 gap-4">
           <div className="col-span-1 relative">
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Levadura</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Levadura</label>
             <AutocompleteInput value={formData.yeast} onChange={val => setFormData({...formData, yeast: val})} placeholder="Buscar..." category="Levadura" inventory={inventory} onAddNewItem={onAddInventoryItem} />
           </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Agua Maceración (L)</label>
-            <input type="number" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.strike} onChange={e => setFormData({...formData, strike: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Agua Lavado (L)</label>
-            <input type="number" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.sparge} onChange={e => setFormData({...formData, sparge: e.target.value})} />
-          </div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Maceración (L)</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800" value={formData.strike} onChange={e => setFormData({...formData, strike: e.target.value})} /></div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Lavado (L)</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-800" value={formData.sparge} onChange={e => setFormData({...formData, sparge: e.target.value})} /></div>
         </div>
 
-        <div className="border-t border-gray-200 dark:border-slate-700 pt-4 bg-blue-50/50 dark:bg-blue-900/10 p-5 rounded-2xl mt-4">
-          <h3 className="font-black text-lg mb-3 text-blue-900 dark:text-blue-400 flex items-center gap-2"><Droplets size={20} className="text-blue-500"/> Perfil de Agua Objetivo (ppm)</h3>
+        <div className="border-t border-gray-200 dark:border-slate-700 pt-4 bg-blue-50/50 dark:bg-blue-900/10 p-5 rounded-2xl mt-4 border border-blue-100 dark:border-blue-800/30">
+          <h3 className="font-black text-lg mb-3 text-blue-900 dark:text-blue-400 flex items-center gap-2"><Droplets size={20}/> Perfil Agua Objetivo (ppm)</h3>
           <div className="grid grid-cols-5 gap-2 md:gap-4">
             {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map((ion) => (
               <div key={ion}>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 text-center">{ion}</label>
-                <input type="number" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.waterProfile?.[ion] || 0} onChange={e => setFormData({ ...formData, waterProfile: { ...formData.waterProfile, [ion]: e.target.value } })} />
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 text-center">{ion}</label>
+                <input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center dark:bg-slate-800" value={formData.waterProfile?.[ion] || 0} onChange={e => setFormData({ ...formData, waterProfile: { ...formData.waterProfile, [ion]: e.target.value } })} />
               </div>
             ))}
           </div>
@@ -585,59 +542,39 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2"><ListOrdered size={20} className="text-purple-500"/> Pasos de Producción</h3>
            {formData.steps.map((step, i) => (
               <div key={i} className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 mb-4 relative">
-                <button type="button" onClick={() => removeStep(i)} className="absolute top-3 right-3 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                <button type="button" onClick={() => removeArrayItem('steps', i)} className="absolute top-3 right-3 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
                 <div className="grid md:grid-cols-3 gap-3 mb-3">
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Título del Paso</label>
-                    <input type="text" placeholder="Ej: Hervor Controlado" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-900 dark:text-white" value={step.title} onChange={e => updateStep(i, 'title', e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Minutos (Cronómetro)</label>
-                    <input type="number" placeholder="Ej: 60" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-900 dark:text-white" value={step.duration || ''} onChange={e => updateStep(i, 'duration', e.target.value)} />
-                  </div>
+                  <div className="md:col-span-2"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Título</label><input type="text" className="w-full p-3 border dark:border-slate-600 rounded-xl outline-none dark:bg-slate-900" value={step.title} onChange={e => updateArray('steps', i, 'title', e.target.value)} /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Minutos</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl outline-none dark:bg-slate-900" value={step.duration || ''} onChange={e => updateArray('steps', i, 'duration', e.target.value)} /></div>
                 </div>
-                <div className="mb-3">
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Descripción Breve</label>
-                  <input type="text" placeholder="Ej: Hervir vigorosamente y agregar amargor." className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-900 dark:text-white" value={step.desc} onChange={e => updateStep(i, 'desc', e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Detalle Técnico (Opcional)</label>
-                  <textarea rows="2" placeholder="Instrucciones avanzadas para el maestro cervecero..." className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-900 dark:text-white resize-none" value={step.details || ''} onChange={e => updateStep(i, 'details', e.target.value)} />
-                </div>
+                <div className="mb-3"><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Descripción Breve</label><input type="text" className="w-full p-3 border dark:border-slate-600 rounded-xl outline-none dark:bg-slate-900" value={step.desc} onChange={e => updateArray('steps', i, 'desc', e.target.value)} /></div>
+                <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Detalle Técnico</label><textarea rows="2" className="w-full p-3 border dark:border-slate-600 rounded-xl outline-none dark:bg-slate-900 resize-none" value={step.details || ''} onChange={e => updateArray('steps', i, 'details', e.target.value)} /></div>
               </div>
            ))}
-           <button onClick={() => setFormData({...formData, steps: [...formData.steps, {id: Date.now(), title:'', desc:'', details:'', duration: 0}]})} className="text-sm text-purple-600 font-bold hover:text-purple-800 transition-colors bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-xl mt-1 flex items-center gap-2"><Plus size={16}/> Añadir Fase del Proceso</button>
+           <button onClick={() => setFormData({...formData, steps: [...formData.steps, {id: Date.now(), title:'', desc:'', details:'', duration: 0}]})} className="text-sm text-purple-600 font-bold hover:text-purple-800 bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-xl mt-1 flex items-center gap-2"><Plus size={16}/> Añadir Fase</button>
         </div>
 
-        {/* NUEVO: CREADOR DE TIPS */}
         <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
            <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Info size={20} className="text-yellow-500"/> Tips de Elaboración</h3>
            {formData.tips.map((tip, i) => (
               <div key={i} className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 mb-3 relative flex flex-col gap-3">
-                <button type="button" onClick={() => removeTip(i)} className="absolute top-3 right-3 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-                <input type="text" placeholder="Concepto (Ej: Miedo al Oxígeno)" className="w-[90%] p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-yellow-500 bg-white dark:bg-slate-900 dark:text-white" value={tip.title} onChange={e => updateTip(i, 'title', e.target.value)} />
-                <textarea rows="2" placeholder="Explicación del tip..." className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-yellow-500 bg-white dark:bg-slate-900 dark:text-white resize-none" value={tip.desc} onChange={e => updateTip(i, 'desc', e.target.value)} />
+                <button type="button" onClick={() => removeArrayItem('tips', i)} className="absolute top-3 right-3 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                <input type="text" placeholder="Concepto (Ej: Control pH)" className="w-[90%] p-3 border dark:border-slate-600 rounded-xl text-sm outline-none dark:bg-slate-900" value={tip.title} onChange={e => updateArray('tips', i, 'title', e.target.value)} />
+                <textarea rows="2" placeholder="Explicación..." className="w-full p-3 border dark:border-slate-600 rounded-xl text-sm outline-none dark:bg-slate-900 resize-none" value={tip.desc} onChange={e => updateArray('tips', i, 'desc', e.target.value)} />
               </div>
            ))}
-           <button onClick={() => setFormData({...formData, tips: [...formData.tips, {title:'', desc:''}]})} className="text-sm text-yellow-600 font-bold hover:text-yellow-800 transition-colors bg-yellow-50 dark:bg-yellow-900/30 px-4 py-2 rounded-xl mt-1 flex items-center gap-2"><Plus size={16}/> Añadir Tip</button>
+           <button onClick={() => setFormData({...formData, tips: [...formData.tips, {title:'', desc:''}]})} className="text-sm text-yellow-600 font-bold bg-yellow-50 dark:bg-yellow-900/30 px-4 py-2 rounded-xl mt-1 flex items-center gap-2"><Plus size={16}/> Añadir Tip</button>
         </div>
 
-        {isEditing && (
-          <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-             <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Nota de Modificación (Opcional)</label>
-             <input type="text" placeholder="Ej: Cambié el lúpulo Citra por Mosaic para probar." className="w-full p-4 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={modNote} onChange={e => setModNote(e.target.value)} />
-          </div>
-        )}
-
-        <button onClick={handleSave} className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white p-5 rounded-2xl font-black text-xl flex justify-center items-center gap-3 mt-8 transition-transform hover:scale-[1.02] shadow-xl">
-          <Save size={28} /> {isEditing ? 'Guardar Obra Maestra' : 'Registrar Receta'}
+        <button onClick={handleSave} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white p-5 rounded-2xl font-black text-xl flex justify-center items-center gap-3 mt-8 shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1">
+          <Save size={28} /> {isEditing ? 'Guardar Obra Maestra' : 'Registrar Nueva Receta'}
         </button>
       </div>
     </div>
   );
 }
 
-// --- APLICACIÓN PRINCIPAL (Capa Lógica) ---
+// --- APLICACIÓN PRINCIPAL ---
 function MainApp() {
   const [user, setUser] = useState(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -648,7 +585,6 @@ function MainApp() {
   const [inventory, setInventory] = useState([]);
   const [history, setHistory] = useState([]);
 
-  // Cambiamos la vista por defecto al Dashboard
   const [view, setView] = useState('dashboard'); 
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [activeTab, setActiveTab] = useState('recipe');
@@ -664,7 +600,11 @@ function MainApp() {
   const [showInvForm, setShowInvForm] = useState(false);
   const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0 });
 
-  // Mejoras de Autenticación
+  // Filtros Dashboard
+  const [dashTimeFilter, setDashTimeFilter] = useState('all');
+  const [dashStyleFilter, setDashStyleFilter] = useState('Todos');
+
+  // Autenticación
   const [authEmail, setAuthEmail] = useState('');
   const [authPass, setAuthPass] = useState('');
   const [authError, setAuthError] = useState('');
@@ -672,37 +612,27 @@ function MainApp() {
   const [showPassword, setShowPassword] = useState(false);
   const [resetMessage, setResetMessage] = useState('');
   
-  // Estado para la IA de Asesoría
+  // Estado IA
   const [aiAdvice, setAiAdvice] = useState(null);
   const [isAdvising, setIsAdvising] = useState(false);
 
-  // --- EFECTO MODO OSCURO (Forzado al tag HTML) ---
+  // --- EFECTO MODO OSCURO ---
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    if (darkMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
   // --- FIREBASE: Autenticación ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
+      if (currentUser) setUser(currentUser);
+      else {
         try {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
-        } catch (error) {
-          console.error("Error en autenticación anónima:", error);
-        }
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+          else await signInAnonymously(auth);
+        } catch (error) { console.error("Error auth anónima:", error); }
       }
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -710,7 +640,6 @@ function MainApp() {
   useEffect(() => {
     if (!user) return;
     const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'brewery', 'mainData');
-    
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -720,308 +649,245 @@ function MainApp() {
       } else {
         const seedRecipes = user.isAnonymous ? [] : initialRecipes;
         const seedInventory = user.isAnonymous ? [] : initialInventory;
-
         setDoc(docRef, { recipes: seedRecipes, inventory: seedInventory, history: [] });
-        setRecipes(seedRecipes);
-        setInventory(seedInventory);
-        setHistory([]);
+        setRecipes(seedRecipes); setInventory(seedInventory); setHistory([]);
       }
       setIsDataLoaded(true);
     }, (error) => {
-      console.error("Error cargando base de datos:", error);
+      console.error("Error DB:", error);
       setIsDataLoaded(true);
     });
-    
     return () => unsubscribe();
   }, [user]);
 
   const updateCloudData = async (newData) => {
     if (!user) return;
     setIsSaving(true); 
-    try {
-      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'brewery', 'mainData');
-      await setDoc(docRef, newData, { merge: true });
-    } catch (e) {
-      console.error("Error guardando:", e);
-    } finally {
-      setTimeout(() => setIsSaving(false), 800); 
-    }
+    try { await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'brewery', 'mainData'), newData, { merge: true }); } 
+    catch (e) { console.error(e); } 
+    finally { setTimeout(() => setIsSaving(false), 800); }
   };
 
   const forceSyncCloud = () => updateCloudData({ recipes, inventory, history });
 
   const handleAuthSubmit = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    setResetMessage('');
+    e.preventDefault(); setAuthError(''); setResetMessage('');
     try {
-      if (isRegistering) {
-        await createUserWithEmailAndPassword(auth, authEmail, authPass);
-      } else {
-        await signInWithEmailAndPassword(auth, authEmail, authPass);
-      }
+      if (isRegistering) await createUserWithEmailAndPassword(auth, authEmail, authPass);
+      else await signInWithEmailAndPassword(auth, authEmail, authPass);
       setView('dashboard');
     } catch (err) {
-      console.error("Error de Auth:", err);
-      if (err.code === 'auth/email-already-in-use') setAuthError('Este correo ya está registrado. Intenta iniciar sesión.');
-      else if (err.code === 'auth/weak-password') setAuthError('La contraseña debe tener al menos 6 caracteres.');
-      else if (err.code === 'auth/invalid-email') setAuthError('El formato del correo es inválido.');
-      else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') setAuthError('Correo o contraseña incorrectos.');
-      else if (err.code === 'auth/operation-not-allowed') setAuthError('Error: El método de Correo/Contraseña está apagado en Firebase Console.');
+      if (err.code === 'auth/email-already-in-use') setAuthError('Este correo ya está registrado.');
+      else if (err.code === 'auth/weak-password') setAuthError('Mínimo 6 caracteres.');
       else setAuthError(`Error: ${err.message}`);
     }
   };
 
   const handleResetPassword = async () => {
-    setAuthError('');
-    setResetMessage('');
-    if (!authEmail) {
-       setAuthError('Por favor, ingresa tu correo electrónico arriba para recuperar tu contraseña.');
-       return;
-    }
+    setAuthError(''); setResetMessage('');
+    if (!authEmail) return setAuthError('Ingresa tu correo arriba.');
     try {
       await sendPasswordResetEmail(auth, authEmail);
-      setResetMessage('¡Enlace de recuperación enviado! Revisa tu bandeja de entrada o spam.');
-    } catch (err) {
-      console.error(err);
-      if (err.code === 'auth/user-not-found') setAuthError('No hay ninguna cuenta con este correo.');
-      else if (err.code === 'auth/invalid-email') setAuthError('El formato del correo es inválido.');
-      else setAuthError('Error al enviar correo de recuperación.');
-    }
+      setResetMessage('¡Enlace de recuperación enviado!');
+    } catch (err) { setAuthError('Error al enviar correo.'); }
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    setView('dashboard');
-  };
+  const handleLogout = async () => { await signOut(auth); setView('dashboard'); };
 
   const handleAddInventoryItem = (name, category) => {
     const unit = category === 'Levadura' ? 'sobre' : category === 'Lúpulo' ? 'g' : 'kg';
     const newInv = [...inventory, { id: 'inv-' + Date.now(), category, name, stock: 0, unit, price: 0 }];
-    setInventory(newInv);
-    updateCloudData({ inventory: newInv });
+    setInventory(newInv); updateCloudData({ inventory: newInv });
   };
   
-  // Consulta a la IA para asesoría de recetas
   const handleGetAiAdvice = async () => {
     if (!selectedRecipe) return;
-    setIsAdvising(true);
-    setAiAdvice(null);
+    setIsAdvising(true); setAiAdvice(null);
     try {
-      const prompt = `Como Maestro Cervecero experto, analiza esta receta: ${selectedRecipe.name} (${selectedRecipe.category}). 
-      Formulación: ${JSON.stringify(selectedRecipe.ingredients)}. 
-      Perfil de Agua: ${JSON.stringify(selectedRecipe.waterProfile)}. 
-      Dime 3 sugerencias técnicas breves y profesionales para mejorar la calidad sensorial o el proceso.`;
-      
-      const res = await callGemini(prompt, "Eres un consultor experto en cervecería artesanal de nivel mundial. Responde en español.");
+      const prompt = `Analiza esta receta: ${selectedRecipe.name} (${selectedRecipe.category}). Formulación: ${JSON.stringify(selectedRecipe.ingredients)}. Agua: ${JSON.stringify(selectedRecipe.waterProfile)}. Dame 3 sugerencias técnicas pro para mejorar.`;
+      const res = await callGemini(prompt, "Eres un Maestro Cervecero de élite mundial.");
       setAiAdvice(res);
-    } catch (err) {
-      alert("La IA está ocupada en este momento. Intenta de nuevo.");
-    } finally {
-      setIsAdvising(false);
-    }
+    } catch (err) { alert("IA Ocupada."); } finally { setIsAdvising(false); }
   };
 
   // --- CRONÓMETRO ---
   useEffect(() => {
     let interval = null;
-    if (brewState.isRunning && brewState.timeLeft > 0) {
-      interval = setInterval(() => setBrewState(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 })), 1000);
-    } else if (brewState.timeLeft === 0 && brewState.isRunning) {
-      setBrewState(prev => ({ ...prev, isRunning: false }));
-    }
+    if (brewState.isRunning && brewState.timeLeft > 0) interval = setInterval(() => setBrewState(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 })), 1000);
+    else if (brewState.timeLeft === 0 && brewState.isRunning) setBrewState(prev => ({ ...prev, isRunning: false }));
     return () => clearInterval(interval);
   }, [brewState.isRunning, brewState.timeLeft]);
 
   const formatTime = (seconds) => {
     if (isNaN(seconds) || seconds < 0) return "00:00";
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
+    const m = Math.floor(seconds / 60); const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
-
-  const calculateCostForRecipe = (recipe, targetVolume) => {
-      let neto = 0;
-      (recipe.ingredients?.malts || []).forEach(m => {
-        const item = inventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === (m.name || '').toLowerCase() || (m.name || '').toLowerCase().includes(i.name.toLowerCase())));
-        neto += (Number(m.amount) || 0) * (item ? Number(item.price) : defaultPrices.malta);
-      });
-      (recipe.ingredients?.hops || []).forEach(h => {
-        const item = inventory.find(i => i.category === 'Lúpulo' && (h.name || '').toLowerCase().includes(i.name.toLowerCase()));
-        neto += (Number(h.amount) || 0) * (item ? Number(item.price) : defaultPrices.lupulo);
-      });
-      
-      const yeastObj = recipe.ingredients?.yeast;
-      if (yeastObj) {
-         const yeastName = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
-         const yeastAmount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
-         const yItem = inventory.find(i => i.category === 'Levadura' && yeastName.toLowerCase().includes(i.name.toLowerCase()));
-         neto += yeastAmount * (yItem ? Number(yItem.price) : defaultPrices.levadura);
-      }
-      return neto + (neto * 0.19);
-  };
-
-  const deleteHistoryItem = (id) => {
-    if(window.confirm("¿Seguro que deseas eliminar este registro del historial?")) {
-      const newHistory = history.filter(item => item.id !== id);
-      setHistory(newHistory);
-      updateCloudData({ history: newHistory });
-    }
-  };
-
-  if (!isDataLoaded) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center text-amber-500 animate-pulse">
-          <Beaker size={64} className="mx-auto mb-4" />
-          <h2 className="text-2xl font-black">Conectando a la Nube...</h2>
-          <p className="font-bold text-sm mt-2 tracking-widest uppercase">Cargando tu cervecería</p>
-        </div>
-      </div>
-    );
-  }
 
   // ==========================================
   // VISTAS
   // ==========================================
 
-  // 0. Vista Auth (Login/Register)
   const renderAuth = () => (
     <div className="flex justify-center items-center min-h-[60vh] animate-fadeIn">
       <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 w-full max-w-md">
         <div className="text-center mb-6">
           <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-600 p-4 rounded-full inline-block mb-3"><User size={40}/></div>
           <h2 className="text-2xl font-black text-slate-800 dark:text-white">{isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}</h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Separa tus recetas e inventario del resto conectando tu cuenta.</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Guarda tus recetas y métricas en la nube.</p>
         </div>
         <form onSubmit={handleAuthSubmit} className="space-y-4">
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Electrónico</label><input type="email" required className="w-full p-3 border dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500" value={authEmail} onChange={e => setAuthEmail(e.target.value)} /></div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Correo Electrónico</label>
-            <input type="email" required className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Contraseña</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contraseña</label>
             <div className="relative">
-              <input type={showPassword ? "text" : "password"} required className="w-full p-3 pr-12 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500" value={authPass} onChange={e => setAuthPass(e.target.value)} />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-slate-400 hover:text-amber-500 transition-colors">
-                {showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}
-              </button>
+              <input type={showPassword ? "text" : "password"} required className="w-full p-3 pr-12 border dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500" value={authPass} onChange={e => setAuthPass(e.target.value)} />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-slate-400 hover:text-amber-500 transition-colors">{showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}</button>
             </div>
-            {!isRegistering && (
-              <div className="text-right mt-2">
-                <button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-500 hover:text-amber-500 transition-colors">¿Olvidaste tu contraseña?</button>
-              </div>
-            )}
+            {!isRegistering && <div className="text-right mt-2"><button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-500 hover:text-amber-500">¿Olvidaste tu contraseña?</button></div>}
           </div>
           {authError && <p className="text-red-500 text-sm font-medium bg-red-50 dark:bg-red-900/30 p-3 rounded-lg">{authError}</p>}
           {resetMessage && <p className="text-emerald-500 text-sm font-medium bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg">{resetMessage}</p>}
-          <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 dark:bg-amber-600 dark:hover:bg-amber-500 text-white p-4 rounded-xl font-black transition-colors shadow-lg">
-            {isRegistering ? 'Registrar y Entrar' : 'Entrar'}
-          </button>
+          <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 dark:bg-amber-600 dark:hover:bg-amber-500 text-white p-4 rounded-xl font-black transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">{isRegistering ? 'Registrar y Entrar' : 'Entrar'}</button>
         </form>
-        <div className="mt-6 text-center">
-          <button onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setResetMessage(''); }} className="text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors">
-            {isRegistering ? '¿Ya tienes cuenta? Inicia Sesión' : '¿No tienes cuenta? Regístrate'}
-          </button>
-        </div>
+        <div className="mt-6 text-center"><button onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setResetMessage(''); }} className="text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors">{isRegistering ? '¿Ya tienes cuenta? Inicia Sesión' : '¿No tienes cuenta? Regístrate'}</button></div>
       </div>
     </div>
   );
 
-  // 1. Vista Dashboard (NUEVO KPIs)
   const renderDashboard = () => {
     const safeHistory = Array.isArray(history) ? history : [];
+    const availableStyles = ['Todos', ...new Set(safeHistory.map(h => h.category || 'Otros'))];
+
+    // Aplicar Filtros
+    const now = Date.now();
+    const filteredHistory = safeHistory.filter(h => {
+        // Filtro Estilo
+        if (dashStyleFilter !== 'Todos' && (h.category || 'Otros') !== dashStyleFilter) return false;
+        // Filtro Tiempo
+        if (dashTimeFilter !== 'all') {
+            const histTime = h.timestamp || parseDateToTimestamp(h.date);
+            const daysDiff = (now - histTime) / (1000 * 3600 * 24);
+            if (dashTimeFilter === '30' && daysDiff > 30) return false;
+            if (dashTimeFilter === '90' && daysDiff > 90) return false;
+            if (dashTimeFilter === '365' && daysDiff > 365) return false;
+        }
+        return true;
+    });
     
-    // Cálculos de KPIs
-    const totalLiters = safeHistory.reduce((sum, h) => sum + (Number(h.volume) || 0), 0);
-    const totalCost = safeHistory.reduce((sum, h) => sum + (Number(h.totalCost) || 0), 0);
+    // Cálculos de KPIs basados en el filtro
+    const totalLiters = filteredHistory.reduce((sum, h) => sum + (Number(h.volume) || 0), 0);
+    const totalCost = filteredHistory.reduce((sum, h) => sum + (Number(h.totalCost) || 0), 0);
     const avgCostPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
-    const totalBatches = safeHistory.length;
+    const totalBatches = filteredHistory.length;
     
     let sumABV = 0; let countABV = 0;
-    safeHistory.forEach(h => { if(h.abv && Number(h.abv) > 0) { sumABV += Number(h.abv); countABV++; } });
+    filteredHistory.forEach(h => { if(h.abv && Number(h.abv) > 0) { sumABV += Number(h.abv); countABV++; } });
     const avgABV = countABV > 0 ? (sumABV / countABV).toFixed(1) : 0;
 
-    // Volumen por Estilo (Top 4)
-    const volumeByStyle = safeHistory.reduce((acc, h) => {
-        // Buscamos la categoría cruzando con la receta si es posible, o usamos un default
-        const recipeMatch = recipes.find(r => r.name === h.recipeName);
-        const style = recipeMatch ? recipeMatch.category : 'Otros';
+    const volumeByStyle = filteredHistory.reduce((acc, h) => {
+        const style = h.category || 'Otros';
         acc[style] = (acc[style] || 0) + (Number(h.volume) || 0);
         return acc;
     }, {});
     const topStyles = Object.entries(volumeByStyle).sort((a,b) => b[1] - a[1]).slice(0, 4);
-    
-    // Máximo volumen para calcular porcentajes en barras
     const maxStyleVolume = topStyles.length > 0 ? topStyles[0][1] : 1;
 
     return (
       <div className="space-y-6 animate-fadeIn">
-        <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800 mb-8">
+        
+        {/* Cabecera Dashboard */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800 mb-6 gap-6">
           <div>
             <h2 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-3">
-              <TrendingUp className="text-blue-500" size={32} /> Dashboard de Producción
+              <TrendingUp className="text-blue-500" size={32} /> Central de Operaciones
             </h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Métricas globales de tu cervecería.</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Visión analítica de tu cervecería.</p>
           </div>
-          <button onClick={() => setView('add')} className="bg-amber-500 hover:bg-amber-400 text-slate-900 px-6 py-3 rounded-xl font-black flex items-center gap-2 transition-colors shadow-md">
-            <Plus size={20} /> Nueva Cocción
-          </button>
+          <div className="flex flex-wrap gap-3 w-full md:w-auto">
+            <button onClick={() => setView('list')} className="flex-1 md:flex-none justify-center bg-amber-500 hover:bg-amber-400 text-slate-900 px-6 py-3 rounded-xl font-black flex items-center gap-2 transition-all shadow-md hover:-translate-y-0.5">
+              <Beer size={20} /> Iniciar Cocción
+            </button>
+            <button onClick={() => setView('add')} className="flex-1 md:flex-none justify-center bg-slate-800 hover:bg-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 text-white px-6 py-3 rounded-xl font-black flex items-center gap-2 transition-all shadow-md hover:-translate-y-0.5 border border-slate-700">
+              <Plus size={20} /> Formular Receta
+            </button>
+          </div>
+        </div>
+
+        {/* Panel de Filtros Inteligentes */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-gray-200 dark:border-slate-800 flex flex-col md:flex-row gap-4 items-center shadow-inner">
+           <div className="flex items-center gap-3 w-full md:w-auto">
+              <Filter className="text-slate-400" size={20} />
+              <span className="font-bold text-sm uppercase tracking-wider text-slate-500">Filtros:</span>
+           </div>
+           
+           <div className="flex flex-wrap gap-2 w-full md:w-auto">
+              {[{l:'Todo', v:'all'}, {l:'30 Días', v:'30'}, {l:'90 Días', v:'90'}, {l:'1 Año', v:'365'}].map(f => (
+                <button 
+                  key={f.v} onClick={() => setDashTimeFilter(f.v)}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${dashTimeFilter === f.v ? 'bg-blue-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
+                >{f.l}</button>
+              ))}
+           </div>
+           
+           <div className="w-full md:w-auto md:ml-auto">
+              <select 
+                value={dashStyleFilter} onChange={e => setDashStyleFilter(e.target.value)}
+                className="w-full md:w-48 p-2 rounded-lg text-sm font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              >
+                {availableStyles.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+           </div>
         </div>
 
         {user && user.isAnonymous && (
-          <div className="bg-amber-500/10 border border-amber-500/20 p-6 md:p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-center gap-6 shadow-inner text-center md:text-left mb-8">
-             <div>
-                <h3 className="font-black text-amber-500 text-xl mb-1 flex items-center justify-center md:justify-start gap-2"><Beaker size={24}/> Modo Invitado Activo</h3>
-                <p className="text-slate-400 text-sm font-medium">Tus estadísticas se perderán. Crea una cuenta gratuita para guardar todo en la nube de forma permanente.</p>
-             </div>
-             <button onClick={() => setView('auth')} className="bg-amber-500 text-slate-900 px-8 py-4 rounded-2xl font-black shadow-[0_10px_30px_rgba(245,158,11,0.3)] hover:bg-amber-400 transition-all whitespace-nowrap active:scale-95">
-                Crear Cuenta Pro
-             </button>
+          <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-6 text-center md:text-left">
+             <p className="text-amber-600 dark:text-amber-500 text-sm font-bold flex items-center justify-center md:justify-start gap-2"><Info size={18}/> Estás en modo invitado. Tus estadísticas desaparecerán al salir.</p>
+             <button onClick={() => setView('auth')} className="bg-amber-500 text-slate-900 px-6 py-2 rounded-xl font-black shadow-md hover:bg-amber-400 transition-all whitespace-nowrap">Crear Cuenta</button>
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden">
-            <div className="absolute right-[-20px] top-[-20px] opacity-20"><Droplets size={100} /></div>
-            <span className="text-blue-100 text-xs font-black uppercase tracking-widest block mb-2 relative z-10">Lts Totales</span>
-            <span className="text-4xl font-black relative z-10">{totalLiters} L</span>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-700 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden transition-transform hover:scale-105">
+            <div className="absolute -right-4 -bottom-4 opacity-20"><Droplets size={100} /></div>
+            <span className="text-blue-100 text-[10px] font-black uppercase tracking-widest block mb-1 relative z-10">Lts Producidos</span>
+            <span className="text-4xl md:text-5xl font-black relative z-10">{totalLiters} <span className="text-2xl text-blue-200">L</span></span>
           </div>
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
-            <div className="absolute right-[-20px] top-[-20px] opacity-5 dark:opacity-10 text-emerald-500"><Banknote size={100} /></div>
-            <span className="text-slate-400 text-xs font-black uppercase tracking-widest block mb-2 relative z-10">Costo / Litro (Prom)</span>
-            <span className="text-3xl font-black text-emerald-600 relative z-10">{formatCurrency(avgCostPerLiter)}</span>
+          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden transition-transform hover:scale-105">
+            <div className="absolute -right-4 -bottom-4 opacity-20"><Banknote size={100} /></div>
+            <span className="text-emerald-100 text-[10px] font-black uppercase tracking-widest block mb-1 relative z-10">Costo / Litro</span>
+            <span className="text-3xl md:text-4xl font-black relative z-10">{formatCurrency(avgCostPerLiter)}</span>
           </div>
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm relative overflow-hidden transition-transform hover:scale-105">
             <div className="absolute right-[-20px] top-[-20px] opacity-5 dark:opacity-10 text-orange-500"><CalendarClock size={100} /></div>
-            <span className="text-slate-400 text-xs font-black uppercase tracking-widest block mb-2 relative z-10">Lotes Cocinados</span>
-            <span className="text-3xl font-black text-slate-800 dark:text-white relative z-10">{totalBatches}</span>
+            <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest block mb-1 relative z-10">Lotes (Batches)</span>
+            <span className="text-4xl font-black text-slate-800 dark:text-white relative z-10">{totalBatches}</span>
           </div>
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm relative overflow-hidden transition-transform hover:scale-105">
             <div className="absolute right-[-20px] top-[-20px] opacity-5 dark:opacity-10 text-red-500"><Thermometer size={100} /></div>
-            <span className="text-slate-400 text-xs font-black uppercase tracking-widest block mb-2 relative z-10">ABV Promedio</span>
-            <span className="text-3xl font-black text-red-500 relative z-10">{avgABV}%</span>
+            <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest block mb-1 relative z-10">ABV Promedio</span>
+            <span className="text-4xl font-black text-red-500 relative z-10">{avgABV}%</span>
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mt-8">
+        <div className="grid md:grid-cols-2 gap-6 mt-2">
           {/* GRÁFICO BARRAS: Producción por Estilo */}
           <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm">
-            <h3 className="font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500"/> Producción por Estilo</h3>
+            <h3 className="font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500"/> Top Estilos (Volumen)</h3>
             {topStyles.length === 0 ? (
-              <p className="text-slate-500 italic">No hay datos suficientes. Cocina tu primer lote.</p>
+              <p className="text-slate-400 font-medium italic text-center py-8">Cocina tu primer lote para ver estadísticas.</p>
             ) : (
               <div className="space-y-5">
                 {topStyles.map(([style, vol], idx) => {
                   const percentage = Math.max(5, (vol / maxStyleVolume) * 100);
                   const theme = getThemeForCategory(style);
                   return (
-                    <div key={idx} className="relative">
-                      <div className="flex justify-between text-sm font-bold mb-1">
-                        <span className="text-slate-700 dark:text-slate-300">{style}</span>
+                    <div key={idx} className="relative group">
+                      <div className="flex justify-between text-sm font-bold mb-1.5">
+                        <span className="text-slate-700 dark:text-slate-300 group-hover:text-white transition-colors">{style}</span>
                         <span className={theme.text}>{vol} L</span>
                       </div>
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden shadow-inner">
                         <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${percentage}%`, backgroundColor: theme.colorBase }}></div>
                       </div>
                     </div>
@@ -1032,14 +898,15 @@ function MainApp() {
           </div>
 
           {/* TARJETA INVERSION TOTAL */}
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col justify-between">
-            <div>
-              <h3 className="font-black text-white mb-2 flex items-center gap-2"><PieChart size={20} className="text-emerald-400"/> Inversión Total</h3>
-              <p className="text-slate-400 text-sm font-medium">Suma de todos los costos registrados en tu historial de producción.</p>
+          <div className="bg-gradient-to-br from-slate-800 to-slate-950 p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform duration-1000"><PieChart size={250} className="text-emerald-500"/></div>
+            <div className="relative z-10">
+              <h3 className="font-black text-white text-xl mb-2 flex items-center gap-2"><Banknote size={24} className="text-emerald-400"/> Inversión Acumulada</h3>
+              <p className="text-slate-400 text-sm font-medium">Suma de costos de todos los insumos de los lotes en este periodo.</p>
             </div>
-            <div className="mt-8 text-center bg-black/30 p-6 rounded-2xl border border-slate-700/50 backdrop-blur-sm">
-              <span className="block text-5xl font-black text-emerald-400 mb-2 drop-shadow-lg">{formatCurrency(totalCost)}</span>
-              <span className="text-emerald-500/80 text-xs font-black uppercase tracking-widest">CLP Histórico</span>
+            <div className="mt-8 text-center bg-black/40 p-8 rounded-2xl border border-white/5 backdrop-blur-md relative z-10 shadow-inner group-hover:border-emerald-500/30 transition-colors">
+              <span className="block text-5xl md:text-6xl font-black text-emerald-400 mb-2 drop-shadow-[0_0_15px_rgba(52,211,153,0.3)] tracking-tighter">{formatCurrency(totalCost)}</span>
+              <span className="text-emerald-500/70 text-[10px] font-black uppercase tracking-[0.3em]">CLP Histórico</span>
             </div>
           </div>
         </div>
@@ -1048,8 +915,8 @@ function MainApp() {
     );
   };
 
-  // 1.5 Vista de Mis Recetas (Antiguo List)
-  const renderRecipes = () => {
+  // 1.5 Vista de Mis Recetas
+  const renderList = () => {
     const safeRecipes = Array.isArray(recipes) ? recipes : [];
     const grouped = safeRecipes.reduce((acc, recipe) => {
       const cat = recipe.category || 'Sin Categoría';
@@ -1070,11 +937,8 @@ function MainApp() {
                   const missing = initialRecipes.filter(r => !existingIds.includes(r.id));
                   if(missing.length > 0) {
                       const updated = [...safeRecipes, ...missing];
-                      setRecipes(updated);
-                      updateCloudData({ recipes: updated });
-                  } else {
-                      alert("¡Ya tienes todas las recetas maestras actualizadas en tu perfil!");
-                  }
+                      setRecipes(updated); updateCloudData({ recipes: updated });
+                  } else { alert("¡Ya tienes todas las recetas maestras actualizadas en tu perfil!"); }
                 }} 
                 className="text-xs text-blue-500 hover:text-blue-600 underline ml-3 font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded"
               >
@@ -1084,7 +948,7 @@ function MainApp() {
           </div>
           <div className="flex flex-wrap gap-2 w-full md:w-auto justify-center">
             <button onClick={() => setView('add')} className="flex-1 md:flex-none justify-center bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
-              <Plus size={18} /> Crear / Clonar Receta
+              <Plus size={18} /> Nueva / Clonar Receta
             </button>
           </div>
         </div>
@@ -1093,59 +957,47 @@ function MainApp() {
           const theme = getThemeForCategory(category);
           return (
             <div key={category} className="space-y-4">
-              <h2 className={`text-2xl font-black ${theme.text} border-b-2 ${theme.border} pb-2 flex items-center gap-2`}>
-                <Beer className={theme.icon} /> {category}
-              </h2>
+              <h2 className={`text-2xl font-black ${theme.text} border-b-2 ${theme.border} pb-2 flex items-center gap-2`}><Beer className={theme.icon} /> {category}</h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {grouped[category].map(recipe => {
                   const recipeHistory = Array.isArray(history) ? history.filter(h => h.recipeName === recipe.name) : [];
                   const brewCount = recipeHistory.length;
                   const ratedHistory = recipeHistory.filter(h => h.tasting && h.tasting.rating > 0);
-                  const avgRating = ratedHistory.length > 0 
-                    ? (ratedHistory.reduce((sum, h) => sum + h.tasting.rating, 0) / ratedHistory.length).toFixed(1) 
-                    : null;
+                  const avgRating = ratedHistory.length > 0 ? (ratedHistory.reduce((sum, h) => sum + h.tasting.rating, 0) / ratedHistory.length).toFixed(1) : null;
+                  const srmColorHex = getSrmColor(recipe.colorSRM); // NUEVO: Obtener color SRM
 
                   return (
                     <div 
                       key={recipe.id} 
-                      className={`bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm hover:shadow-lg border-2 border-transparent hover:${theme.border} transition-all group flex flex-col justify-between relative`}
+                      className={`bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm hover:shadow-xl border-2 border-transparent hover:${theme.border} transition-all duration-300 hover:-translate-y-1 group flex flex-col justify-between relative overflow-hidden`}
                     >
+                      {/* BARRA SRM INFERIOR */}
+                      <div className="absolute bottom-0 left-0 w-full h-1.5 opacity-80" style={{ backgroundColor: srmColorHex }}></div>
+
                       <button 
                          onClick={(e) => {
                            e.stopPropagation();
                            if(window.confirm(`¿Seguro que deseas eliminar la receta: ${recipe.name}?`)) {
                              const newRecipes = recipes.filter(r => r.id !== recipe.id);
-                             setRecipes(newRecipes);
-                             updateCloudData({ recipes: newRecipes });
+                             setRecipes(newRecipes); updateCloudData({ recipes: newRecipes });
                            }
                          }}
-                         className="absolute top-4 right-4 text-gray-300 dark:text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1"
-                         title="Eliminar receta"
-                      >
-                         <Trash2 size={18}/>
-                      </button>
+                         className="absolute top-4 right-4 text-gray-300 dark:text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1 bg-white dark:bg-slate-800 rounded-md shadow-sm" title="Eliminar receta"
+                      ><Trash2 size={18}/></button>
 
                       <div className="cursor-pointer" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setAiAdvice(null); setView('recipe'); }}>
                         <div className="flex justify-between items-start mb-3">
-                          <span className={`inline-block px-3 py-1 rounded text-xs font-bold ${theme.badge}`}>{recipe.category || 'Sin Estilo'}</span>
-                          
+                          <span className={`inline-block px-3 py-1 rounded text-xs font-bold shadow-sm ${theme.badge}`}>{recipe.category || 'Sin Estilo'}</span>
                           {brewCount > 0 && (
                             <div className="flex items-center gap-2 text-xs font-bold mr-6">
-                              <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 px-2 py-1 rounded-lg flex items-center gap-1">
-                                <CalendarClock size={12} /> {brewCount} {brewCount === 1 ? 'Lote' : 'Lotes'}
-                              </span>
-                              {avgRating && (
-                                <span className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50 px-2 py-1 rounded-lg flex items-center gap-1">
-                                  <Star size={12} className="fill-amber-500 text-amber-500" /> {avgRating}
-                                </span>
-                              )}
+                              <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm"><CalendarClock size={12} /> {brewCount} {brewCount === 1 ? 'Lote' : 'Lotes'}</span>
+                              {avgRating && <span className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50 px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm"><Star size={12} className="fill-amber-500 text-amber-500" /> {avgRating}</span>}
                             </div>
                           )}
                         </div>
-                        
-                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors pr-6">{recipe.name || 'Sin Nombre'}</h3>
+                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors pr-6 tracking-tight">{recipe.name || 'Sin Nombre'}</h3>
                       </div>
-                      <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4 cursor-pointer" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setAiAdvice(null); setView('recipe'); }}>
+                      <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4 cursor-pointer pb-2" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setAiAdvice(null); setView('recipe'); }}>
                         <span className="flex items-center gap-1" title="Volumen"><Droplets size={16} className="text-blue-500"/> {recipe.targetVolume || 0}L</span>
                         <span className="flex items-center gap-1" title="Alcohol Est."><Thermometer size={16} className="text-red-500"/> {recipe.abv || 0}%</span>
                         {(recipe.ibu > 0) && <span className="flex items-center gap-1" title="Amargor"><Activity size={16} className="text-orange-500"/> {recipe.ibu} IBU</span>}
@@ -1346,11 +1198,16 @@ function MainApp() {
 
       const diff = {
         Ca: Math.max(0, (Number(target.Ca) || 0) - baseWater.Ca), Mg: Math.max(0, (Number(target.Mg) || 0) - baseWater.Mg),
-        SO4: Math.max(0, (Number(target.SO4) || 0) - baseWater.SO4), Cl: Math.max(0, (Number(target.Cl) || 0) - baseWater.Cl)
+        SO4: Math.max(0, (Number(target.SO4) || 0) - baseWater.SO4), Cl: Math.max(0, (Number(target.Cl) || 0) - baseWater.Cl),
+        HCO3: Math.max(0, (Number(target.HCO3) || 0) - baseWater.HCO3) // NUEVO: Calculo para Bicarbonato
       };
 
       const epsomGrams = (diff.Mg * totalWaterLiters) / 99; const epsomSO4Contributed = (epsomGrams * 390) / totalWaterLiters || 0;
       const cacl2Grams = (diff.Cl * totalWaterLiters) / 482; const cacl2CaContributed = (cacl2Grams * 272) / totalWaterLiters || 0;
+      
+      // NUEVO: Bicarbonato de Sodio (Baking Soda) para alcanzar HCO3
+      const bakingSodaGrams = (diff.HCO3 * totalWaterLiters) / 728; 
+
       const remainingSO4 = Math.max(0, diff.SO4 - epsomSO4Contributed);
       const gypsumGrams = (remainingSO4 * totalWaterLiters) / 558; const gypsumCaContributed = (gypsumGrams * 232) / totalWaterLiters || 0;
 
@@ -1359,9 +1216,10 @@ function MainApp() {
         Mg: Math.round(baseWater.Mg + diff.Mg),
         SO4: Math.round(baseWater.SO4 + epsomSO4Contributed + remainingSO4), 
         Cl: Math.round(baseWater.Cl + diff.Cl),
-        HCO3: Math.round(baseWater.HCO3) // Retiene y muestra el HCO3
+        HCO3: Math.round(baseWater.HCO3 + diff.HCO3) // Ya alcanzamos el objetivo con Baking Soda
       };
-      return { totalWater: totalWaterLiters.toFixed(1), gypsum: gypsumGrams.toFixed(1), cacl2: cacl2Grams.toFixed(1), epsom: epsomGrams.toFixed(1), finalEstimates };
+      
+      return { totalWater: totalWaterLiters.toFixed(1), gypsum: gypsumGrams.toFixed(1), cacl2: cacl2Grams.toFixed(1), epsom: epsomGrams.toFixed(1), bakingSoda: bakingSodaGrams.toFixed(1), finalEstimates };
     };
     const saltAdditions = calculateSalts();
 
@@ -1371,126 +1229,130 @@ function MainApp() {
     return (
       <div className="animate-fadeIn">
         <div className="flex justify-between items-center mb-4">
-          <button onClick={() => setView('recipes')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-white dark:bg-slate-800 px-4 py-2 rounded-xl transition-colors shadow-sm border border-gray-200 dark:border-slate-700">
+          <button onClick={() => setView('list')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-white dark:bg-slate-800 px-4 py-2 rounded-xl transition-all shadow-sm border border-gray-200 dark:border-slate-700 hover:-translate-x-1">
             <ArrowLeft size={20} /> Mis Recetas
           </button>
-          <button onClick={() => setView('edit')} className="flex items-center gap-2 text-white font-bold bg-slate-800 hover:bg-slate-900 px-4 py-2 rounded-xl transition-colors shadow-sm">
+          <button onClick={() => setView('edit')} className="flex items-center gap-2 text-white font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-slate-700">
             <Edit3 size={18} /> Editar Receta
           </button>
         </div>
 
         {/* HEADER DINÁMICO */}
-        <div className={`${theme.header} text-white p-6 md:p-10 rounded-t-3xl shadow-lg flex flex-col md:flex-row justify-between items-start md:items-end relative overflow-hidden`}>
+        <div className={`${theme.header} text-white p-8 md:p-12 rounded-t-[2.5rem] shadow-xl flex flex-col md:flex-row justify-between items-start md:items-end relative overflow-hidden`}>
           <div className="relative z-10">
-            <span className="bg-white/20 px-4 py-1.5 rounded-full text-sm font-black tracking-wider uppercase mb-4 inline-block shadow-sm backdrop-blur-md">
+            <span className="bg-white/20 px-5 py-2 rounded-full text-sm font-black tracking-[0.2em] uppercase mb-4 inline-block shadow-sm backdrop-blur-md">
               {scaledRecipe.category || 'Sin Categoría'}
             </span>
-            <h2 className="text-4xl md:text-5xl font-black mb-3 leading-tight drop-shadow-md">{scaledRecipe.name || 'Receta Sin Nombre'}</h2>
-            <div className="flex flex-wrap gap-3 mt-5 font-bold text-white/90">
-              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Alcohol por Volumen"><Thermometer size={18}/> ABV: {scaledRecipe.abv}%</span>
-              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Gravedad Original"><Clock size={18}/> DO: {scaledRecipe.og}</span>
-              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Gravedad Final"><CheckCircle2 size={18}/> DF: {scaledRecipe.fg}</span>
-              {(scaledRecipe.ibu > 0) && <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Amargor (IBU)"><Activity size={18}/> IBU: {scaledRecipe.ibu}</span>}
-              {(scaledRecipe.colorSRM > 0) && <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Color (SRM)"><Palette size={18}/> SRM: {scaledRecipe.colorSRM}</span>}
+            <h2 className="text-5xl md:text-6xl font-black mb-3 leading-[0.9] drop-shadow-md tracking-tighter">{scaledRecipe.name || 'Receta Sin Nombre'}</h2>
+            <div className="flex flex-wrap gap-3 mt-6 font-bold text-white/90">
+              <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Alcohol por Volumen"><Thermometer size={18}/> ABV: {scaledRecipe.abv}%</span>
+              <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Gravedad Original"><Clock size={18}/> DO: {scaledRecipe.og}</span>
+              <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Gravedad Final"><CheckCircle2 size={18}/> DF: {scaledRecipe.fg}</span>
+              {(scaledRecipe.ibu > 0) && <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Amargor (IBU)"><Activity size={18}/> IBU: {scaledRecipe.ibu}</span>}
+              {(scaledRecipe.colorSRM > 0) && (
+                 <span className="flex items-center gap-2 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Color Estimado (SRM)">
+                    <div className="w-4 h-4 rounded-full border border-white/50" style={{backgroundColor: getSrmColor(scaledRecipe.colorSRM)}}></div> SRM: {scaledRecipe.colorSRM}
+                 </span>
+              )}
             </div>
           </div>
           
-          <div className="mt-6 md:mt-0 flex flex-col items-start md:items-end bg-black/20 p-5 rounded-2xl backdrop-blur-md border border-white/20 relative z-10">
-            <label className="font-bold text-white/90 text-sm mb-2 uppercase tracking-wider">Volumen Objetivo</label>
+          <div className="mt-8 md:mt-0 flex flex-col items-start md:items-end bg-black/20 p-6 rounded-3xl backdrop-blur-md border border-white/20 relative z-10 shadow-lg">
+            <label className="font-bold text-white/90 text-xs mb-2 uppercase tracking-widest">Volumen Objetivo</label>
             <div className="flex items-center gap-3">
               <input 
                 type="number" 
                 value={targetVol}
                 onChange={(e) => setTargetVol(Number(e.target.value) || 0)}
-                className="w-24 p-2 bg-white text-slate-800 rounded-xl text-center focus:ring-4 focus:ring-white/50 outline-none text-2xl font-black shadow-inner"
+                className="w-28 p-2 bg-white text-slate-800 rounded-2xl text-center focus:ring-4 focus:ring-white/50 outline-none text-3xl font-black shadow-inner"
                 min="1"
               />
-              <span className="text-white font-black text-2xl">L</span>
+              <span className="text-white font-black text-3xl italic">L</span>
             </div>
           </div>
         </div>
 
         {/* TABS NAVEGACIÓN */}
         <div className="flex flex-wrap border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-x-auto rounded-b-none">
-          <button onClick={() => setActiveTab('recipe')} className={`flex-1 min-w-[100px] py-4 font-bold text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'recipe' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+          <button onClick={() => setActiveTab('recipe')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'recipe' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
             <BookOpen size={18} /> Receta
           </button>
-          <button onClick={() => setActiveTab('process')} className={`flex-1 min-w-[100px] py-4 font-bold text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'process' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+          <button onClick={() => setActiveTab('process')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'process' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
             <CheckCircle2 size={18} /> Proceso
           </button>
-          <button onClick={() => setActiveTab('water')} className={`flex-1 min-w-[100px] py-4 font-bold text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'water' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+          <button onClick={() => setActiveTab('water')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'water' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
             <Droplets size={18} /> Agua
           </button>
-          <button onClick={() => setActiveTab('tips')} className={`flex-1 min-w-[100px] py-4 font-bold text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'tips' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+          <button onClick={() => setActiveTab('tips')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'tips' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
             <Info size={18} /> Tips
           </button>
           {(Array.isArray(scaledRecipe.modifications) && scaledRecipe.modifications.length > 0) && (
-            <button onClick={() => setActiveTab('history')} className={`flex-1 min-w-[100px] py-4 font-bold text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'history' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('history')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'history' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
               <FileClock size={18} /> Cambios
             </button>
           )}
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-b-3xl shadow-sm border border-t-0 border-gray-100 dark:border-slate-800 mt-0">
+        <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-b-[2.5rem] shadow-sm border border-t-0 border-gray-100 dark:border-slate-800 mt-0">
           
           {/* TAB: RECETA */}
           {activeTab === 'recipe' && (
-            <div className="space-y-8 animate-fadeIn">
+            <div className="space-y-10 animate-fadeIn">
               
               {/* BOTON IA Y CONSEJOS */}
               <div className="flex justify-end">
                 <button 
                   onClick={handleGetAiAdvice} 
                   disabled={isAdvising}
-                  className="bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-400 font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+                  className="bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-400 font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-sm hover:shadow-md disabled:opacity-50 border border-amber-200 dark:border-amber-800"
                 >
                   {isAdvising ? <Loader2 className="animate-spin" size={18} /> : <BrainCircuit size={18} />}
-                  {isAdvising ? 'Analizando...' : '✨ Consultar al Maestro IA'}
+                  {isAdvising ? 'Analizando parámetros...' : '✨ Consultar al Maestro IA'}
                 </button>
               </div>
 
               {aiAdvice && (
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-800 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-inner relative animate-in zoom-in duration-500">
-                   <div className="absolute top-4 right-4 text-amber-400/20"><Sparkles size={48} /></div>
-                   <h4 className="font-black text-amber-800 dark:text-amber-500 text-lg flex items-center gap-2 mb-3">
-                     <Wand2 size={20} /> Análisis de la Receta
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-800 p-8 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-inner relative animate-in zoom-in duration-500">
+                   <div className="absolute top-6 right-6 text-amber-400/20"><Sparkles size={64} /></div>
+                   <h4 className="font-black text-amber-800 dark:text-amber-500 text-xl flex items-center gap-2 mb-4">
+                     <Wand2 size={24} /> Análisis Experto de la Receta
                    </h4>
-                   <div className="text-slate-700 dark:text-slate-300 font-medium text-sm whitespace-pre-line leading-relaxed">
+                   <div className="text-slate-700 dark:text-slate-300 font-medium text-base whitespace-pre-line leading-relaxed">
                      {aiAdvice}
                    </div>
                 </div>
               )}
 
-              <div className="bg-emerald-50 dark:bg-emerald-900/10 p-6 rounded-2xl border border-emerald-200 dark:border-emerald-800/50 flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
-                 <div className="flex items-center gap-4 w-full md:w-auto">
-                   <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 p-4 rounded-2xl text-white shadow-md flex-shrink-0">
-                     <Banknote size={32} />
+              <div className="bg-emerald-50 dark:bg-emerald-900/10 p-8 rounded-3xl border border-emerald-200 dark:border-emerald-800/50 flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
+                 <div className="flex items-center gap-5 w-full md:w-auto">
+                   <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 p-5 rounded-2xl text-white shadow-lg flex-shrink-0">
+                     <Banknote size={36} />
                    </div>
                    <div>
-                     <h4 className="font-black text-emerald-900 dark:text-emerald-400 text-xl tracking-tight">Costo de Producción</h4>
+                     <h4 className="font-black text-emerald-900 dark:text-emerald-400 text-2xl tracking-tight">Costo de Producción</h4>
                      {!costInfo.allFound && <p className="text-sm text-emerald-700 dark:text-emerald-600 font-medium flex items-center gap-1 mt-1"><Info size={14}/> Faltan ítems, usando estimación.</p>}
                    </div>
                  </div>
                  
-                 <div className="flex flex-col md:flex-row gap-6 bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border border-emerald-100 dark:border-slate-700 w-full md:w-auto flex-1 md:flex-none justify-end">
-                   <div className="flex flex-col text-sm border-b md:border-b-0 md:border-r border-gray-100 dark:border-slate-700 pb-4 md:pb-0 md:pr-6 justify-center">
-                     <div className="flex justify-between gap-8 text-slate-500 dark:text-slate-400 mb-2">
+                 <div className="flex flex-col md:flex-row gap-8 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-slate-700 w-full md:w-auto flex-1 md:flex-none justify-end">
+                   <div className="flex flex-col text-sm border-b md:border-b-0 md:border-r border-gray-100 dark:border-slate-700 pb-4 md:pb-0 md:pr-8 justify-center">
+                     <div className="flex justify-between gap-10 text-slate-500 dark:text-slate-400 mb-2">
                        <span>Neto:</span>
                        <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(costInfo.neto)}</span>
                      </div>
-                     <div className="flex justify-between gap-8 text-slate-500 dark:text-slate-400">
+                     <div className="flex justify-between gap-10 text-slate-500 dark:text-slate-400">
                        <span>IVA (19%):</span>
                        <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(costInfo.iva)}</span>
                      </div>
                    </div>
                    
-                   <div className="flex justify-between md:flex-col items-center md:items-end md:justify-center gap-2 pl-0 md:pl-2">
+                   <div className="flex justify-between md:flex-col items-center md:items-end md:justify-center gap-3 pl-0 md:pl-4">
                      <div className="text-left md:text-right w-full">
-                       <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Lote</span>
-                       <span className="text-2xl font-black text-emerald-600 leading-none block">{formatCurrency(costInfo.totalConIva)}</span>
+                       <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Lote</span>
+                       <span className="text-3xl font-black text-emerald-600 leading-none block">{formatCurrency(costInfo.totalConIva)}</span>
                      </div>
-                     <div className="text-right w-full border-l border-gray-100 dark:border-slate-700 pl-4 md:border-none md:pl-0 mt-0 md:mt-3">
-                       <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Costo x Litro</span>
+                     <div className="text-right w-full border-l border-gray-100 dark:border-slate-700 pl-4 md:border-none md:pl-0 mt-0 md:mt-2">
+                       <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Costo x Litro</span>
                        <span className="text-xl font-black text-emerald-500 leading-none block">{formatCurrency(costInfo.perLiter)}</span>
                      </div>
                    </div>
@@ -1498,42 +1360,42 @@ function MainApp() {
               </div>
 
               <div className="grid md:grid-cols-2 gap-8">
-                <div className="bg-amber-50/50 dark:bg-amber-900/10 p-6 rounded-2xl border border-amber-200 dark:border-amber-800/30 shadow-sm">
-                  <h3 className="text-xl font-black flex items-center gap-2 border-b border-amber-200 dark:border-amber-800/50 pb-3 mb-5 text-amber-900 dark:text-amber-500">
-                    <Wheat className="text-amber-500" size={24}/> Granos y Agua
+                <div className="bg-amber-50/50 dark:bg-amber-900/10 p-8 rounded-3xl border border-amber-200 dark:border-amber-800/30 shadow-sm">
+                  <h3 className="text-2xl font-black flex items-center gap-3 border-b border-amber-200 dark:border-amber-800/50 pb-4 mb-6 text-amber-900 dark:text-amber-500">
+                    <Wheat className="text-amber-500" size={28}/> Granos y Agua
                   </h3>
                   <ul className="space-y-4">
                     {scaledRecipe.ingredients.malts.map((malt, idx) => (
-                      <li key={idx} className="flex justify-between items-center text-base border-b border-amber-100 dark:border-amber-900/30 pb-3">
+                      <li key={idx} className="flex justify-between items-center text-lg border-b border-amber-100 dark:border-amber-900/30 pb-4">
                         <span className="font-bold text-slate-700 dark:text-slate-300">{malt.name || 'Malta'}</span>
-                        <span className="bg-white dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-3 py-1 rounded-lg font-black shadow-sm">{malt.amount} {malt.unit || 'kg'}</span>
+                        <span className="bg-white dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{malt.amount} {malt.unit || 'kg'}</span>
                       </li>
                     ))}
-                    <li className="flex justify-between items-center pt-3 mt-2 border-t border-dashed border-amber-300 dark:border-amber-800/50">
-                      <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={16}/> Agua Strike (Macerar)</span>
-                      <span className="font-black text-blue-800 dark:text-blue-300 text-lg">{scaledRecipe.ingredients.water.strike} L</span>
+                    <li className="flex justify-between items-center pt-4 mt-4 border-t border-dashed border-amber-300 dark:border-amber-800/50">
+                      <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={18}/> Agua Strike (Macerar)</span>
+                      <span className="font-black text-blue-800 dark:text-blue-300 text-xl">{scaledRecipe.ingredients.water.strike} L</span>
                     </li>
-                    <li className="flex justify-between items-center pt-2">
-                      <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={16}/> Agua Sparge (Lavar)</span>
-                      <span className="font-black text-blue-800 dark:text-blue-300 text-lg">{scaledRecipe.ingredients.water.sparge} L</span>
+                    <li className="flex justify-between items-center pt-3">
+                      <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={18}/> Agua Sparge (Lavar)</span>
+                      <span className="font-black text-blue-800 dark:text-blue-300 text-xl">{scaledRecipe.ingredients.water.sparge} L</span>
                     </li>
                   </ul>
                 </div>
 
-                <div className="bg-green-50/50 dark:bg-green-900/10 p-6 rounded-2xl border border-green-200 dark:border-green-800/30 shadow-sm">
-                  <h3 className="text-xl font-black flex items-center gap-2 border-b border-green-200 dark:border-green-800/50 pb-3 mb-5 text-green-900 dark:text-green-500">
-                    <Leaf className="text-green-500" size={24}/> Lúpulos
+                <div className="bg-green-50/50 dark:bg-green-900/10 p-8 rounded-3xl border border-green-200 dark:border-green-800/30 shadow-sm">
+                  <h3 className="text-2xl font-black flex items-center gap-3 border-b border-green-200 dark:border-green-800/50 pb-4 mb-6 text-green-900 dark:text-green-500">
+                    <Leaf className="text-green-500" size={28}/> Lúpulos
                   </h3>
-                  <ul className="space-y-4">
+                  <ul className="space-y-5">
                     {scaledRecipe.ingredients.hops.map((hop, idx) => (
-                      <li key={idx} className="flex flex-col border-b border-green-100 dark:border-green-900/30 pb-3 last:border-0">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-slate-800 dark:text-slate-200 text-lg">{hop.name || 'Lúpulo'}</span>
-                          <span className="bg-white dark:bg-slate-800 border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-3 py-1 rounded-lg font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
+                      <li key={idx} className="flex flex-col border-b border-green-100 dark:border-green-900/30 pb-4 last:border-0">
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="font-bold text-slate-800 dark:text-slate-200 text-xl">{hop.name || 'Lúpulo'}</span>
+                          <span className="bg-white dark:bg-slate-800 border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
                         </div>
                         {hop.time && (
-                          <span className="text-green-700 dark:text-green-300 font-bold text-xs flex items-center gap-1.5 bg-green-100/50 dark:bg-green-900/40 w-fit px-2.5 py-1 rounded-md border border-green-200/50 dark:border-green-800">
-                            <Clock size={14}/> {hop.time} <span className="mx-1">•</span> <span className="uppercase tracking-wider">{hop.stage || 'Hervor'}</span>
+                          <span className="text-green-700 dark:text-green-300 font-bold text-sm flex items-center gap-2 bg-green-100/50 dark:bg-green-900/40 w-fit px-3 py-1.5 rounded-lg border border-green-200/50 dark:border-green-800">
+                            <Clock size={16}/> {hop.time} <span className="mx-1 opacity-50">•</span> <span className="uppercase tracking-wider">{hop.stage || 'Hervor'}</span>
                           </span>
                         )}
                       </li>
@@ -1542,13 +1404,13 @@ function MainApp() {
                 </div>
               </div>
               
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-start md:items-center gap-5 shadow-sm">
-                 <div className="bg-white dark:bg-slate-700 p-4 rounded-2xl text-slate-600 dark:text-white shadow-sm border border-slate-200 dark:border-slate-600 flex-shrink-0">
-                    <Beaker size={32} />
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
+                 <div className="bg-white dark:bg-slate-700 p-5 rounded-2xl text-slate-600 dark:text-white shadow-md border border-slate-200 dark:border-slate-600 flex-shrink-0">
+                    <Beaker size={36} />
                  </div>
                  <div>
-                   <h4 className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-xs mb-1">Levadura Recomendada</h4>
-                   <p className="text-slate-800 dark:text-white font-black text-2xl">{scaledRecipe.ingredients.yeast.amount} <span className="text-lg font-bold text-slate-500">{scaledRecipe.ingredients.yeast.unit || 'sobre'}</span> de <span className="text-amber-600 dark:text-amber-500">{scaledRecipe.ingredients.yeast.name || 'Genérica'}</span></p>
+                   <h4 className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-xs mb-2">Levadura Recomendada</h4>
+                   <p className="text-slate-800 dark:text-white font-black text-3xl">{scaledRecipe.ingredients.yeast.amount} <span className="text-xl font-bold text-slate-500">{scaledRecipe.ingredients.yeast.unit || 'sobre'}</span> de <span className="text-amber-600 dark:text-amber-500">{scaledRecipe.ingredients.yeast.name || 'Genérica'}</span></p>
                  </div>
               </div>
             </div>
@@ -1556,11 +1418,11 @@ function MainApp() {
 
           {/* TAB: PROCESO */}
           {activeTab === 'process' && (
-            <div className="space-y-5 animate-fadeIn">
-              <div className={`${theme.header} text-white p-8 rounded-3xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-6 mb-8`}>
+            <div className="space-y-6 animate-fadeIn">
+              <div className={`${theme.header} text-white p-8 md:p-12 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 mb-10`}>
                 <div className="text-center md:text-left">
-                  <h3 className="text-3xl font-black flex items-center justify-center md:justify-start gap-3 mb-2"><Play size={32} className="fill-white" /> Día de Cocción</h3>
-                  <p className="text-white/80 font-bold text-sm md:text-base">Modo guiado paso a paso. Al finalizar descontaremos de tu inventario.</p>
+                  <h3 className="text-4xl font-black flex items-center justify-center md:justify-start gap-4 mb-3 tracking-tighter"><Play size={36} className="fill-white" /> Día de Cocción</h3>
+                  <p className="text-white/90 font-bold text-base">Modo guiado paso a paso. Al finalizar descontaremos de tu inventario.</p>
                 </div>
                 <button 
                   onClick={() => {
@@ -1568,7 +1430,7 @@ function MainApp() {
                     setBrewState({ stepIdx: 0, timeLeft: firstStep.duration ? firstStep.duration * 60 : 0, isRunning: false, currentScaledRecipe: scaledRecipe });
                     setView('brew');
                   }}
-                  className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black transition-all shadow-xl w-full md:w-auto text-center hover:scale-105"
+                  className="bg-white text-slate-900 px-10 py-5 rounded-2xl font-black text-lg transition-transform shadow-2xl w-full md:w-auto text-center hover:scale-105 active:scale-95"
                 >
                   ¡Empezar a Cocinar!
                 </button>
@@ -1578,35 +1440,35 @@ function MainApp() {
                 <div key={step.id || idx} className="flex flex-col group">
                   <div 
                     onClick={() => toggleStep(step.id || idx)}
-                    className={`p-6 rounded-t-2xl md:rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-5 ${completedSteps.includes(step.id || idx) ? 'border-green-400 bg-green-50/50 dark:bg-green-900/20 opacity-70' : 'border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:border-amber-300 dark:hover:border-amber-600'} ${expandedStep === (step.id || idx) ? 'rounded-b-none border-b-0' : ''}`}
+                    className={`p-6 md:p-8 rounded-t-3xl md:rounded-3xl border-2 cursor-pointer transition-all duration-300 flex items-start gap-5 md:gap-6 ${completedSteps.includes(step.id || idx) ? 'border-green-400 bg-green-50/50 dark:bg-green-900/20 opacity-60' : 'border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600'} ${expandedStep === (step.id || idx) ? 'rounded-b-none border-b-0' : ''}`}
                   >
                     <button className={`mt-1 rounded-full flex-shrink-0 transition-colors ${completedSteps.includes(step.id || idx) ? 'text-green-500' : 'text-gray-300 dark:text-slate-600 group-hover:text-amber-400'}`}>
-                      <CheckCircle2 size={32} className={completedSteps.includes(step.id || idx) ? 'fill-green-100 dark:fill-green-900' : ''} />
+                      <CheckCircle2 size={36} className={completedSteps.includes(step.id || idx) ? 'fill-green-100 dark:fill-green-900' : ''} />
                     </button>
-                    <div className="flex-1">
-                      <h3 className={`font-black text-xl ${completedSteps.includes(step.id || idx) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-slate-800 dark:text-white'}`}>
+                    <div className="flex-1 pt-1">
+                      <h3 className={`font-black text-2xl ${completedSteps.includes(step.id || idx) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-slate-800 dark:text-white'}`}>
                         {idx + 1}. {step.title || 'Paso de Cocción'}
                       </h3>
-                      <p className={`text-base mt-2 leading-relaxed font-medium ${completedSteps.includes(step.id || idx) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
+                      <p className={`text-lg mt-2 leading-relaxed font-medium ${completedSteps.includes(step.id || idx) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
                         {step.desc || ''}
                       </p>
                     </div>
                     {step.details && typeof step.details === 'string' && (
                       <button 
                         onClick={(e) => toggleStepDetails(e, step.id || idx)}
-                        className="ml-auto text-gray-400 hover:text-amber-600 p-2 flex flex-col items-center justify-center transition-colors bg-gray-50 dark:bg-slate-800 rounded-lg"
+                        className="ml-auto text-gray-400 hover:text-amber-600 p-3 flex flex-col items-center justify-center transition-colors bg-gray-50 dark:bg-slate-800 rounded-xl hover:bg-amber-50 dark:hover:bg-slate-700"
                         title="Ver detalle del paso"
                       >
-                        {expandedStep === (step.id || idx) ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
-                        <span className="text-[10px] font-bold mt-1 uppercase tracking-wider">Detalle</span>
+                        {expandedStep === (step.id || idx) ? <ChevronUp size={28} /> : <ChevronDown size={28} />}
+                        <span className="text-[10px] font-bold mt-1 uppercase tracking-wider">Técnica</span>
                       </button>
                     )}
                   </div>
                   
                   {expandedStep === (step.id || idx) && step.details && typeof step.details === 'string' && (
-                    <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-2 border-t-0 border-slate-200 dark:border-slate-700 rounded-b-2xl text-slate-800 dark:text-slate-200 animate-fadeIn text-base shadow-inner">
-                      <h4 className="font-black flex items-center gap-2 mb-4 text-amber-700 dark:text-amber-500"><Info size={20}/> Guía Técnica:</h4>
-                      <div className="pl-6 space-y-3 border-l-4 border-amber-300 dark:border-amber-700 font-medium">
+                    <div className="p-6 md:p-8 bg-slate-50 dark:bg-slate-800/50 border-2 border-t-0 border-slate-200 dark:border-slate-700 rounded-b-3xl text-slate-800 dark:text-slate-200 animate-fadeIn text-base md:text-lg shadow-inner">
+                      <h4 className="font-black flex items-center gap-2 mb-4 text-amber-700 dark:text-amber-500 uppercase tracking-wider text-sm"><Info size={20}/> Guía del Maestro:</h4>
+                      <div className="pl-6 space-y-4 border-l-4 border-amber-300 dark:border-amber-700 font-medium">
                          {step.details.split(/(?=\d+\.\s)/).filter(Boolean).map((part, i) => {
                             const match = part.match(/^(\d+\.\s)(.*)/);
                             if (match) {
@@ -1620,8 +1482,8 @@ function MainApp() {
                 </div>
               ))}
               {(!scaledRecipe.steps || scaledRecipe.steps.length === 0) && (
-                <div className="p-8 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
-                  <p className="font-bold italic">No hay pasos detallados para esta receta.</p>
+                <div className="p-10 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800">
+                  <p className="font-bold text-lg italic">No hay pasos detallados para esta receta.</p>
                 </div>
               )}
             </div>
@@ -1630,44 +1492,44 @@ function MainApp() {
           {/* TAB: AGUA */}
           {activeTab === 'water' && (
             <div className="space-y-8 animate-fadeIn">
-              <div className="bg-blue-50/50 dark:bg-blue-900/10 p-8 rounded-3xl border border-blue-100 dark:border-blue-800 shadow-sm relative overflow-hidden">
+              <div className="bg-blue-50/50 dark:bg-blue-900/10 p-8 md:p-10 rounded-3xl border border-blue-100 dark:border-blue-800 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 text-blue-500 pointer-events-none">
-                  <Droplets size={160} />
+                  <Droplets size={200} />
                 </div>
-                <h3 className="text-2xl font-black text-blue-900 dark:text-blue-400 mb-2 flex items-center gap-2 relative z-10">
-                  <Droplets size={28} className="text-blue-500" /> Perfil Mineral Objetivo
+                <h3 className="text-3xl font-black text-blue-900 dark:text-blue-400 mb-2 flex items-center gap-3 relative z-10">
+                  <Droplets size={32} className="text-blue-500" /> Perfil Mineral Objetivo
                 </h3>
-                <p className="text-blue-800 dark:text-blue-300 text-base mb-6 font-medium relative z-10">
-                  Clave para resaltar el lúpulo crujiente o la sedosidad maltosa.
+                <p className="text-blue-800 dark:text-blue-300 text-lg mb-8 font-medium relative z-10 max-w-2xl">
+                  Ajustar el agua es el secreto para transformar una buena cerveza en una cerveza de campeonato mundial.
                 </p>
                 
                 {scaledRecipe.waterProfile ? (
-                  <div className="grid grid-cols-5 gap-3 text-center relative z-10">
+                  <div className="grid grid-cols-5 gap-3 md:gap-5 text-center relative z-10">
                     {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
-                      <div key={ion} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col">
-                        <span className="block font-black text-slate-400 text-xs uppercase tracking-wider mb-1">{ion}</span>
-                        <span className="text-blue-600 dark:text-blue-400 font-black text-2xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
+                      <div key={ion} className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col transition-transform hover:-translate-y-1">
+                        <span className="block font-black text-slate-400 text-xs md:text-sm uppercase tracking-widest mb-2">{ion}</span>
+                        <span className="text-blue-600 dark:text-blue-400 font-black text-3xl md:text-4xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white dark:bg-slate-800 p-6 rounded-xl text-center text-slate-500 font-bold border border-blue-100 dark:border-slate-700 relative z-10">
+                  <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl text-center text-slate-500 font-bold border border-blue-100 dark:border-slate-700 relative z-10 text-lg">
                     No hay un perfil estricto para esta receta.
                   </div>
                 )}
               </div>
 
-              <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-gray-200 dark:border-slate-800 shadow-sm">
-                 <h4 className="font-black text-slate-800 dark:text-white mb-6 text-xl">Tu Agua de la Llave (PPM)</h4>
-                 <div className="grid grid-cols-5 gap-3 md:gap-5">
+              <div className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-3xl border border-gray-200 dark:border-slate-800 shadow-sm">
+                 <h4 className="font-black text-slate-800 dark:text-white mb-8 text-2xl flex items-center gap-3">Tu Agua de la Llave (Base)</h4>
+                 <div className="grid grid-cols-5 gap-3 md:gap-6">
                     {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
                       <div key={ion}>
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">{ion}</label>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">{ion}</label>
                         <input 
                           type="number" 
                           value={baseWater[ion] || 0} 
                           onChange={(e) => setBaseWater({...baseWater, [ion]: Number(e.target.value) || 0})}
-                          className="w-full p-4 border border-gray-200 dark:border-slate-700 rounded-2xl text-center font-black text-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 dark:bg-slate-800 text-slate-800 dark:text-white transition-colors"
+                          className="w-full p-4 md:p-5 border border-gray-200 dark:border-slate-700 rounded-2xl text-center font-black text-xl md:text-2xl focus:ring-4 focus:ring-blue-500/30 outline-none bg-gray-50 dark:bg-slate-800 text-slate-800 dark:text-white transition-all shadow-inner"
                         />
                       </div>
                     ))}
@@ -1675,50 +1537,57 @@ function MainApp() {
               </div>
 
               {saltAdditions && scaledRecipe.waterProfile && (
-                <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-6 md:p-10 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-md">
-                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                     <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl flex items-center gap-3">
-                       <Scale size={32} className="text-amber-600" /> Adición de Sales
+                <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-8 md:p-12 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-xl relative overflow-hidden">
+                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+                     <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl md:text-4xl flex items-center gap-3">
+                       <Scale size={40} className="text-amber-600" /> Adición de Sales
                      </h4>
-                     <span className="bg-amber-600 text-white px-5 py-2.5 rounded-xl text-base font-black shadow-sm">
+                     <span className="bg-amber-600 text-white px-6 py-3 rounded-2xl text-lg font-black shadow-md">
                        Para {saltAdditions.totalWater} L (Total)
                      </span>
                    </div>
                    
-                   <p className="text-lg text-amber-800 dark:text-slate-300 font-medium mb-8">
-                     Mezcla estas cantidades exactas en el agua antes de agregar la malta.
+                   <p className="text-xl text-amber-800 dark:text-slate-300 font-medium mb-10">
+                     Mezcla estas cantidades exactas en el agua <span className="font-black underline">antes</span> de agregar la malta.
                    </p>
 
-                   <div className="grid md:grid-cols-3 gap-5 mb-8">
-                     <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-amber-100 dark:border-slate-700 text-center shadow-sm relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-400"></div>
-                       <span className="block font-black text-slate-800 dark:text-white text-4xl mb-2">{saltAdditions.cacl2}g</span>
-                       <span className="text-sm font-bold text-slate-500 uppercase tracking-wider block">Cloruro de Calcio</span>
+                   <div className="grid md:grid-cols-4 gap-5 mb-10">
+                     <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                       <div className="absolute top-0 left-0 w-full h-2 bg-blue-400"></div>
+                       <span className="block font-black text-slate-800 dark:text-white text-5xl mb-3">{saltAdditions.cacl2}g</span>
+                       <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider block">Cloruro de Calcio</span>
                      </div>
-                     <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-amber-100 dark:border-slate-700 text-center shadow-sm relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1.5 bg-amber-400"></div>
-                       <span className="block font-black text-slate-800 dark:text-white text-4xl mb-2">{saltAdditions.gypsum}g</span>
-                       <span className="text-sm font-bold text-slate-500 uppercase tracking-wider block">Gypsum (CaSO4)</span>
+                     <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                       <div className="absolute top-0 left-0 w-full h-2 bg-amber-400"></div>
+                       <span className="block font-black text-slate-800 dark:text-white text-5xl mb-3">{saltAdditions.gypsum}g</span>
+                       <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider block">Gypsum (CaSO4)</span>
                      </div>
-                     <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-amber-100 dark:border-slate-700 text-center shadow-sm relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1.5 bg-green-400"></div>
-                       <span className="block font-black text-slate-800 dark:text-white text-4xl mb-2">{saltAdditions.epsom}g</span>
-                       <span className="text-sm font-bold text-slate-500 uppercase tracking-wider block">Sal de Epsom</span>
+                     <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                       <div className="absolute top-0 left-0 w-full h-2 bg-green-400"></div>
+                       <span className="block font-black text-slate-800 dark:text-white text-5xl mb-3">{saltAdditions.epsom}g</span>
+                       <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider block">Sal de Epsom</span>
                      </div>
+                     {Number(saltAdditions.bakingSoda) > 0 && (
+                       <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                         <div className="absolute top-0 left-0 w-full h-2 bg-purple-400"></div>
+                         <span className="block font-black text-slate-800 dark:text-white text-5xl mb-3">{saltAdditions.bakingSoda}g</span>
+                         <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider block">Bicarbonato Sodio</span>
+                       </div>
+                     )}
                    </div>
 
-                   <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-amber-200 dark:border-slate-700 shadow-sm">
-                     <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-4 text-center">Perfil Final Estimado</h5>
-                     <div className="flex justify-around text-lg font-bold flex-wrap gap-4">
-                       <span className="text-slate-500">Ca: <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-600' : 'text-amber-600'}>{saltAdditions.finalEstimates.Ca}</span></span>
-                       <span className="text-slate-500">Mg: <span className="text-green-600">{saltAdditions.finalEstimates.Mg}</span></span>
-                       <span className="text-slate-500">SO4: <span className="text-green-600">{saltAdditions.finalEstimates.SO4}</span></span>
-                       <span className="text-slate-500">Cl: <span className="text-green-600">{saltAdditions.finalEstimates.Cl}</span></span>
-                       <span className="text-slate-500" title="Retenido del agua base">HCO3: <span className={(saltAdditions.finalEstimates.HCO3 >= (Number(scaledRecipe.waterProfile.HCO3) || 0)) ? 'text-green-600' : 'text-amber-600'}>{saltAdditions.finalEstimates.HCO3}</span></span>
+                   <div className="bg-white dark:bg-slate-950 p-8 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner">
+                     <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-6 text-center">Perfil Final Estimado</h5>
+                     <div className="flex justify-around text-2xl font-black flex-wrap gap-6">
+                       <span className="text-slate-500 text-sm flex flex-col items-center">Ca <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.Ca}</span></span>
+                       <span className="text-slate-500 text-sm flex flex-col items-center">Mg <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Mg}</span></span>
+                       <span className="text-slate-500 text-sm flex flex-col items-center">SO4 <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.SO4}</span></span>
+                       <span className="text-slate-500 text-sm flex flex-col items-center">Cl <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Cl}</span></span>
+                       <span className="text-slate-500 text-sm flex flex-col items-center" title="Ajustado con Bicarbonato de Sodio">HCO3 <span className={(saltAdditions.finalEstimates.HCO3 >= (Number(scaledRecipe.waterProfile.HCO3) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.HCO3}</span></span>
                      </div>
                    </div>
-                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-4 text-center italic">
-                     * El perfil estimado puede diferir del objetivo porque las sales aportan iones en pares (ej. el Cloruro de Calcio suma Cl y Ca simultáneamente).
+                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-6 text-center italic font-medium">
+                     * El perfil estimado puede diferir levemente del objetivo porque las sales aportan iones en pares (ej. el Cloruro de Calcio suma Cl y Ca simultáneamente).
                    </p>
                 </div>
               )}
@@ -1729,31 +1598,31 @@ function MainApp() {
           {activeTab === 'tips' && (
             <div className="space-y-6 animate-fadeIn">
               {Array.isArray(scaledRecipe.tips) && scaledRecipe.tips.map((tip, idx) => (
-                <div key={idx} className="bg-slate-50 dark:bg-slate-800 border-l-4 border-amber-500 shadow-sm p-6 rounded-r-2xl">
-                  <h3 className="text-xl font-black text-slate-800 dark:text-white mb-3 flex items-center gap-2">
-                    💡 {tip.title || 'Tip'}
+                <div key={idx} className="bg-slate-50 dark:bg-slate-800 border-l-8 border-amber-500 shadow-md p-8 rounded-r-3xl transition-transform hover:-translate-y-1">
+                  <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-4 flex items-center gap-3">
+                    <Star className="text-amber-500 fill-amber-500"/> {tip.title || 'Tip Cervecero'}
                   </h3>
-                  <p className="text-slate-600 dark:text-slate-300 text-base leading-relaxed font-medium">
+                  <p className="text-slate-600 dark:text-slate-300 text-lg leading-relaxed font-medium">
                     {tip.desc || ''}
                   </p>
                 </div>
               ))}
               {(!scaledRecipe.tips || scaledRecipe.tips.length === 0) && (
-                <p className="text-gray-500 font-medium italic text-center py-10 bg-gray-50 dark:bg-slate-800 rounded-xl">No hay tips específicos para esta receta, ¡aplica las buenas prácticas de siempre!</p>
+                <p className="text-gray-500 font-bold text-lg italic text-center py-12 bg-gray-50 dark:bg-slate-800 rounded-3xl">No hay tips específicos para esta receta, ¡aplica las buenas prácticas de siempre!</p>
               )}
             </div>
           )}
 
           {/* TAB: HISTORIAL CAMBIOS */}
           {activeTab === 'history' && (
-            <div className="space-y-4 animate-fadeIn">
-              <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-6 border-b border-gray-200 dark:border-slate-700 pb-3">Historial de Modificaciones</h3>
-              <div className="border-l-4 border-slate-300 dark:border-slate-600 ml-4 pl-6 space-y-8">
-                {Array.isArray(scaledRecipe.modifications) && scaledRecipe.modifications.map((mod, idx) => (
+            <div className="space-y-6 animate-fadeIn">
+              <h3 className="text-3xl font-black text-slate-800 dark:text-white mb-8 border-b border-gray-200 dark:border-slate-700 pb-4">Historial de Modificaciones</h3>
+              <div className="border-l-4 border-slate-300 dark:border-slate-600 ml-6 pl-8 space-y-10">
+                {Array.isArray(scaledRecipe.modifications) && [...scaledRecipe.modifications].reverse().map((mod, idx) => (
                   <div key={idx} className="relative">
-                    <div className="absolute -left-[37px] top-1 bg-white dark:bg-slate-900 border-4 border-slate-300 dark:border-slate-600 w-5 h-5 rounded-full"></div>
-                    <span className="text-xs font-bold text-slate-400 tracking-wider uppercase block mb-1">{mod.date}</span>
-                    <p className="text-slate-700 dark:text-slate-300 font-medium bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700">"{mod.note}"</p>
+                    <div className="absolute -left-[45px] top-1 bg-white dark:bg-slate-900 border-4 border-slate-300 dark:border-slate-600 w-6 h-6 rounded-full shadow-sm"></div>
+                    <span className="text-sm font-black text-slate-400 tracking-widest uppercase block mb-2">{mod.date}</span>
+                    <p className="text-slate-700 dark:text-slate-300 font-medium text-lg bg-slate-50 dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">"{mod.note}"</p>
                   </div>
                 ))}
               </div>
@@ -1801,6 +1670,7 @@ function MainApp() {
           id: 'hist-' + Date.now(),
           recipeName: recipe.name || 'Sin Nombre',
           date: new Date().toLocaleDateString(),
+          timestamp: Date.now(),
           volume: recipe.targetVolume || targetVol || 0,
           og: recipe.og || '-',
           fg: recipe.fg || '-',
@@ -1927,7 +1797,7 @@ function MainApp() {
           </div>
         ) : (
           <div className="grid gap-6">
-            {history.map((h) => (
+            {[...history].sort((a,b) => (b.timestamp||0) - (a.timestamp||0)).map((h) => (
               <div key={h.id} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 transition-all relative group">
                 
                 <button 
