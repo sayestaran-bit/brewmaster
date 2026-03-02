@@ -461,15 +461,24 @@ function MainApp() {
 
   // --- FIREBASE: Autenticación ---
   useEffect(() => {
-    const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token).catch(() => signInAnonymously(auth));
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        // Ya hay una sesión activa guardada (correo o anónimo)
+        setUser(currentUser);
       } else {
-        await signInAnonymously(auth).catch(e => console.error("Anonymous auth failed", e));
+        // No hay sesión en memoria, creamos una de respaldo (anónima)
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+        } catch (error) {
+          console.error("Error en autenticación anónima de respaldo:", error);
+        }
       }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    });
+
     return () => unsubscribe();
   }, []);
 
@@ -560,7 +569,7 @@ function MainApp() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    signInAnonymously(auth); 
+    // Ya no forzamos el inicio de sesión anónimo al salir, dejamos que el useEffect se encargue si es necesario.
     setView('list');
   };
 
