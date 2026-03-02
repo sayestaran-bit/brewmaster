@@ -54,8 +54,9 @@ const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'brewmaster-pro-v1
 const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
 // --- GEMINI API INTEGRATION ---
-// ATENCIÓN: Si exportas a Vercel u otro hosting, pon tu clave de Google AI Studio aquí.
-const apiKey = "";
+// 🚨 ATENCIÓN: ¡NO PONGAS TU CONTRASEÑA DE CORREO AQUÍ!
+// Consigue una API Key gratis en: https://aistudio.google.com/
+const apiKey = "AIzaSyArmabUjOrBxnFC26Re_-yghnqZ3xoPuhE";
 
 const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
@@ -78,21 +79,34 @@ const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
   }
 };
 
-// --- FORMATO DE MONEDA & FECHAS ---
+// --- FORMATOS Y HELPERS ---
 const formatCurrency = (val) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(val) || 0);
 
-// Función universal para formatear fechas a DD/MM/YYYY
+// Formateador universal estricto a DD/MM/YYYY
 const getFormattedDate = () => {
   const date = new Date();
   const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0'); // Los meses van de 0 a 11
+  const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
 };
 
+// Limpia formatos antiguos (2-3-2026 o 2/3/2026) a un DD/MM/YYYY estándar
+const standardizeDate = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.replace(/-/g, '/').split('/');
+  if (parts.length === 3) {
+    const day = parts[0].padStart(2, '0');
+    const month = parts[1].padStart(2, '0');
+    const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+    return `${day}/${month}/${year}`;
+  }
+  return dateStr;
+};
+
 const parseDateToTimestamp = (dateStr) => {
   if (!dateStr) return 0;
-  const parts = dateStr.split(/[-/]/);
+  const parts = dateStr.replace(/-/g, '/').split('/');
   if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
   return Date.now();
 };
@@ -100,7 +114,7 @@ const parseDateToTimestamp = (dateStr) => {
 const generateGoogleCalendarLink = (title, daysFromStart, startDateMs, details) => {
   const targetDate = new Date(startDateMs + daysFromStart * 24 * 60 * 60 * 1000);
   const startStr = targetDate.toISOString().replace(/-|:|\.\d\d\d/g,"");
-  const endDate = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000); // Todo el día
+  const endDate = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000);
   const endStr = endDate.toISOString().replace(/-|:|\.\d\d\d/g,"");
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startStr}/${endStr}&details=${encodeURIComponent(details)}`;
 };
@@ -339,7 +353,7 @@ function AutocompleteInput({ value, onChange, placeholder, category, inventory, 
               onClick={() => { onChange(item.name); setShowDrop(false); }}
             >
               <span>{item.name}</span>
-              <span className="text-gray-400 text-xs">{Number(item.stock).toLocaleString('es-CL', {maximumFractionDigits: 4})} {item.unit}</span>
+              <span className="text-gray-400 text-xs">{parseFloat(Number(item.stock).toFixed(2))} {item.unit}</span>
             </div>
           ))}
           {!exactMatch && (
@@ -407,7 +421,7 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
   
   const [modNote, setModNote] = useState('');
 
-  // NUEVA FUNCIÓN: Manejar la clonación de receta
+  // Manejar la clonación de receta
   const handleClone = (e) => {
     const recipeId = e.target.value;
     if (!recipeId) return;
@@ -482,7 +496,7 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
       
     } catch (err) {
       console.error("Error al conectar con IA:", err);
-      alert("Hubo un error conectando con la IA. Si has exportado a Vercel u otro hosting, asegúrate de colocar tu API Key en la variable 'apiKey' del código.");
+      alert("Hubo un error conectando con la IA. Si has exportado a Vercel u otro hosting, asegúrate de colocar tu API Key de Google AI Studio en la variable 'apiKey' del código.");
     } finally {
       setIsGeneratingIA(false);
     }
@@ -797,14 +811,13 @@ function MainApp() {
       } else {
         await signInWithEmailAndPassword(auth, authEmail, authPass);
       }
-      // No forzamos el setView aquí, onAuthStateChanged en el useEffect redirigirá correctamente.
     } catch (err) {
       if (err.code === 'auth/email-already-in-use') {
-        setAuthError('Este correo ya está registrado. Intenta Iniciar Sesión.');
+        setAuthError('Ese correo ya está registrado. Intenta Iniciar Sesión o usa tu cuenta de Google.');
       } else if (err.code === 'auth/weak-password') {
         setAuthError('La contraseña debe tener mínimo 6 caracteres.');
       } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
-        setAuthError('Credenciales inválidas. Si ya tienes cuenta con Google, usa el botón de Google. Si no, haz clic en "Regístrate" abajo.');
+        setAuthError('Acceso denegado. Esa combinación de correo y clave no existe. Si usaste Google la primera vez, haz clic en el botón de Google abajo.');
       } else {
         setAuthError(`Error al acceder: ${err.message}`);
       }
@@ -832,8 +845,8 @@ function MainApp() {
     if (!authEmail) return setAuthError('Ingresa tu correo arriba.');
     try {
       await sendPasswordResetEmail(auth, authEmail);
-      setResetMessage('¡Enlace de recuperación enviado!');
-    } catch (err) { setAuthError('Error al enviar correo.'); }
+      setResetMessage('¡Enlace de recuperación enviado al correo!');
+    } catch (err) { setAuthError('Error al enviar correo de recuperación.'); }
   };
 
   const handleLogout = async () => { await signOut(auth); setView('auth'); };
@@ -853,7 +866,7 @@ function MainApp() {
       setAiAdvice(res);
     } catch (err) {
       console.error("Error AI:", err);
-      alert("Error conectando con la IA. Si has exportado el código a Vercel u otro servidor, recuerda pegar tu clave en 'const apiKey = \"\"' en el código.");
+      alert("Error conectando con la IA. Si has exportado el código a Vercel u otro servidor, recuerda pegar tu clave de Google AI Studio en 'const apiKey = \"\"' en el código.");
     } finally { 
       setIsAdvising(false); 
     }
@@ -949,7 +962,7 @@ function MainApp() {
             </div>
             {!isRegistering && <div className="text-right mt-2"><button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-500 hover:text-amber-500">¿Olvidaste tu contraseña?</button></div>}
           </div>
-          {authError && <p className="text-red-500 text-sm font-medium bg-red-50 dark:bg-red-900/30 p-3 rounded-lg border border-red-200 dark:border-red-900/50">{authError}</p>}
+          {authError && <p className="text-red-500 text-sm font-medium bg-red-50 dark:bg-red-900/30 p-4 rounded-xl border border-red-200 dark:border-red-900/50 leading-tight shadow-sm">{authError}</p>}
           {resetMessage && <p className="text-emerald-500 text-sm font-medium bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg">{resetMessage}</p>}
           <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 dark:bg-amber-600 dark:hover:bg-amber-500 text-white p-4 rounded-xl font-black transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">{isRegistering ? 'Registrar y Entrar' : 'Entrar'}</button>
         </form>
@@ -965,7 +978,6 @@ function MainApp() {
             Google
           </button>
           
-          {/* Botón explícito para entrar como invitado */}
           <button type="button" onClick={async () => { await signInAnonymously(auth); setView('dashboard'); }} className="text-sm text-amber-600 dark:text-amber-500 font-bold mt-2 hover:underline transition-colors flex justify-center items-center gap-2">
              <Eye size={16}/> Continuar como Invitado temporal
           </button>
@@ -1160,7 +1172,7 @@ function MainApp() {
                         <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">{item.category}</span>
                       </div>
                       <span className="font-black text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded-md text-xs shrink-0 whitespace-nowrap">
-                        {Number(item.stock).toLocaleString('es-CL', {maximumFractionDigits: 4})} {item.unit}
+                        {parseFloat(Number(item.stock).toFixed(2))} {item.unit}
                       </span>
                     </li>
                   ))}
@@ -1195,7 +1207,7 @@ function MainApp() {
                <tbody className="divide-y divide-gray-50 dark:divide-slate-800/50">
                  {filteredHistory.sort((a,b) => (b.timestamp||0) - (a.timestamp||0)).slice(0, 5).map(h => (
                    <tr key={h.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer" onClick={() => setView('history')}>
-                     <td className="px-4 py-4 font-medium text-slate-500">{h.date}</td>
+                     <td className="px-4 py-4 font-medium text-slate-500">{standardizeDate(h.date)}</td>
                      <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200">{h.recipeName}</td>
                      <td className="px-4 py-4"><span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs font-bold text-slate-600 dark:text-slate-300">{h.category}</span></td>
                      <td className="px-4 py-4 font-bold text-blue-600 dark:text-blue-400">{h.volume} L</td>
@@ -1336,9 +1348,9 @@ function MainApp() {
     const updateInvItem = (id, field, value) => {
       const newInv = [...inventory];
       const index = newInv.findIndex(inv => inv.id === id);
-      // Aplicar redondeo a 4 decimales cuando se cambia el stock para evitar errores de coma flotante visuales
+      // Aplicar redondeo maximo 4 decimales cuando se cambia el stock para evitar errores de coma flotante visuales
       newInv[index][field] = field === 'stock' 
-        ? Number(Number(value).toFixed(4)) 
+        ? parseFloat(Number(value).toFixed(4)) 
         : Number(value) || 0;
       setInventory(newInv);
       updateCloudData({ inventory: newInv });
@@ -1421,16 +1433,26 @@ function MainApp() {
                       <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 group transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.name}</td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <input type="number" value={item.stock} onChange={(e) => updateInvItem(item.id, 'stock', e.target.value)} className="w-24 p-2 border border-gray-200 dark:border-slate-700 rounded-lg text-center mr-2 focus:ring-2 focus:ring-blue-500 outline-none font-medium bg-white dark:bg-slate-800 dark:text-white transition-all"/>
-                            <span className="text-gray-400 font-bold w-6">{item.unit}</span>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="number" 
+                              value={parseFloat(Number(item.stock).toFixed(4))} 
+                              onChange={(e) => updateInvItem(item.id, 'stock', e.target.value)} 
+                              className="w-full max-w-[100px] p-2 border border-gray-200 dark:border-slate-700 rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none font-medium bg-white dark:bg-slate-800 dark:text-white transition-all"
+                            />
+                            <span className="text-gray-400 font-bold shrink-0">{item.unit}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                           <div className="flex items-center text-gray-400">
-                            <span className="mr-1">$</span>
-                            <input type="number" value={item.price} onChange={(e) => updateInvItem(item.id, 'price', e.target.value)} className="w-24 p-2 border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 transition-all"/>
-                            <span className="text-xs ml-2 w-8">/ {item.unit}</span>
+                           <div className="flex items-center gap-2 text-gray-400">
+                            <span className="shrink-0">$</span>
+                            <input 
+                              type="number" 
+                              value={item.price} 
+                              onChange={(e) => updateInvItem(item.id, 'price', e.target.value)} 
+                              className="w-full max-w-[100px] p-2 border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 transition-all"
+                            />
+                            <span className="text-xs shrink-0">/ {item.unit}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
@@ -1986,7 +2008,7 @@ function MainApp() {
                   return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
               });
               // Redondeo seguro a 4 decimales al descontar de inventario
-              if (item) item.stock = Number((Math.max(0, Number(item.stock) - (Number(m.amount) || 0))).toFixed(4));
+              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(m.amount) || 0)).toFixed(4));
           });
           (recipe.ingredients?.hops || []).forEach(h => {
               const hName = (h.name || '').toLowerCase();
@@ -1994,7 +2016,7 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Lúpulo' && iName && hName.includes(iName);
               });
-              if (item) item.stock = Number((Math.max(0, Number(item.stock) - (Number(h.amount) || 0))).toFixed(4));
+              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(h.amount) || 0)).toFixed(4));
           });
           const yeastObj = recipe.ingredients?.yeast;
           if (yeastObj) {
@@ -2005,7 +2027,7 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Levadura' && iName && yName.includes(iName);
               });
-              if (yItem) yItem.stock = Number((Math.max(0, Number(yItem.stock) - yeastAmount)).toFixed(4));
+              if (yItem) yItem.stock = parseFloat(Math.max(0, Number(yItem.stock) - yeastAmount).toFixed(4));
           }
 
           // AHORA VA A LOTES ACTIVOS EN LUGAR DE HISTORIAL DIRECTO
@@ -2151,7 +2173,7 @@ function MainApp() {
                       </div>
                       <h3 className="text-3xl font-black text-slate-800 dark:text-white mb-2">{batch.recipeName}</h3>
                       <p className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-2 mb-6">
-                        <CalendarClock size={16}/> Cocinada el: {batch.date} <span className="opacity-50">•</span> <span className="text-emerald-600 dark:text-emerald-400">Día {daysElapsed}</span>
+                        <CalendarClock size={16}/> Cocinada el: {standardizeDate(batch.date)} <span className="opacity-50">•</span> <span className="text-emerald-600 dark:text-emerald-400">Día {daysElapsed}</span>
                       </p>
 
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 mb-6">
@@ -2268,7 +2290,7 @@ function MainApp() {
                       <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3">{h.recipeName || 'Lote Sin Nombre'}</h3>
                       
                       <div className="flex flex-wrap gap-2 mb-4">
-                        <span className="bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-3 py-1.5 rounded-lg text-sm text-slate-600 dark:text-slate-300 font-bold flex items-center gap-1.5"><CalendarClock size={16}/> {h.date}</span>
+                        <span className="bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 px-3 py-1.5 rounded-lg text-sm text-slate-600 dark:text-slate-300 font-bold flex items-center gap-1.5"><CalendarClock size={16}/> {standardizeDate(h.date)}</span>
                         <span className="bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5"><Droplets size={16}/> {h.volume || 0} L</span>
                         <span className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5">💰 Total: {formatCurrency(h.totalCost)}</span>
                         <span className="bg-emerald-100 dark:bg-emerald-800/50 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5 text-xs uppercase tracking-wider">🏷️ x Litro: {formatCurrency((Number(h.totalCost) || 0) / (Number(h.volume) || 1))}</span>
