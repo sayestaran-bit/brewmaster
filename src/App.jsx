@@ -56,7 +56,7 @@ const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 // --- GEMINI API INTEGRATION ---
 // 🚨 ATENCIÓN: ¡NO PONGAS TU CONTRASEÑA DE CORREO AQUÍ!
 // Consigue una API Key gratis en: https://aistudio.google.com/
-const apiKey = "AIzaSyArmabUjOrBxnFC26Re_-yghnqZ3xoPuhE"; // TU CLAVE AQUÍ
+const apiKey = "AIzaSyArmabUjOrBxnFC26Re_-yghnqZ3xoPuhE";
 
 const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
   // CAMBIO: Usamos el modelo gemini-1.5-flash, mucho más estable para API Keys públicas
@@ -2013,8 +2013,8 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
               });
-              // Redondeo seguro a 4 decimales al descontar de inventario
-              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(m.amount) || 0)).toFixed(4));
+              // Redondeo seguro a 2 decimales al descontar de inventario
+              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(m.amount) || 0)).toFixed(2));
           });
           (recipe.ingredients?.hops || []).forEach(h => {
               const hName = (h.name || '').toLowerCase();
@@ -2022,7 +2022,7 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Lúpulo' && iName && hName.includes(iName);
               });
-              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(h.amount) || 0)).toFixed(4));
+              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(h.amount) || 0)).toFixed(2));
           });
           const yeastObj = recipe.ingredients?.yeast;
           if (yeastObj) {
@@ -2033,7 +2033,7 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Levadura' && iName && yName.includes(iName);
               });
-              if (yItem) yItem.stock = parseFloat(Math.max(0, Number(yItem.stock) - yeastAmount).toFixed(4));
+              if (yItem) yItem.stock = parseFloat(Math.max(0, Number(yItem.stock) - yeastAmount).toFixed(2));
           }
 
           // AHORA VA A LOTES ACTIVOS EN LUGAR DE HISTORIAL DIRECTO
