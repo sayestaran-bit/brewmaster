@@ -566,6 +566,13 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
            <button onClick={() => setFormData({...formData, tips: [...formData.tips, {title:'', desc:''}]})} className="text-sm text-yellow-600 font-bold bg-yellow-50 dark:bg-yellow-900/30 px-4 py-2 rounded-xl mt-1 flex items-center gap-2"><Plus size={16}/> Añadir Tip</button>
         </div>
 
+        {isEditing && (
+          <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
+             <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Nota de Modificación (Opcional)</label>
+             <input type="text" placeholder="Ej: Cambié el lúpulo Citra por Mosaic para probar." className="w-full p-4 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={modNote} onChange={e => setModNote(e.target.value)} />
+          </div>
+        )}
+
         <button onClick={handleSave} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white p-5 rounded-2xl font-black text-xl flex justify-center items-center gap-3 mt-8 shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1">
           <Save size={28} /> {isEditing ? 'Guardar Obra Maestra' : 'Registrar Nueva Receta'}
         </button>
@@ -723,6 +730,60 @@ function MainApp() {
     const m = Math.floor(seconds / 60); const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
+
+  // Corrección de cruce de datos seguros:
+  const calculateCostForRecipe = (recipe, targetVolume) => {
+      let neto = 0;
+      (recipe.ingredients?.malts || []).forEach(m => {
+        const mName = (m.name || '').toLowerCase();
+        const item = inventory.find(i => {
+          const iName = (i.name || '').toLowerCase();
+          return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
+        });
+        neto += (Number(m.amount) || 0) * (item ? Number(item.price) : defaultPrices.malta);
+      });
+      (recipe.ingredients?.hops || []).forEach(h => {
+        const hName = (h.name || '').toLowerCase();
+        const item = inventory.find(i => {
+          const iName = (i.name || '').toLowerCase();
+          return i.category === 'Lúpulo' && iName && hName.includes(iName);
+        });
+        neto += (Number(h.amount) || 0) * (item ? Number(item.price) : defaultPrices.lupulo);
+      });
+      
+      const yeastObj = recipe.ingredients?.yeast;
+      if (yeastObj) {
+         const yeastName = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
+         const yeastAmount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
+         const yName = (yeastName || '').toLowerCase();
+         const yItem = inventory.find(i => {
+           const iName = (i.name || '').toLowerCase();
+           return i.category === 'Levadura' && iName && yName.includes(iName);
+         });
+         neto += yeastAmount * (yItem ? Number(yItem.price) : defaultPrices.levadura);
+      }
+      return neto + (neto * 0.19);
+  };
+
+  const deleteHistoryItem = (id) => {
+    if(window.confirm("¿Seguro que deseas eliminar este registro del historial?")) {
+      const newHistory = history.filter(item => item.id !== id);
+      setHistory(newHistory);
+      updateCloudData({ history: newHistory });
+    }
+  };
+
+  if (!isDataLoaded) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center text-amber-500 animate-pulse">
+          <Beaker size={64} className="mx-auto mb-4" />
+          <h2 className="text-2xl font-black">Conectando a la Nube...</h2>
+          <p className="font-bold text-sm mt-2 tracking-widest uppercase">Cargando tu cervecería</p>
+        </div>
+      </div>
+    );
+  }
 
   // ==========================================
   // VISTAS
@@ -1048,9 +1109,6 @@ function MainApp() {
             <button onClick={() => setShowInvForm(!showInvForm)} className="flex-1 md:flex-none justify-center flex items-center gap-2 text-white font-bold bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-colors shadow-sm">
               <Plus size={20} /> Añadir
             </button>
-            <button onClick={() => setView('dashboard')} className="flex-1 md:flex-none justify-center flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 font-bold bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 transition-colors">
-              <ArrowLeft size={20} /> Volver
-            </button>
           </div>
         </div>
 
@@ -1174,16 +1232,30 @@ function MainApp() {
     const calculateCost = () => {
       let neto = 0; let allFound = true;
       scaledRecipe.ingredients.malts.forEach(m => {
-        const item = inventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === (m.name || '').toLowerCase() || (m.name || '').toLowerCase().includes(i.name.toLowerCase())));
+        const mName = (m.name || '').toLowerCase();
+        const item = inventory.find(i => {
+          const iName = (i.name || '').toLowerCase();
+          return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
+        });
         if (item) neto += (Number(m.amount) || 0) * Number(item.price); else { neto += (Number(m.amount) || 0) * defaultPrices.malta; allFound = false; }
       });
       scaledRecipe.ingredients.hops.forEach(h => {
-        const item = inventory.find(i => i.category === 'Lúpulo' && (h.name || '').toLowerCase().includes(i.name.toLowerCase()));
+        const hName = (h.name || '').toLowerCase();
+        const item = inventory.find(i => {
+          const iName = (i.name || '').toLowerCase();
+          return i.category === 'Lúpulo' && iName && hName.includes(iName);
+        });
         if (item) neto += (Number(h.amount) || 0) * Number(item.price); else { neto += (Number(h.amount) || 0) * defaultPrices.lupulo; allFound = false; }
       });
       
-      const yItem = inventory.find(i => i.category === 'Levadura' && (scaledRecipe.ingredients.yeast.name || '').toLowerCase().includes(i.name.toLowerCase()));
-      if (yItem) neto += (Number(scaledRecipe.ingredients.yeast.amount) || 0) * Number(yItem.price); else { neto += (Number(scaledRecipe.ingredients.yeast.amount) || 0) * defaultPrices.levadura; allFound = false; }
+      const yName = (typeof scaledRecipe.ingredients?.yeast === 'string' ? scaledRecipe.ingredients.yeast : (scaledRecipe.ingredients?.yeast?.name || '')).toLowerCase();
+      const yItem = inventory.find(i => {
+        const iName = (i.name || '').toLowerCase();
+        return i.category === 'Levadura' && iName && yName.includes(iName);
+      });
+      const yAmount = typeof scaledRecipe.ingredients?.yeast === 'string' ? 1 : (Number(scaledRecipe.ingredients?.yeast?.amount) || 1);
+      
+      if (yItem) neto += yAmount * Number(yItem.price); else { neto += yAmount * defaultPrices.levadura; allFound = false; }
       
       const iva = neto * 0.19; const totalConIva = neto + iva;
       return { neto, iva, totalConIva, perLiter: totalConIva / (targetVol || 1), allFound };
@@ -1647,46 +1719,63 @@ function MainApp() {
 
     const handleNextStep = () => {
       if (isLastStep) {
-        const totalCost = calculateCostForRecipe(recipe, recipe.targetVolume);
+        try {
+          const totalCost = calculateCostForRecipe(recipe, recipe.targetVolume);
 
-        let currentInventory = JSON.parse(JSON.stringify(inventory));
-        (recipe.ingredients?.malts || []).forEach(m => {
-            const item = currentInventory.find(i => i.category === 'Malta' && (i.name.toLowerCase() === (m.name || '').toLowerCase() || (m.name || '').toLowerCase().includes(i.name.toLowerCase())));
-            if (item) item.stock = Math.max(0, Number(item.stock) - (Number(m.amount) || 0));
-        });
-        (recipe.ingredients?.hops || []).forEach(h => {
-            const item = currentInventory.find(i => i.category === 'Lúpulo' && (h.name || '').toLowerCase().includes(i.name.toLowerCase()));
-            if (item) item.stock = Math.max(0, Number(item.stock) - (Number(h.amount) || 0));
-        });
-        const yeastObj = recipe.ingredients?.yeast;
-        if (yeastObj) {
-            const yeastName = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
-            const yeastAmount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
-            const yItem = currentInventory.find(i => i.category === 'Levadura' && yeastName.toLowerCase().includes(i.name.toLowerCase()));
-            if (yItem) yItem.stock = Math.max(0, Number(yItem.stock) - yeastAmount);
+          let currentInventory = JSON.parse(JSON.stringify(inventory));
+          (recipe.ingredients?.malts || []).forEach(m => {
+              const mName = (m.name || '').toLowerCase();
+              const item = currentInventory.find(i => {
+                  const iName = (i.name || '').toLowerCase();
+                  return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
+              });
+              if (item) item.stock = Math.max(0, Number(item.stock) - (Number(m.amount) || 0));
+          });
+          (recipe.ingredients?.hops || []).forEach(h => {
+              const hName = (h.name || '').toLowerCase();
+              const item = currentInventory.find(i => {
+                  const iName = (i.name || '').toLowerCase();
+                  return i.category === 'Lúpulo' && iName && hName.includes(iName);
+              });
+              if (item) item.stock = Math.max(0, Number(item.stock) - (Number(h.amount) || 0));
+          });
+          const yeastObj = recipe.ingredients?.yeast;
+          if (yeastObj) {
+              const yeastName = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
+              const yeastAmount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
+              const yName = (yeastName || '').toLowerCase();
+              const yItem = currentInventory.find(i => {
+                  const iName = (i.name || '').toLowerCase();
+                  return i.category === 'Levadura' && iName && yName.includes(iName);
+              });
+              if (yItem) yItem.stock = Math.max(0, Number(yItem.stock) - yeastAmount);
+          }
+
+          const newHistoryItem = {
+            id: 'hist-' + Date.now(),
+            recipeName: recipe.name || 'Sin Nombre',
+            date: new Date().toLocaleDateString(),
+            timestamp: Date.now(),
+            volume: recipe.targetVolume || targetVol || 0,
+            og: recipe.og || '-',
+            fg: recipe.fg || '-',
+            abv: recipe.abv || '-',
+            category: recipe.category || 'Otros',
+            totalCost: totalCost || 0,
+            notes: "Producción completada. Insumos descontados."
+          };
+          
+          const newHistory = [newHistoryItem, ...history];
+          
+          setHistory(newHistory);
+          setInventory(currentInventory);
+          updateCloudData({ history: newHistory, inventory: currentInventory });
+          setView('history');
+        } catch (error) {
+          console.error("Error al finalizar cocción:", error);
+          alert("Hubo un pequeño problema descontando el inventario, pero el lote fue guardado.");
+          setView('history');
         }
-
-        const newHistoryItem = {
-          id: 'hist-' + Date.now(),
-          recipeName: recipe.name || 'Sin Nombre',
-          date: new Date().toLocaleDateString(),
-          timestamp: Date.now(),
-          volume: recipe.targetVolume || targetVol || 0,
-          og: recipe.og || '-',
-          fg: recipe.fg || '-',
-          abv: recipe.abv || '-',
-          category: recipe.category || 'Otros',
-          totalCost: totalCost || 0,
-          notes: "Producción completada. Insumos descontados."
-        };
-        
-        const newHistory = [newHistoryItem, ...history];
-        
-        setHistory(newHistory);
-        setInventory(currentInventory);
-        updateCloudData({ history: newHistory, inventory: currentInventory });
-        setView('history');
-
       } else {
         const nextStep = stepsArray[safeStepIdx + 1];
         setBrewState({
