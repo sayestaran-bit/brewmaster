@@ -55,7 +55,7 @@ const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
 // --- GEMINI API INTEGRATION ---
 // ATENCIÓN: Si exportas a Vercel u otro hosting, pon tu clave de Google AI Studio aquí.
-const apiKey = "";
+const apiKey = "-x~p6cSgnwWK?)";
 
 const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
@@ -80,6 +80,15 @@ const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
 
 // --- FORMATO DE MONEDA & FECHAS ---
 const formatCurrency = (val) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(val) || 0);
+
+// Función universal para formatear fechas a DD/MM/YYYY
+const getFormattedDate = () => {
+  const date = new Date();
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0'); // Los meses van de 0 a 11
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 const parseDateToTimestamp = (dateStr) => {
   if (!dateStr) return 0;
@@ -133,7 +142,9 @@ const getThemeForCategory = (category = '') => {
 // --- DATOS PRECARGADOS ---
 const initialRecipes = [
   {
-    id: 'hazy-tamango-pro', category: 'Hazy IPA', name: "Jugosa Hazy IPA (Estilo Tamango)", targetVolume: 20, og: 1.065, fg: 1.015, abv: 6.5, ibu: 42, colorSRM: 5,
+    id: 'hazy-tamango-pro', category: 'Hazy IPA', name: "Jugosa Hazy IPA (Estilo Tamango)", 
+    description: "Una explosión tropical en tu boca. Esta Hazy IPA rinde tributo a las mejores cervezas de la costa oeste, con un cuerpo increíblemente sedoso (gracias a la avena y el trigo) y un perfil aromático donde el mango, la maracuyá y el durazno bailan juntos. Amargor bajo, pero sabor infinito. Perfecta para tomar frente al mar o soñar que estás en él.",
+    targetVolume: 20, og: 1.065, fg: 1.015, abv: 6.5, ibu: 42, colorSRM: 5,
     waterProfile: { Ca: 120, Mg: 15, SO4: 75, Cl: 200, HCO3: 50 },
     ingredients: {
       malts: [ { name: "Malta Pilsen", amount: 4.5, unit: "kg" }, { name: "Avena en hojuelas", amount: 1.0, unit: "kg" }, { name: "Trigo en hojuelas", amount: 0.8, unit: "kg" } ],
@@ -141,12 +152,12 @@ const initialRecipes = [
       yeast: { name: "Lallemand Verdant IPA", amount: 1, unit: "sobre" }, water: { strike: 22, sparge: 12 }
     },
     steps: [ 
-      { id: 1, title: "Maceración y Ajuste de Agua", desc: "Macerar a 67°C por 60 min. Buscar sedosidad extrema.", details: "1. Calienta el agua en la Guten a 71°C.\n2. Agrega tus sales para llegar al perfil.\n3. Incorpora los granos lentamente removiendo para evitar grumos, la avena tiende a apelmazarse.\n4. Mide el pH a los 10 min: el objetivo es 5.2 - 5.3.", duration: 60 }, 
-      { id: 2, title: "Lavado (Sparge)", desc: "Lavar suavemente con 12L a 75°C.", details: "Realiza un lavado lento. Es CRÍTICO no superar los 76°C ni que el pH suba de 5.8 al final del lavado, o extraerás taninos de las cáscaras.", duration: 15 }, 
-      { id: 3, title: "Hervor Controlado", desc: "Hervir 60 min. Adición de amargor limpio.", details: "Lleva el mosto a ebullición vigorosa. Al romper hervor, agrega los 10g de Magnum para dar la columna vertebral de amargor limpio.", duration: 60 }, 
-      { id: 4, title: "Whirlpool / Hop Stand Crítico", desc: "Enfriar a 80°C e incorporar lúpulos de aroma.", details: "¡Fase clave! Enfría a 80°C exactos. Agrega Citra y Mosaic, y mantén un remolino suave por 20 minutos. Así no sumarás IBUs pero extraerás todos los aceites tropicales.", duration: 20 },
-      { id: 5, title: "Fermentación y Biotransformación", desc: "Inocular a 18°C. Dry Hop activo.", details: "1. Enfría a 18°C y traspasa al fermentador oxigenando muy bien el mosto.\n2. Inocula la Verdant IPA.\n3. DÍA 2-3 (Alta actividad): Agrega el primer Dry Hop para biotransformación.\n4. Deja subir la temperatura a 20°C para descanso de diacetilo.\n5. DÍA 7: Agrega el segundo Dry Hop." },
-      { id: 6, title: "Maduración y Envasado", desc: "Cold Crash extremo y purga de O2.", details: "1. Baja la temperatura a 2°C (Cold Crash) por 48hrs.\n2. Envasa purgando todo con CO2." }
+      { id: 1, title: "Maceración y Ajuste de Agua", desc: "Macerar a 67°C por 60 min. Buscar sedosidad extrema.", details: "1. Calienta el agua en la Guten a 71°C.\n2. Agrega tus sales para llegar al perfil (énfasis en Cloruros).\n3. Incorpora los granos lentamente removiendo para evitar grumos, la avena tiende a apelmazarse.\n4. Mide el pH a los 10 min: el objetivo es 5.2 - 5.3.", duration: 60 }, 
+      { id: 2, title: "Lavado (Sparge)", desc: "Lavar suavemente con 12L a 75°C.", details: "1. Realiza un lavado lento sobre la cama de granos.\n2. Es CRÍTICO no superar los 76°C en el agua de lavado.\n3. Vigila que el pH no suba de 5.8 al final del proceso, o extraerás taninos astringentes de las cáscaras.", duration: 15 }, 
+      { id: 3, title: "Hervor Controlado", desc: "Hervir 60 min. Adición de amargor limpio.", details: "1. Lleva el mosto a ebullición vigorosa.\n2. Vigila el 'Hot Break' (espuma inicial) para evitar derrames.\n3. Al romper hervor, agrega los 10g de Magnum para dar la columna vertebral de amargor limpio y sin asperezas.", duration: 60 }, 
+      { id: 4, title: "Whirlpool / Hop Stand Crítico", desc: "Enfriar a 80°C e incorporar lúpulos de aroma.", details: "1. Apaga el fuego y enfría el mosto a 80°C exactos (¡Fase clave!).\n2. Agrega las cargas masivas de Citra y Mosaic.\n3. Mantén un remolino constante y suave por 20 minutos. A esta temperatura no sumarás IBUs, pero extraerás todos los aceites esenciales tropicales.", duration: 20 },
+      { id: 5, title: "Fermentación y Biotransformación", desc: "Inocular a 18°C. Dry Hop activo.", details: "1. Enfría a 18°C y traspasa al fermentador oxigenando muy bien el mosto.\n2. Inocula la levadura Verdant IPA.\n3. DÍA 2-3 (Alta actividad de burbujeo): Agrega el primer Dry Hop. Esto permite la 'biotransformación' de aceites.\n4. Deja subir la temperatura a 20°C hacia el final para el descanso de diacetilo.\n5. DÍA 7: Agrega el segundo Dry Hop." },
+      { id: 6, title: "Maduración y Envasado", desc: "Cold Crash extremo y purga de O2.", details: "1. Baja la temperatura a 2°C (Cold Crash) por al menos 48hrs para precipitar lúpulo y levadura.\n2. Al envasar, purga todo equipo con CO2. El oxígeno destruirá esta cerveza en días." }
     ],
     tips: [ 
       { title: "Miedo al Oxígeno", desc: "Las Hazy IPAs mueren en días si se exponen al oxígeno. Evita abrir la tapa del fermentador para mirar. Usa un sistema de purga de CO2." },
@@ -155,7 +166,9 @@ const initialRecipes = [
     ], modifications: []
   },
   {
-    id: 'doble-hazy-ipa-pro', category: 'Hazy IPA', name: "Nebulosa DDH - Doble Hazy", targetVolume: 20, og: 1.080, fg: 1.018, abv: 8.2, ibu: 55, colorSRM: 6,
+    id: 'doble-hazy-ipa-pro', category: 'Hazy IPA', name: "Nebulosa DDH - Doble Hazy", 
+    description: "El hermano mayor de la Jugosa. Elevamos el alcohol al 8.2% y aplicamos un Doble Dry Hop (DDH) obsceno con lúpulo Galaxy australiano. El resultado es un néctar de dioses, espeso, que nubla la copa y te golpea con un aroma resinoso y a frutas de carozo. Advertencia: No conducir maquinaria pesada después de probarla.",
+    targetVolume: 20, og: 1.080, fg: 1.018, abv: 8.2, ibu: 55, colorSRM: 6,
     waterProfile: { Ca: 130, Mg: 15, SO4: 80, Cl: 220, HCO3: 50 },
     ingredients: { 
       malts: [{ name: "Malta Pilsen", amount: 6.0, unit: 'kg' }, { name: "Trigo en hojuelas", amount: 1.5, unit: 'kg' }, { name: "Avena en hojuelas", amount: 1.0, unit: 'kg' }], 
@@ -163,11 +176,11 @@ const initialRecipes = [
       yeast: {name: 'Verdant', amount: 2, unit: 'sobres'}, water: {strike: 25, sparge: 12} 
     },
     steps: [
-      { id: 1, title: "Maceración Densa", desc: "66°C por 60 min. Cuidado con atascos.", details: "Al tener una carga de granos tan alta (8.5kg para 20L), la recirculación debe ser muy lenta al inicio para no compactar la cama de granos en tu equipo.", duration: 60 },
-      { id: 2, title: "Lavado Controlado", desc: "Lavar con 12L a 75°C.", details: "No te apresures. Lava lentamente para extraer todos los azúcares posibles de esa gran cama de granos.", duration: 20 },
-      { id: 3, title: "Hervor", desc: "Hervir 60 min.", details: "Añade el Magnum al inicio. Vigila posibles derrames (boil-overs) por la alta densidad del mosto.", duration: 60 },
-      { id: 4, title: "Whirlpool Masivo", desc: "Bajar a 78°C e incorporar Galaxy y Citra.", details: "El Galaxy aporta notas a maracuyá intensas. Mantenlo a 78°C durante 30 minutos enteros para saturar el mosto de aceites esenciales.", duration: 30 },
-      { id: 5, title: "Fermentación Doble", desc: "Inocular a 18°C con DOS sobres.", details: "Oxigena el doble de lo normal. La alta densidad estresará a la levadura si no tiene el oxígeno y la cantidad de células suficientes." }
+      { id: 1, title: "Maceración Densa", desc: "66°C por 60 min. Cuidado con atascos.", details: "1. Calienta 25L de agua a 70°C.\n2. Al tener una carga de granos masiva (8.5kg para 20L), la integración debe ser lentísima.\n3. Remueve constantemente desde el fondo. Tienes alto riesgo de canalización (stuck mash) por la avena y el trigo.\n4. Recircula a bajo caudal los primeros 15 minutos.", duration: 60 },
+      { id: 2, title: "Lavado Controlado", desc: "Lavar con 12L a 75°C.", details: "1. No te apresures en abrir la válvula a tope.\n2. Lava lentamente para darle tiempo al agua de arrastrar la tremenda cantidad de azúcares atrapados.\n3. Detén el lavado si alcanzas tu volumen de pre-hervor deseado, no sobre-laves.", duration: 20 },
+      { id: 3, title: "Hervor Denso", desc: "Hervir 60 min. Añadir Magnum.", details: "1. Alcanza ebullición y añade el Magnum.\n2. Un mosto con densidad cercana a 1.080 es un almíbar; vigila muy de cerca la olla porque los derrames (boil-overs) son violentos.\n3. Revuelve esporádicamente para evitar caramelización en el fondo.", duration: 60 },
+      { id: 4, title: "Whirlpool Masivo", desc: "Bajar a 78°C e incorporar Galaxy y Citra.", details: "1. Enfría rápidamente a 78°C.\n2. El Galaxy aporta notas intensas a maracuyá y durazno, pero a altas temperaturas puede dar amargor vegetal.\n3. Mantenlo a 78°C durante 30 minutos enteros con remolino para saturar el mosto.", duration: 30 },
+      { id: 5, title: "Fermentación Doble", desc: "Inocular a 18°C con DOS sobres.", details: "1. Enfría a 18°C e inyecta EL DOBLE de oxígeno que en una cerveza normal.\n2. Inocula obligatoriamente 2 sobres de levadura hidratada; un solo sobre sufrirá estrés osmótico.\n3. Agrega el Dry Hop masivo de Galaxy al día 4 de fermentación activa." }
     ], 
     tips: [
       { title: "Tasa de Inoculación (Pitch Rate)", desc: "Es una cerveza de alta densidad (1.080). Un solo sobre de levadura sufrirá estrés y generará alcoholes fusel (sabor a solvente o quemado). Asegúrate de usar 2 sobres bien hidratados." },
@@ -175,7 +188,9 @@ const initialRecipes = [
     ], modifications: []
   },
   {
-    id: 'triple-hazy-ipa-pro', category: 'Hazy IPA', name: "Agujero Negro - Triple Hazy", targetVolume: 20, og: 1.100, fg: 1.022, abv: 10.5, ibu: 65, colorSRM: 7,
+    id: 'triple-hazy-ipa-pro', category: 'Hazy IPA', name: "Agujero Negro - Triple Hazy", 
+    description: "Una aberración técnica. Empujamos los límites de la física cervecera macerando más de 10 kilos de granos para apenas 20 litros. Con un brutal 10.5% de alcohol escondido tras capas y capas de avena, trigo, maltodextrina y lúpulos Citra/Mosaic/Galaxy. Es un batido espeso, dulce y peligrosamente bebible. Tómala a sorbos pequeños.",
+    targetVolume: 20, og: 1.100, fg: 1.022, abv: 10.5, ibu: 65, colorSRM: 7,
     waterProfile: { Ca: 140, Mg: 15, SO4: 100, Cl: 250, HCO3: 50 },
     ingredients: { 
       malts: [{ name: "Malta Pale Ale", amount: 8.0, unit: 'kg' }, { name: "Avena en hojuelas", amount: 1.5, unit: 'kg' }, { name: "Trigo en hojuelas", amount: 1.0, unit: 'kg' }, { name: "Maltodextrina", amount: 0.5, unit: 'kg' }], 
@@ -183,35 +198,40 @@ const initialRecipes = [
       yeast: {name: 'Verdant', amount: 3, unit: 'sobres'}, water: {strike: 28, sparge: 10} 
     },
     steps: [
-      { id: 1, title: "Maceración al Límite", desc: "65°C por 90 min para alta fermentabilidad.", details: "Necesitas extraer cada gota de azúcar. Macera 90 minutos para asegurar la conversión enzimática total. El equipo estará al límite de su capacidad.", duration: 90 },
-      { id: 2, title: "Lavado Corto", desc: "Lavar con solo 10L a 76°C", details: "Al buscar una densidad tan extrema (1.100), no podemos diluir mucho el mosto. El lavado será mínimo.", duration: 15 },
-      { id: 3, title: "Hervor y Azúcares", desc: "Hervir 90 min. Añadir Maltodextrina.", details: "Hierve por 90 minutos para concentrar aún más el mosto. Agrega la Maltodextrina faltando 15 minutos para darle un cuerpo ultra denso y pegajoso.", duration: 90 },
-      { id: 4, title: "Fermentación Extrema", desc: "Inocular 3 sobres a 18°C.", details: "Controla estrictamente la temperatura. La levadura generará muchísimo calor propio. Si sube de 20°C los primeros días, tendrás sabores a alcohol muy ásperos." }
+      { id: 1, title: "Maceración al Límite", desc: "65°C por 90 min para alta fermentabilidad.", details: "1. Tu equipo estará al borde del colapso físico con casi 11kg de grano.\n2. Utiliza 28L de agua a 69°C para llegar a 65°C estables.\n3. Macera por 90 minutos para asegurar que las enzimas rompan todos los azúcares complejos. Queremos que la levadura pueda comerlo todo.\n4. Añade cáscara de arroz si tienes, para evitar que se tape la bomba.", duration: 90 },
+      { id: 2, title: "Lavado Corto", desc: "Lavar con solo 10L a 76°C", details: "1. Al buscar una densidad extrema de 1.100, NO podemos diluir el mosto.\n2. Lava solo con 10 litros o menos, sacrificando eficiencia por densidad.\n3. Mide la gravedad constantemente; el mosto debe caer a la olla grueso y oscuro.", duration: 15 },
+      { id: 3, title: "Hervor Largo y Azúcares", desc: "Hervir 90 min. Añadir Maltodextrina.", details: "1. Hierve por 90 minutos para concentrar el volumen y caramelizar ligeramente.\n2. Agrega el Columbus a los 60 min restantes.\n3. Al minuto 75 (15 min para terminar), añade la Maltodextrina disuelta previamente en mosto caliente. Esto le dará un cuerpo ultra pegajoso y sedoso.", duration: 90 },
+      { id: 4, title: "Whirlpool Extremo", desc: "Remolino a 75°C por 30 minutos.", details: "1. Enfría el mosto a 75°C.\n2. Añade 200g totales de Citra y Mosaic.\n3. Haz remolino. El mosto es tan denso que la absorción de aceites será más lenta, dale los 30 minutos completos.", duration: 30 },
+      { id: 5, title: "Fermentación Térmica", desc: "Inocular 3 sobres y domar la bestia a 18°C.", details: "1. Necesitas 3 sobres de levadura hidratados con nutriente.\n2. Oxigena por 2 minutos completos con piedra difusora.\n3. CRÍTICO: La levadura generará calor violento. Controla la cámara a 18°C estrictos los primeros 5 días. Si sube a 22°C, sabrá a alcohol puro e intomable.\n4. Doble Dry Hop masivo en los días 5 y 10." }
     ], tips: [ 
-      { title: "Cuidado con la Fermentación", desc: "A 10.5% ABV, la levadura genera mucho calor. Controla estrictamente la temperatura a 18°C los primeros 4 días o sabrá a alcohol puro." },
-      { title: "Nutrientes", desc: "Para este nivel de alcohol, añadir nutrientes de levadura en los últimos 10 min de hervor es la diferencia entre una fermentación limpia y una estancada." }
+      { title: "Control de Temperatura Activo", desc: "A 10.5% ABV, la levadura genera una cantidad absurda de energía térmica. Si no tienes un refrigerador controlado (Inkbird), no intentes esta receta en verano." },
+      { title: "Nutrientes Obligatorios", desc: "Añadir nutrientes de levadura (Zinc, aminoácidos) en los últimos 10 min de hervor es la diferencia entre una fermentación que termina limpia y una que se estanca en 1.040, dejando una cerveza dulce y empalagosa." }
     ], modifications: []
   },
   {
-    id: 'oatmeal-stout-pro', category: 'Stout', name: "Expreso de Medianoche", targetVolume: 20, og: 1.058, fg: 1.016, abv: 5.5, ibu: 32, colorSRM: 38,
+    id: 'oatmeal-stout-pro', category: 'Stout', name: "Expreso de Medianoche", 
+    description: "Una Stout inglesa de manual, pero mejorada. El uso intensivo de avena le otorga una textura en boca tan suave como el terciopelo. Las maltas tostadas no se maceran desde el inicio, sino que se añaden al final para extraer todo ese aroma a espresso recién hecho y chocolate negro intenso sin nada de la aspereza ácida. Ideal para los días fríos.",
+    targetVolume: 20, og: 1.058, fg: 1.016, abv: 5.5, ibu: 32, colorSRM: 38,
     waterProfile: { Ca: 50, Mg: 10, SO4: 50, Cl: 50, HCO3: 150 },
     ingredients: { 
-      malts: [{ name: "Malta Pale Ale", amount: 4.0, unit: 'kg' }, { name: "Avena", amount: 0.8, unit: 'kg' }, { name: "Cebada Tostada", amount: 0.3, unit: 'kg' }, { name: "Malta Chocolate", amount: 0.2, unit: 'kg' }], 
+      malts: [{ name: "Malta Pale Ale", amount: 4.0, unit: 'kg' }, { name: "Avena en hojuelas", amount: 0.8, unit: 'kg' }, { name: "Cebada Tostada", amount: 0.3, unit: 'kg' }, { name: "Malta Chocolate", amount: 0.2, unit: 'kg' }], 
       hops: [{ name: "Fuggles", amount: 40, unit: 'g', time: "60 min", stage: "Hervor" }], 
       yeast: {name: 'S-04', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} 
     },
     steps: [
-      { id: 1, title: "Maceración Base", desc: "68°C por 50 min. Solo maltas claras y avena.", details: "TRUCO PRO: Macera a 68°C para dejar azúcares residuales y dar cuerpo dulce. NO agregues las maltas oscuras (Chocolate y Cebada Tostada) todavía. Si las pones desde el principio, el pH caerá mucho y extraerás astringencia.", duration: 50 },
-      { id: 2, title: "Adición de Maltas Oscuras", desc: "Minuto 50: Añadir maltas oscuras.", details: "Espolvorea la malta Chocolate y la Cebada Tostada por encima de la cama de granos y remueve solo la capa superior. Déjalo reposar 10 minutos más antes de hacer el Mash Out. Esto extrae el color y aroma a café, pero deja la acidez y astringencia atrás.", duration: 10 },
-      { id: 3, title: "Hervor Clásico", desc: "Hervir 60 minutos con Fuggles.", details: "Añade todo el lúpulo al inicio. En una Stout, el aroma a lúpulo no debe competir con el tostado de las maltas.", duration: 60 },
-      { id: 4, title: "Fermentación Inglesa", desc: "Fermentar a 19°C.", details: "La levadura S-04 aportará un ligero perfil afrutado inglés que combina perfecto con el chocolate." }
+      { id: 1, title: "Maceración Base", desc: "68°C por 50 min. Solo maltas claras y avena.", details: "1. Integra SOLO la Malta Pale y la Avena en el agua a 68°C.\n2. TRUCO PRO: Macera a esta temperatura alta para dejar azúcares no fermentables que darán cuerpo.\n3. NO agregues la malta Chocolate ni la Cebada Tostada todavía. Su acidez destruiría el pH óptimo de conversión de las maltas base.", duration: 50 },
+      { id: 2, title: "Adición de Maltas Oscuras", desc: "Minuto 50: Añadir oscuras por encima.", details: "1. Al minuto 50, espolvorea la malta Chocolate y la Cebada Tostada por encima de la cama de granos.\n2. Remueve solo la capa superior (1-2 cm), sin llegar al fondo.\n3. Déjalo reposar 10-15 minutos más. Esto extrae el color profundo y el rico aroma a café y chocolate, pero deja la astringencia tánica atrás.", duration: 15 },
+      { id: 3, title: "Hervor Clásico Inglés", desc: "Hervir 60 minutos con lúpulo Fuggles.", details: "1. Lavado normal y llevar a ebullición.\n2. Añade los 40g de Fuggles al minuto 0.\n3. En una buena Stout, el lúpulo no debe dar sabor ni aroma, solo amargor de soporte para equilibrar el dulzor de la malta.", duration: 60 },
+      { id: 4, title: "Fermentación Inglesa", desc: "Fermentar a 19°C con levadura S-04.", details: "1. Enfría a 19°C y añade un sobre de S-04.\n2. Esta temperatura fomenta que la cepa inglesa genere ligeros ésteres afrutados (como a mora o ciruela) que combinan perfecto con el chocolate de las maltas oscuras.\n3. Termina la fermentación a 21°C." }
     ], tips: [ 
-      { title: "Control de pH con Maltas Oscuras", desc: "Las maltas muy tostadas son ácidas y pueden bajar el pH de tu macerado a niveles subóptimos (< 5.0). Añadirlas al final del macerado o hacer un 'Cold Steeping' (infusión en frío de 24hs) y agregarlo al hervor es un truco maestro." },
-      { title: "Carbonatación", desc: "Apunta a una carbonatación baja (1.8 a 2.0 volúmenes de CO2). Mucho gas destruye la sensación cremosa que aporta la avena." } 
+      { title: "Cold Steeping (Infusión en Frío)", desc: "Como alternativa pro al paso 2: Deja remojando la malta Chocolate y Tostada en agua fría por 24hs en el refrigerador. Filtra el líquido negro y añádelo en los últimos 5 minutos del hervor. Obtendrás un sabor a café ultra suave." },
+      { title: "Carbonatación Baja", desc: "Apunta a una carbonatación baja de estilo británico (1.8 a 2.0 volúmenes de CO2). Ponerle mucho gas destruirá la sensación cremosa en boca que tanto trabajo te costó conseguir con la avena." } 
     ], modifications: []
   },
   { 
-    id: 'lager-premium-pro', category: 'Lager', name: "Pilsner del Sur", targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, ibu: 28, colorSRM: 4,
+    id: 'lager-premium-pro', category: 'Lager', name: "Pilsner del Sur", 
+    description: "Una obra maestra de paciencia y precisión. Inspirada en las clásicas lagers checas, esta cerveza es cristalina, súper refrescante y tiene ese toque floral inconfundible del lúpulo noble Saaz. Maceración escalonada y semanas de maduración en frío (Lagering) la convierten en el premio final después de cortar el pasto.",
+    targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, ibu: 28, colorSRM: 4,
     waterProfile: { Ca: 50, Mg: 5, SO4: 50, Cl: 50, HCO3: 20 },
     ingredients: { 
       malts: [{name: 'Malta Pilsen', amount: 4.5, unit: 'kg'}, {name: 'Carapils', amount: 0.2, unit: 'kg'}], 
@@ -219,17 +239,20 @@ const initialRecipes = [
       yeast: {name: 'W-34/70', amount: 2, unit: 'sobres'}, water: {strike: 18, sparge: 14} 
     }, 
     steps: [
-      { id: 1, title: "Maceración Escalonada", desc: "Escalón proteico y sacarificación.", details: "Comienza a 52°C por 15 min (mejora retención de espuma). Luego sube a 64°C por 45 min para un mosto altamente fermentable y seco.", duration: 60 },
-      { id: 2, title: "Hervor Largo", desc: "Hervir 90 min.", details: "La malta Pilsen contiene precursores de DMS (olor a maíz cocido). Hiérvela destapada por 90 minutos para evaporarlos. Agrega Magnum a los 60 min y Saaz a los 15 min del final.", duration: 90 },
-      { id: 3, title: "Fermentación Fría y Diacetilo", desc: "Inocular a 10°C.", details: "1. Oxigena al máximo y fermenta a 10-12°C.\n2. Cuando falten 4 puntos de densidad para terminar, SUbE a 16°C por 3 días (Descanso de Diacetilo).\n3. Lagering: Guarda en frío a 1°C por 4 semanas mínimo." }
+      { id: 1, title: "Maceración Escalonada", desc: "Escalón proteico y de sacarificación.", details: "1. Empieza la maceración a 52°C por 15 minutos. Esto descompone proteínas medias mejorando drásticamente la retención de espuma.\n2. Sube la temperatura a 64°C por 45 minutos. Esta temperatura baja crea un mosto muy fermentable, esencial para una Lager seca y crujiente.\n3. Sube a 75°C por 10 min para hacer el Mash Out.", duration: 70 },
+      { id: 2, title: "Hervor Largo (Destapado)", desc: "Hervir 90 min para evaporar DMS.", details: "1. La malta Pilsen contiene precursores de DMS (que da un defecto de sabor a maíz cocido o verdura hervida).\n2. DEBES hervir por 90 minutos vigorosamente y sin tapa para que este compuesto se evapore.\n3. Agrega el Magnum al min 60 (quedando 30 min de los 90) y el mítico lúpulo Saaz al minuto 15.", duration: 90 },
+      { id: 3, title: "Inoculación en Frío", desc: "Bajar a 10°C y doble levadura.", details: "1. NO incules a 20°C para luego enfriar, eso generará sabores frutales que arruinan la Lager.\n2. Enfría el mosto hasta 10°C u 11°C.\n3. Oxigena al máximo e inocula DOS sobres de W-34/70. Las levaduras a baja temperatura son lentas y necesitan un ejército grande." },
+      { id: 4, title: "Descanso de Diacetilo y Lagering", desc: "Subir a 16°C y luego madurar a 1°C.", details: "1. Fermenta a 12°C. Cuando queden unos 4 o 5 puntos para llegar a la densidad final (ej: en 1.015), sube el refrigerador a 16°C por 3 días. La levadura reabsorberá la molécula de la mantequilla (Diacetilo).\n2. Lagering: Baja la temperatura 2°C por día hasta llegar a 1°C y déjala madurar ahí por 4 a 6 semanas. La paciencia hace al maestro." }
     ], 
     tips: [
-      { title: "Descanso de Diacetilo", desc: "Las levaduras Lager producen diacetilo (sabor a mantequilla). Es obligatorio subir la temperatura a 16-18°C cuando falten unos 4 puntos de gravedad para terminar, así la levadura reabsorbe esta mantequilla." },
-      { title: "Inoculación en Frío", desc: "Es un error inocular levadura Lager a 20°C y luego enfriar. Debes enfriar tu mosto a 10°C, y recién ahí inocular DOBLE cantidad de levadura. Esto asegura un perfil extra limpio." }
+      { title: "Tratamiento de Agua Ligera", desc: "Una Pilsner exige agua muy blanda. Si el agua de tu llave es dura (mucho sarro), dilúyela con un 50% a 70% de agua desmineralizada o de ósmosis inversa. Demasiado sulfato o bicarbonato hará que el amargor raspe la lengua." },
+      { title: "El Factor Claridad", desc: "Añade musgo irlandés (Irish Moss) o Whirlfloc 15 minutos antes de terminar el hervor. Junto con el 'Lagering' de 4 semanas, la cerveza saldrá brillante como cristal sin necesidad de filtrar mecánicamente." }
     ], modifications: [] 
   },
   { 
-    id: 'amber-ale-pro', category: 'Amber Ale', name: "Red Marzen Americana", targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, ibu: 32, colorSRM: 14,
+    id: 'amber-ale-pro', category: 'Amber Ale', name: "Red Marzen Americana", 
+    description: "Una oda al equilibrio perfecto entre malta y lúpulo. Esta cerveza brilla con un color rubí hipnótico. En boca, arranca con un dulzor a caramelo tostado y corteza de pan (gracias a la malta Melanoidina), y remata con un toque resinoso y a pomelo clásico del lúpulo americano Cascade. Una todoterreno infalible para cualquier ocasión.",
+    targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, ibu: 32, colorSRM: 14,
     waterProfile: { Ca: 80, Mg: 10, SO4: 100, Cl: 80, HCO3: 80 },
     ingredients: { 
       malts: [{name: 'Malta Pale Ale', amount: 4.0, unit: 'kg'}, {name: 'Caramelo 60L', amount: 0.5, unit: 'kg'}, {name: 'Melanoidina', amount: 0.3, unit: 'kg'}, {name: 'Cebada Tostada', amount: 0.05, unit: 'kg'}], 
@@ -237,12 +260,13 @@ const initialRecipes = [
       yeast: {name: 'US-05', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} 
     }, 
     steps: [
-      { id: 1, title: "Maceración Balanceada", desc: "66°C por 60 min", details: "Macerar a esta temperatura nos dará un balance perfecto entre azúcares fermentables y cuerpo residual, ideal para el dulzor del caramelo.", duration: 60 },
-      { id: 2, title: "Hervor y Sabor", desc: "60 min. Adiciones de Cascade.", details: "Añade 20g de Cascade al inicio. A los 45 minutos (faltando 15 min), agrega los otros 30g para fijar el clásico sabor a pomelo/pino americano.", duration: 60 },
-      { id: 3, title: "Fermentación Limpia", desc: "18°C con US-05.", details: "Mantenlo a 18°C para que la levadura no genere ésteres y deje brillar el perfil a malta tostada y caramelo." }
+      { id: 1, title: "Maceración Balanceada", desc: "66°C por 60 min", details: "1. Calienta 18L de agua a 71°C.\n2. Integra los granos para asentar a 66°C exactos.\n3. Esta temperatura media es crucial: no queremos un mosto seco ni tampoco un almíbar; buscamos un soporte de malta perfecto para contrarrestar el lúpulo Cascade.\n4. Mide pH y mantén en 5.3.", duration: 60 },
+      { id: 2, title: "Hervor y Sabor Americano", desc: "60 min. Adiciones de Cascade.", details: "1. Lleva a ebullición viva.\n2. Añade 20g de Cascade al inicio. Esto aportará un amargor cítrico muy limpio.\n3. A los 45 minutos (faltando 15 min), agrega los otros 30g de Cascade. Esta carga tardía fijará el clásico sabor a pino y pomelo típico de las cervezas craft americanas.", duration: 60 },
+      { id: 3, title: "Fermentación Limpia", desc: "18°C con levadura Ale Neutra (US-05).", details: "1. Enfría el mosto a 18°C.\n2. Inocula la US-05. Es importante mantener la temperatura controlada; no queremos ésteres afrutados de la levadura que confundan el paladar, queremos dejar brillar el caramelo de la malta y el pino del lúpulo." }
     ], 
     tips: [
-      { title: "Ajuste de Color", desc: "Esos 50 gramos de Cebada Tostada no son para sabor, sino para darle ese tono rojo/rubí profundo característico del estilo sin aportar notas a café." }
+      { title: "El Truco del Color", desc: "Quizás te preguntes qué hacen 50 gramos minúsculos de Cebada Tostada en esta receta. No aportarán sabor a café, su único propósito es corregir el espectro visual para lograr ese característico tono Rojo Rubí intenso, en lugar de un café aguado." },
+      { title: "Malta Melanoidina", desc: "La adición de Melanoidina imita el complejo sabor a corteza de pan tostado que normalmente se logra mediante decocción (un método alemán muy complejo). Es un atajo de Maestro Cervecero." }
     ], modifications: [] 
   }
 ];
@@ -333,7 +357,7 @@ function AutocompleteInput({ value, onChange, placeholder, category, inventory, 
 }
 
 // --- COMPONENTE DE FORMULARIO PARA RECETAS (Añadir / Editar) CON IA ---
-function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryItem }) {
+function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryItem, recipes }) {
   const isEditing = !!initialData;
   const [isGeneratingIA, setIsGeneratingIA] = useState(false);
   const [iaPrompt, setIaPrompt] = useState("");
@@ -353,6 +377,7 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
         id: initialData.id,
         name: initialData.name || '',
         category: initialData.category || 'Hazy IPA',
+        description: initialData.description || '',
         targetVolume: initialData.targetVolume || 20,
         og: initialData.og || 1.050,
         fg: initialData.fg || 1.010,
@@ -371,7 +396,7 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
       };
     }
     return {
-      name: '', category: 'Hazy IPA', targetVolume: 20, og: 1.050, fg: 1.010, abv: 5.0, ibu: 30, colorSRM: 5,
+      name: '', category: 'Hazy IPA', description: '', targetVolume: 20, og: 1.050, fg: 1.010, abv: 5.0, ibu: 30, colorSRM: 5,
       malts: [{ name: '', amount: 0 }],
       hops: [{ name: '', amount: 0, time: '', stage: 'Hervor' }],
       yeast: '', strike: 15, sparge: 15,
@@ -382,16 +407,57 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
   
   const [modNote, setModNote] = useState('');
 
+  // NUEVA FUNCIÓN: Manejar la clonación de receta
+  const handleClone = (e) => {
+    const recipeId = e.target.value;
+    if (!recipeId) return;
+    
+    const recipeToClone = (recipes || []).find(r => r.id === recipeId);
+    if (recipeToClone) {
+      const safeMalts = Array.isArray(recipeToClone.ingredients?.malts) ? [...recipeToClone.ingredients.malts] : [{ name: '', amount: 0 }];
+      const safeHops = Array.isArray(recipeToClone.ingredients?.hops) ? [...recipeToClone.ingredients.hops] : [{ name: '', amount: 0, time: '', stage: 'Hervor' }];
+      
+      let safeYeast = '';
+      if (recipeToClone.ingredients?.yeast) {
+        if (typeof recipeToClone.ingredients.yeast === 'string') safeYeast = recipeToClone.ingredients.yeast;
+        else safeYeast = recipeToClone.ingredients.yeast.name || '';
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        name: recipeToClone.name + ' (Copia)',
+        category: recipeToClone.category || 'Hazy IPA',
+        description: recipeToClone.description || '',
+        targetVolume: recipeToClone.targetVolume || 20,
+        og: recipeToClone.og || 1.050,
+        fg: recipeToClone.fg || 1.010,
+        abv: recipeToClone.abv || 5.0,
+        ibu: recipeToClone.ibu || 0,
+        colorSRM: recipeToClone.colorSRM || 0,
+        malts: safeMalts,
+        hops: safeHops,
+        yeast: safeYeast,
+        strike: recipeToClone.ingredients?.water?.strike || 15,
+        sparge: recipeToClone.ingredients?.water?.sparge || 15,
+        waterProfile: recipeToClone.waterProfile || { Ca: 100, Mg: 10, SO4: 100, Cl: 100, HCO3: 50 },
+        steps: Array.isArray(recipeToClone.steps) ? [...recipeToClone.steps].map((s, i) => ({ ...s, id: Date.now() + i })) : [],
+        tips: Array.isArray(recipeToClone.tips) ? [...recipeToClone.tips] : [],
+        modifications: [] // Limpiamos el historial de modificaciones porque es una receta nueva
+      }));
+    }
+  };
+
   const handleAIGenerate = async () => {
     if (!iaPrompt.trim()) return alert("Por favor, describe la cerveza que deseas generar.");
     setIsGeneratingIA(true);
     try {
-      const systemInstruction = "Eres un Maestro Cervecero experto. Genera una receta de cerveza altamente detallada. Responde ÚNICAMENTE con un JSON válido.";
+      const systemInstruction = "Eres un Maestro Cervecero experto. Genera una receta de cerveza altamente detallada. Incluye una descripción 'description' muy creativa, poética y entretenida de la cerveza. Responde ÚNICAMENTE con un JSON válido.";
       const prompt = `Genera una receta profesional de cerveza basada en esta idea: "${iaPrompt}". 
       Estructura JSON esperada OBLIGATORIA:
       {
         "name": "Nombre creativo de la receta",
         "category": "Estilo oficial (ej. Stout, IPA)",
+        "description": "Una breve historia o descripción muy atractiva para vender esta cerveza.",
         "targetVolume": 20,
         "og": 1.050, "fg": 1.010, "abv": 5.0, "ibu": 30, "colorSRM": 5,
         "waterProfile": { "Ca": 100, "Mg": 10, "SO4": 100, "Cl": 100, "HCO3": 50 },
@@ -427,15 +493,16 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
     
     const newModifications = [...(formData.modifications || [])];
     if (isEditing && modNote.trim()) {
-       newModifications.push({ date: new Date().toLocaleDateString(), note: modNote });
+       newModifications.push({ date: getFormattedDate(), note: modNote });
     } else if (isEditing) {
-       newModifications.push({ date: new Date().toLocaleDateString(), note: "Edición general." });
+       newModifications.push({ date: getFormattedDate(), note: "Edición general." });
     }
 
     const recipeToSave = {
       id: isEditing ? formData.id : 'recipe-' + Date.now(),
       category: formData.category,
       name: formData.name,
+      description: formData.description || '',
       targetVolume: Number(formData.targetVolume),
       og: formData.og, fg: formData.fg, abv: formData.abv, 
       ibu: Number(formData.ibu), colorSRM: Number(formData.colorSRM),
@@ -473,6 +540,25 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
         <button onClick={onCancel} className="text-gray-500 hover:text-red-500 font-bold transition-colors">Cancelar</button>
       </div>
 
+      {/* NUEVO: SELECTOR PARA CLONAR RECETA */}
+      {!isEditing && recipes && recipes.length > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/10 p-5 rounded-2xl border border-blue-200 dark:border-blue-800/30 mb-8 flex flex-col md:flex-row items-start md:items-center gap-4 shadow-sm">
+           <label className="text-sm font-black text-blue-800 dark:text-blue-400 whitespace-nowrap flex items-center gap-2">
+              <BookOpen size={20} /> Clonar receta existente:
+           </label>
+           <select 
+             className="flex-1 w-full p-3 border border-blue-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold shadow-inner transition-all" 
+             onChange={handleClone} 
+             defaultValue=""
+           >
+             <option value="" disabled>Selecciona una receta para copiar su perfil e ingredientes...</option>
+             {recipes.map(r => (
+               <option key={r.id} value={r.id}>{r.name} ({r.category})</option>
+             ))}
+           </select>
+        </div>
+      )}
+
       {/* --- ASISTENTE IA --- */}
       {!isEditing && (
         <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 p-6 rounded-2xl border border-amber-200 dark:border-amber-800/30 mb-8 shadow-sm">
@@ -492,6 +578,11 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
         <div className="grid md:grid-cols-2 gap-4">
           <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre</label><input type="text" className="w-full p-3 border dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-amber-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
           <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Estilo</label><input type="text" className="w-full p-3 border dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-amber-500" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} /></div>
+        </div>
+        
+        <div>
+          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descripción / Historia (Opcional)</label>
+          <textarea rows="3" className="w-full p-3 border dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm text-slate-700 dark:text-slate-300" placeholder="Vende tu cerveza con una descripción atractiva..." value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})}></textarea>
         </div>
 
         <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
@@ -706,12 +797,17 @@ function MainApp() {
       } else {
         await signInWithEmailAndPassword(auth, authEmail, authPass);
       }
-      // Omitir setView('dashboard') aquí, dejar que onAuthStateChanged lo maneje
+      // No forzamos el setView aquí, onAuthStateChanged en el useEffect redirigirá correctamente.
     } catch (err) {
-      if (err.code === 'auth/email-already-in-use') setAuthError('Este correo ya está registrado.');
-      else if (err.code === 'auth/weak-password') setAuthError('Mínimo 6 caracteres.');
-      else if (err.code === 'auth/invalid-credential') setAuthError('Credenciales inválidas. Verifica tu correo y contraseña.');
-      else setAuthError(`Error: ${err.message}`);
+      if (err.code === 'auth/email-already-in-use') {
+        setAuthError('Este correo ya está registrado. Intenta Iniciar Sesión.');
+      } else if (err.code === 'auth/weak-password') {
+        setAuthError('La contraseña debe tener mínimo 6 caracteres.');
+      } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setAuthError('Credenciales inválidas. Si ya tienes cuenta con Google, usa el botón de Google. Si no, haz clic en "Regístrate" abajo.');
+      } else {
+        setAuthError(`Error al acceder: ${err.message}`);
+      }
     }
   };
 
@@ -853,7 +949,7 @@ function MainApp() {
             </div>
             {!isRegistering && <div className="text-right mt-2"><button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-500 hover:text-amber-500">¿Olvidaste tu contraseña?</button></div>}
           </div>
-          {authError && <p className="text-red-500 text-sm font-medium bg-red-50 dark:bg-red-900/30 p-3 rounded-lg">{authError}</p>}
+          {authError && <p className="text-red-500 text-sm font-medium bg-red-50 dark:bg-red-900/30 p-3 rounded-lg border border-red-200 dark:border-red-900/50">{authError}</p>}
           {resetMessage && <p className="text-emerald-500 text-sm font-medium bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg">{resetMessage}</p>}
           <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 dark:bg-amber-600 dark:hover:bg-amber-500 text-white p-4 rounded-xl font-black transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">{isRegistering ? 'Registrar y Entrar' : 'Entrar'}</button>
         </form>
@@ -1130,21 +1226,21 @@ function MainApp() {
     return (
       <div className="space-y-8 animate-fadeIn">
         <div className="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 gap-4">
-          <div className="flex items-center">
+          <div className="flex items-center flex-wrap gap-2">
             <p className="text-slate-600 dark:text-slate-400 font-medium">Tienes <span className="text-amber-600 font-bold">{safeRecipes.length} recetas</span> en tu biblioteca.</p>
             {user && !user.isAnonymous && (
               <button 
                 onClick={() => {
-                  const existingIds = safeRecipes.map(r => r.id);
-                  const missing = initialRecipes.filter(r => !existingIds.includes(r.id));
-                  if(missing.length > 0) {
-                      const updated = [...safeRecipes, ...missing];
-                      setRecipes(updated); updateCloudData({ recipes: updated });
-                  } else { alert("¡Ya tienes todas las recetas maestras actualizadas en tu perfil!"); }
+                  if(window.confirm("Esto actualizará las recetas base a su última versión detallada (sin borrar tus recetas propias). ¿Continuar?")) {
+                    const myCustomRecipes = safeRecipes.filter(r => !initialRecipes.some(base => base.id === r.id));
+                    const updated = [...initialRecipes, ...myCustomRecipes];
+                    setRecipes(updated); updateCloudData({ recipes: updated });
+                    alert("¡Recetas base actualizadas con éxito!");
+                  }
                 }} 
-                className="text-xs text-blue-500 hover:text-blue-600 underline ml-3 font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded"
+                className="text-xs text-blue-500 hover:text-blue-600 underline ml-0 md:ml-3 font-bold bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
               >
-                ¿Faltan recetas base?
+                <RefreshCw size={12}/> Actualizar Recetas Base
               </button>
             )}
           </div>
@@ -1198,6 +1294,9 @@ function MainApp() {
                           )}
                         </div>
                         <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors pr-6 tracking-tight">{recipe.name || 'Sin Nombre'}</h3>
+                        {recipe.description && (
+                          <p className="text-slate-500 dark:text-slate-400 text-xs line-clamp-2 mt-1">{recipe.description}</p>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4 cursor-pointer pb-2" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setAiAdvice(null); setView('recipe'); }}>
                         <span className="flex items-center gap-1" title="Volumen"><Droplets size={16} className="text-blue-500"/> {recipe.targetVolume || 0}L</span>
@@ -1460,11 +1559,19 @@ function MainApp() {
 
         {/* HEADER DINÁMICO */}
         <div className={`${theme.header} text-white p-8 md:p-12 rounded-t-[2.5rem] shadow-xl flex flex-col md:flex-row justify-between items-start md:items-end relative overflow-hidden`}>
-          <div className="relative z-10">
+          <div className="relative z-10 w-full md:w-2/3">
             <span className="bg-white/20 px-5 py-2 rounded-full text-sm font-black tracking-[0.2em] uppercase mb-4 inline-block shadow-sm backdrop-blur-md">
               {scaledRecipe.category || 'Sin Categoría'}
             </span>
             <h2 className="text-5xl md:text-6xl font-black mb-3 leading-[0.9] drop-shadow-md tracking-tighter">{scaledRecipe.name || 'Receta Sin Nombre'}</h2>
+            
+            {/* NUEVO: DESCRIPCIÓN EN RECETA */}
+            {scaledRecipe.description && (
+              <p className="text-white/80 font-medium text-lg leading-relaxed mt-4 max-w-2xl bg-black/10 p-4 rounded-xl backdrop-blur-sm border border-white/5">
+                {scaledRecipe.description}
+              </p>
+            )}
+
             <div className="flex flex-wrap gap-3 mt-6 font-bold text-white/90">
               <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Alcohol por Volumen"><Thermometer size={18}/> ABV: {scaledRecipe.abv}%</span>
               <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Gravedad Original"><Clock size={18}/> DO: {scaledRecipe.og}</span>
@@ -1906,7 +2013,7 @@ function MainApp() {
             id: 'batch-' + Date.now(),
             recipeId: recipe.id,
             recipeName: recipe.name || 'Sin Nombre',
-            date: new Date().toLocaleDateString(),
+            date: getFormattedDate(), // Usa el nuevo formato de fecha
             timestamp: Date.now(),
             volume: recipe.targetVolume || targetVol || 0,
             og: recipe.og || '-',
@@ -2070,7 +2177,8 @@ function MainApp() {
                       <button 
                         onClick={() => {
                           if(window.confirm(`¿Seguro que deseas embotellar y mover ${batch.recipeName} al Historial definitivo?`)) {
-                            const newHistoryItem = { ...batch, id: 'hist-' + Date.now(), notes: `Embotellada en el Día ${daysElapsed}` };
+                            // Usamos el formato unificado
+                            const newHistoryItem = { ...batch, date: getFormattedDate(), id: 'hist-' + Date.now(), notes: `Embotellada en el Día ${daysElapsed}` };
                             const newHistory = [newHistoryItem, ...history];
                             const newActive = activeBatches.filter(b => b.id !== batch.id);
                             setHistory(newHistory);
@@ -2320,11 +2428,11 @@ function MainApp() {
                 {view === 'add' && <RecipeForm onSave={(newRecipe) => { 
                    const newRecipesList = [...recipes, newRecipe];
                    setRecipes(newRecipesList); updateCloudData({ recipes: newRecipesList }); setView('list'); 
-                }} onCancel={() => setView('list')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} />}
+                }} onCancel={() => setView('list')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} recipes={recipes} />}
                 {view === 'edit' && <RecipeForm initialData={selectedRecipe} onSave={(updatedRecipe) => { 
                    const newRecipesList = recipes.map(r => r.id === updatedRecipe.id ? updatedRecipe : r);
                    setRecipes(newRecipesList); setSelectedRecipe(updatedRecipe); updateCloudData({ recipes: newRecipesList }); setView('recipe'); 
-                }} onCancel={() => setView('recipe')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} />}
+                }} onCancel={() => setView('recipe')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} recipes={recipes} />}
                 {view === 'brew' && renderBrewSession()}
                 {view === 'active' && renderActiveBatches()}
                 {view === 'history' && renderHistory()}
