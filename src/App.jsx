@@ -7,7 +7,7 @@ import {
   Banknote, Wheat, Leaf, Cloud, RefreshCw, Moon, Sun, User, 
   LogOut, Edit3, FileClock, Eye, EyeOff, Activity, Palette, ListOrdered,
   Sparkles, Loader2, BrainCircuit, Wand2, TrendingUp, BarChart3, PieChart,
-  LayoutDashboard, Filter, AlertTriangle
+  LayoutDashboard, Filter, AlertTriangle, Hourglass, CalendarPlus
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -54,7 +54,8 @@ const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'brewmaster-pro-v1
 const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
 // --- GEMINI API INTEGRATION ---
-const apiKey = "";
+// ATENCIÓN: Si exportas a Vercel u otro hosting, pon tu clave de Google AI Studio aquí.
+const apiKey = "-x~p6cSgnwWK?")";
 
 const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
@@ -85,6 +86,14 @@ const parseDateToTimestamp = (dateStr) => {
   const parts = dateStr.split(/[-/]/);
   if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
   return Date.now();
+};
+
+const generateGoogleCalendarLink = (title, daysFromStart, startDateMs, details) => {
+  const targetDate = new Date(startDateMs + daysFromStart * 24 * 60 * 60 * 1000);
+  const startStr = targetDate.toISOString().replace(/-|:|\.\d\d\d/g,"");
+  const endDate = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000); // Todo el día
+  const endStr = endDate.toISOString().replace(/-|:|\.\d\d\d/g,"");
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startStr}/${endStr}&details=${encodeURIComponent(details)}`;
 };
 
 // --- SIMULADOR DE COLOR SRM A HEX ---
@@ -406,8 +415,8 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
       }));
       
     } catch (err) {
-      console.error(err);
-      alert("Hubo un error conectando con la IA. Inténtalo de nuevo más tarde.");
+      console.error("Error al conectar con IA:", err);
+      alert("Hubo un error conectando con la IA. Si has exportado a Vercel u otro hosting, asegúrate de colocar tu API Key en la variable 'apiKey' del código.");
     } finally {
       setIsGeneratingIA(false);
     }
@@ -593,6 +602,7 @@ function MainApp() {
   const [recipes, setRecipes] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [history, setHistory] = useState([]);
+  const [activeBatches, setActiveBatches] = useState([]); // NUEVO ESTADO PARA LOTES ACTIVOS
 
   const [view, setView] = useState('auth'); // Empieza siempre en Auth
   const [selectedRecipe, setSelectedRecipe] = useState(null);
@@ -663,11 +673,12 @@ function MainApp() {
         setRecipes(Array.isArray(data.recipes) ? data.recipes : []);
         setInventory(Array.isArray(data.inventory) ? data.inventory : []);
         setHistory(Array.isArray(data.history) ? data.history : []);
+        setActiveBatches(Array.isArray(data.activeBatches) ? data.activeBatches : []); // CARGAR ACTIVOS
       } else {
         const seedRecipes = user.isAnonymous ? [] : initialRecipes;
         const seedInventory = user.isAnonymous ? [] : initialInventory;
-        setDoc(docRef, { recipes: seedRecipes, inventory: seedInventory, history: [] });
-        setRecipes(seedRecipes); setInventory(seedInventory); setHistory([]);
+        setDoc(docRef, { recipes: seedRecipes, inventory: seedInventory, history: [], activeBatches: [] });
+        setRecipes(seedRecipes); setInventory(seedInventory); setHistory([]); setActiveBatches([]);
       }
       setIsDataLoaded(true);
     }, (error) => {
@@ -685,17 +696,21 @@ function MainApp() {
     finally { setTimeout(() => setIsSaving(false), 800); }
   };
 
-  const forceSyncCloud = () => updateCloudData({ recipes, inventory, history });
+  const forceSyncCloud = () => updateCloudData({ recipes, inventory, history, activeBatches });
 
   const handleAuthSubmit = async (e) => {
     e.preventDefault(); setAuthError(''); setResetMessage('');
     try {
-      if (isRegistering) await createUserWithEmailAndPassword(auth, authEmail, authPass);
-      else await signInWithEmailAndPassword(auth, authEmail, authPass);
-      setView('dashboard');
+      if (isRegistering) {
+        await createUserWithEmailAndPassword(auth, authEmail, authPass);
+      } else {
+        await signInWithEmailAndPassword(auth, authEmail, authPass);
+      }
+      // Omitir setView('dashboard') aquí, dejar que onAuthStateChanged lo maneje
     } catch (err) {
       if (err.code === 'auth/email-already-in-use') setAuthError('Este correo ya está registrado.');
       else if (err.code === 'auth/weak-password') setAuthError('Mínimo 6 caracteres.');
+      else if (err.code === 'auth/invalid-credential') setAuthError('Credenciales inválidas. Verifica tu correo y contraseña.');
       else setAuthError(`Error: ${err.message}`);
     }
   };
@@ -740,7 +755,12 @@ function MainApp() {
       const prompt = `Analiza esta receta: ${selectedRecipe.name} (${selectedRecipe.category}). Formulación: ${JSON.stringify(selectedRecipe.ingredients)}. Agua: ${JSON.stringify(selectedRecipe.waterProfile)}. Dame 3 sugerencias técnicas pro para mejorar.`;
       const res = await callGemini(prompt, "Eres un Maestro Cervecero de élite mundial.");
       setAiAdvice(res);
-    } catch (err) { alert("IA Ocupada."); } finally { setIsAdvising(false); }
+    } catch (err) {
+      console.error("Error AI:", err);
+      alert("Error conectando con la IA. Si has exportado el código a Vercel u otro servidor, recuerda pegar tu clave en 'const apiKey = \"\"' en el código.");
+    } finally { 
+      setIsAdvising(false); 
+    }
   };
 
   // --- CRONÓMETRO ---
@@ -1043,7 +1063,9 @@ function MainApp() {
                         <span className="font-bold text-slate-700 dark:text-slate-300 block truncate text-sm">{item.name}</span>
                         <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">{item.category}</span>
                       </div>
-                      <span className="font-black text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded-md text-xs shrink-0 whitespace-nowrap">{Number(item.stock).toLocaleString('es-CL', {maximumFractionDigits: 4})} {item.unit}</span>
+                      <span className="font-black text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded-md text-xs shrink-0 whitespace-nowrap">
+                        {Number(item.stock).toLocaleString('es-CL', {maximumFractionDigits: 4})} {item.unit}
+                      </span>
                     </li>
                   ))}
                   {lowStockItems.length > 4 && (
@@ -1879,8 +1901,10 @@ function MainApp() {
               if (yItem) yItem.stock = Number((Math.max(0, Number(yItem.stock) - yeastAmount)).toFixed(4));
           }
 
-          const newHistoryItem = {
-            id: 'hist-' + Date.now(),
+          // AHORA VA A LOTES ACTIVOS EN LUGAR DE HISTORIAL DIRECTO
+          const newBatchItem = {
+            id: 'batch-' + Date.now(),
+            recipeId: recipe.id,
             recipeName: recipe.name || 'Sin Nombre',
             date: new Date().toLocaleDateString(),
             timestamp: Date.now(),
@@ -1890,19 +1914,19 @@ function MainApp() {
             abv: recipe.abv || '-',
             category: recipe.category || 'Otros',
             totalCost: totalCost || 0,
-            notes: "Producción completada. Insumos descontados."
+            status: 'Fermentando'
           };
           
-          const newHistory = [newHistoryItem, ...history];
+          const newBatches = [newBatchItem, ...activeBatches];
           
-          setHistory(newHistory);
+          setActiveBatches(newBatches);
           setInventory(currentInventory);
-          updateCloudData({ history: newHistory, inventory: currentInventory });
-          setView('history');
+          updateCloudData({ activeBatches: newBatches, inventory: currentInventory });
+          setView('active');
         } catch (error) {
           console.error("Error al finalizar cocción:", error);
           alert("Hubo un pequeño problema descontando el inventario, pero el lote fue guardado.");
-          setView('history');
+          setView('active');
         }
       } else {
         const nextStep = stepsArray[safeStepIdx + 1];
@@ -1974,9 +1998,111 @@ function MainApp() {
             onClick={handleNextStep}
             className="bg-amber-500 hover:bg-amber-400 text-slate-900 px-10 py-5 rounded-2xl font-black text-xl flex items-center gap-3 transition-all shadow-xl border-b-4 border-amber-700 hover:border-amber-600 active:translate-y-1 active:border-b-0 w-full md:w-auto justify-center"
           >
-            {isLastStep ? <><Save size={28} /> Finalizar y Guardar</> : <>Siguiente Paso <SkipForward size={28} /></>}
+            {isLastStep ? <><Save size={28} /> Enviar a Fermentador</> : <>Siguiente Paso <SkipForward size={28} /></>}
           </button>
         </div>
+      </div>
+    );
+  };
+
+  // NUEVA VISTA: EN PROCESO (FERMENTANDO)
+  const renderActiveBatches = () => {
+    return (
+      <div className="space-y-8 animate-fadeIn">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-200 dark:border-slate-700 pb-4 gap-4">
+          <h2 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+            <Hourglass className="text-emerald-500" size={32} /> Lotes en Proceso
+          </h2>
+          <button onClick={() => setView('dashboard')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 transition-colors shadow-sm w-full md:w-auto justify-center">
+            <ArrowLeft size={20} /> Volver al Panel
+          </button>
+        </div>
+
+        {activeBatches.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl text-center shadow-sm border border-gray-100 dark:border-slate-800">
+            <Beaker size={72} className="mx-auto text-emerald-100 dark:text-emerald-900/30 mb-5" />
+            <h3 className="text-2xl font-black text-slate-700 dark:text-slate-300 mb-2">No hay cervezas fermentando</h3>
+            <p className="text-slate-500 dark:text-slate-500 font-medium">Ve a "Mis Recetas", elige una y presiona "¡Empezar a Cocinar!".</p>
+          </div>
+        ) : (
+          <div className="grid gap-6">
+            {activeBatches.map(batch => {
+              const daysElapsed = Math.floor((Date.now() - batch.timestamp) / (1000 * 60 * 60 * 24));
+              const theme = getThemeForCategory(batch.category);
+
+              return (
+                <div key={batch.id} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl shadow-sm border-l-8 border-emerald-500 border-y border-r border-gray-100 dark:border-slate-800 relative overflow-hidden group">
+                  <div className="absolute -right-10 -top-10 opacity-5 dark:opacity-10 text-emerald-500 pointer-events-none">
+                    <Hourglass size={150} />
+                  </div>
+
+                  <div className="flex flex-col lg:flex-row justify-between gap-8 relative z-10">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${theme.badge}`}>{batch.category}</span>
+                        <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest flex items-center gap-1 animate-pulse"><Activity size={12}/> Fermentando</span>
+                      </div>
+                      <h3 className="text-3xl font-black text-slate-800 dark:text-white mb-2">{batch.recipeName}</h3>
+                      <p className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-2 mb-6">
+                        <CalendarClock size={16}/> Cocinada el: {batch.date} <span className="opacity-50">•</span> <span className="text-emerald-600 dark:text-emerald-400">Día {daysElapsed}</span>
+                      </p>
+
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 mb-6">
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><CalendarPlus size={16}/> Sincronizar Calendario</h4>
+                        <div className="flex flex-wrap gap-2">
+                          <a href={generateGoogleCalendarLink(`Dry Hop - ${batch.recipeName}`, 3, batch.timestamp, `Revisar actividad de fermentación y agregar lúpulo para ${batch.recipeName}.`)} target="_blank" rel="noreferrer" className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 hover:border-blue-400 hover:text-blue-600 text-slate-600 dark:text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
+                            Dry Hop (Día 3)
+                          </a>
+                          <a href={generateGoogleCalendarLink(`Medir Densidad - ${batch.recipeName}`, 7, batch.timestamp, `Medir gravedad específica de ${batch.recipeName}. Si está estable, preparar Cold Crash.`)} target="_blank" rel="noreferrer" className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 hover:border-amber-400 hover:text-amber-600 text-slate-600 dark:text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
+                            Medir DF (Día 7)
+                          </a>
+                          <a href={generateGoogleCalendarLink(`Cold Crash - ${batch.recipeName}`, 10, batch.timestamp, `Bajar temperatura a 1-2°C para clarificar ${batch.recipeName}.`)} target="_blank" rel="noreferrer" className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 hover:border-indigo-400 hover:text-indigo-600 text-slate-600 dark:text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
+                            Cold Crash (Día 10)
+                          </a>
+                          <a href={generateGoogleCalendarLink(`Embotellar - ${batch.recipeName}`, 14, batch.timestamp, `Lavar botellas, preparar almíbar (priming) y embotellar ${batch.recipeName}.`)} target="_blank" rel="noreferrer" className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 hover:border-emerald-400 hover:text-emerald-600 text-slate-600 dark:text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
+                            Embotellar (Día 14)
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col justify-end gap-3 min-w-[200px]">
+                      <button 
+                        onClick={() => {
+                          if(window.confirm(`¿Seguro que deseas embotellar y mover ${batch.recipeName} al Historial definitivo?`)) {
+                            const newHistoryItem = { ...batch, id: 'hist-' + Date.now(), notes: `Embotellada en el Día ${daysElapsed}` };
+                            const newHistory = [newHistoryItem, ...history];
+                            const newActive = activeBatches.filter(b => b.id !== batch.id);
+                            setHistory(newHistory);
+                            setActiveBatches(newActive);
+                            updateCloudData({ history: newHistory, activeBatches: newActive });
+                            alert("¡Lote embotellado con éxito!");
+                            setView('history');
+                          }
+                        }}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-xl shadow-md transition-all hover:-translate-y-1 w-full flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle2 size={20} /> Embotellar Lote
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if(window.confirm("¿Seguro que deseas ELIMINAR este lote? No se guardará en el historial.")) {
+                            const newActive = activeBatches.filter(b => b.id !== batch.id);
+                            setActiveBatches(newActive);
+                            updateCloudData({ activeBatches: newActive });
+                          }
+                        }}
+                        className="bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-500 font-bold py-3 rounded-xl transition-colors w-full flex items-center justify-center gap-2"
+                      >
+                        <Trash2 size={18} /> Descartar Lote
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -2170,7 +2296,12 @@ function MainApp() {
                <button onClick={() => setView('list')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'list' ? 'text-amber-500 border-b-4 border-amber-500 bg-amber-50/50 dark:bg-amber-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                  <BookOpen size={18}/> Mis Recetas
                </button>
-               <button onClick={() => setView('inventory')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'inventory' ? 'text-emerald-500 border-b-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+               {/* NUEVA PESTAÑA EN PROCESO */}
+               <button onClick={() => setView('active')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'active' ? 'text-emerald-500 border-b-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                 <Hourglass size={18}/> En Proceso
+                 {activeBatches.length > 0 && <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] ml-1">{activeBatches.length}</span>}
+               </button>
+               <button onClick={() => setView('inventory')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'inventory' ? 'text-blue-500 border-b-4 border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                  <Package size={18}/> Inventario
                </button>
                <button onClick={() => setView('history')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'history' ? 'text-purple-500 border-b-4 border-purple-500 bg-purple-50/50 dark:bg-purple-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
@@ -2195,6 +2326,7 @@ function MainApp() {
                    setRecipes(newRecipesList); setSelectedRecipe(updatedRecipe); updateCloudData({ recipes: newRecipesList }); setView('recipe'); 
                 }} onCancel={() => setView('recipe')} inventory={inventory} onAddInventoryItem={handleAddInventoryItem} />}
                 {view === 'brew' && renderBrewSession()}
+                {view === 'active' && renderActiveBatches()}
                 {view === 'history' && renderHistory()}
                 {view === 'inventory' && renderInventory()}
               </>
