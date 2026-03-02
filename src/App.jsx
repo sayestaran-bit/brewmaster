@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Beaker, Thermometer, Droplets, Clock, Info, CheckCircle2, 
   ChevronRight, BookOpen, Plus, ArrowLeft, Beer, Save, 
   Trash2, ChevronDown, ChevronUp, Play, Pause, SkipForward, 
   History, CalendarClock, Scale, Package, Star, MessageSquare, 
   Banknote, Wheat, Leaf, Cloud, RefreshCw, Moon, Sun, User, 
-  LogOut, Edit3, FileClock, Eye, EyeOff
+  LogOut, Edit3, FileClock, Eye, EyeOff, Activity, Palette, ListOrdered,
+  Sparkles, Loader2, BrainCircuit, Wand2, TrendingUp, BarChart3, PieChart,
+  LayoutDashboard
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -49,6 +51,46 @@ const db = getFirestore(app);
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'brewmaster-pro-v1';
 const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
+// --- GEMINI API INTEGRATION ---
+const apiKey = "";
+
+const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+  };
+  
+  if (systemInstruction) {
+    payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+  }
+  if (isJson) {
+    payload.generationConfig = { responseMimeType: "application/json" };
+  }
+
+  const delays = [1000, 2000, 4000, 8000, 16000];
+  
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      
+      const result = await response.json();
+      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      return isJson ? JSON.parse(text) : text;
+    } catch (error) {
+      if (attempt === 4) {
+        throw new Error("No se pudo contactar a la IA después de varios intentos. Verifica tu conexión.");
+      }
+      await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+    }
+  }
+};
+
 // --- FORMATO DE MONEDA (CLP) ---
 const formatCurrency = (val) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(val) || 0);
 
@@ -58,37 +100,37 @@ const getThemeForCategory = (category = '') => {
   if (cat.includes('hazy') || cat.includes('ipa') || cat.includes('pale ale')) {
     return { 
       bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-900 dark:text-orange-300', border: 'border-orange-300 dark:border-orange-700', icon: 'text-orange-500', 
-      badge: 'bg-orange-100 text-orange-800 dark:bg-orange-800/50 dark:text-orange-200', header: 'bg-gradient-to-r from-orange-500 to-amber-500',
+      badge: 'bg-orange-100 text-orange-800 dark:bg-orange-800/50 dark:text-orange-200', header: 'bg-gradient-to-r from-orange-500 to-amber-500', colorBase: '#f97316'
     };
   }
   if (cat.includes('lager') || cat.includes('pilsner') || cat.includes('blonde')) {
     return { 
       bg: 'bg-yellow-50 dark:bg-yellow-900/20', text: 'text-yellow-900 dark:text-yellow-300', border: 'border-yellow-400 dark:border-yellow-700', icon: 'text-yellow-500', 
-      badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200', header: 'bg-gradient-to-r from-yellow-400 to-amber-400 text-slate-900',
+      badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200', header: 'bg-gradient-to-r from-yellow-400 to-amber-400 text-slate-900', colorBase: '#eab308'
     };
   }
   if (cat.includes('amber') || cat.includes('red') || cat.includes('scotch')) {
     return { 
       bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-900 dark:text-red-300', border: 'border-red-300 dark:border-red-700', icon: 'text-red-600', 
-      badge: 'bg-red-100 text-red-800 dark:bg-red-800/50 dark:text-red-200', header: 'bg-gradient-to-r from-red-700 to-orange-600',
+      badge: 'bg-red-100 text-red-800 dark:bg-red-800/50 dark:text-red-200', header: 'bg-gradient-to-r from-red-700 to-orange-600', colorBase: '#dc2626'
     };
   }
   if (cat.includes('stout') || cat.includes('porter') || cat.includes('dark')) {
     return { 
       bg: 'bg-stone-100 dark:bg-stone-800/40', text: 'text-stone-900 dark:text-stone-300', border: 'border-stone-400 dark:border-stone-600', icon: 'text-stone-700 dark:text-stone-400', 
-      badge: 'bg-stone-200 text-stone-800 dark:bg-stone-700 dark:text-stone-300', header: 'bg-gradient-to-r from-stone-800 to-stone-600',
+      badge: 'bg-stone-200 text-stone-800 dark:bg-stone-700 dark:text-stone-300', header: 'bg-gradient-to-r from-stone-800 to-stone-600', colorBase: '#44403c'
     };
   }
   return { 
     bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-900 dark:text-amber-300', border: 'border-amber-300 dark:border-amber-700', icon: 'text-amber-500', 
-    badge: 'bg-amber-100 text-amber-800 dark:bg-amber-800/50 dark:text-amber-200', header: 'bg-gradient-to-r from-amber-600 to-yellow-600',
+    badge: 'bg-amber-100 text-amber-800 dark:bg-amber-800/50 dark:text-amber-200', header: 'bg-gradient-to-r from-amber-600 to-yellow-600', colorBase: '#f59e0b'
   };
 };
 
 // --- DATOS PRECARGADOS DE ALTA FIDELIDAD TÉCNICA ---
 const initialRecipes = [
   {
-    id: 'hazy-tamango-pro', category: 'Hazy IPA', name: "Jugosa Hazy IPA (Estilo Tamango)", targetVolume: 20, og: 1.065, fg: 1.015, abv: 6.5,
+    id: 'hazy-tamango-pro', category: 'Hazy IPA', name: "Jugosa Hazy IPA (Estilo Tamango)", targetVolume: 20, og: 1.065, fg: 1.015, abv: 6.5, ibu: 42, colorSRM: 5,
     waterProfile: { Ca: 120, Mg: 15, SO4: 75, Cl: 200, HCO3: 50 },
     ingredients: {
       malts: [ { name: "Malta Pilsen", amount: 4.5, unit: "kg" }, { name: "Avena en hojuelas", amount: 1.0, unit: "kg" }, { name: "Trigo en hojuelas", amount: 0.8, unit: "kg" } ],
@@ -105,54 +147,100 @@ const initialRecipes = [
     ],
     tips: [ 
       { title: "Miedo al Oxígeno", desc: "Las Hazy IPAs mueren en días si se exponen al oxígeno. Evita abrir la tapa del fermentador para mirar. Usa un sistema de purga de CO2 al embotellar o embarrilar. Una Hazy oxidada se vuelve marrón y con sabor a cartón." },
-      { title: "El Secreto del Agua", desc: "Para que sea verdaderamente 'Jugosa' y sedosa, necesitas más Cloruros que Sulfatos. Apunta a un ratio de 2.5:1 o 3:1 de Cloruro sobre Sulfato. Esto envuelve el amargor y da esa sensación de jugo de frutas en boca." }
+      { title: "El Secreto del Agua", desc: "Para que sea verdaderamente 'Jugosa' y sedosa, necesitas más Cloruros que Sulfatos. Apunta a un ratio de 2.5:1 o 3:1 de Cloruro sobre Sulfato. Esto envuelve el amargor y da esa sensación de jugo de frutas en boca." },
+      { title: "Biotransformación", desc: "Añadir lúpulo durante la fermentación activa (Día 2-3) permite que la levadura Verdant IPA convierta el geraniol del lúpulo en citronelol, potenciando los sabores a cítricos y frutas de carozo." }
     ], modifications: []
   },
   {
-    id: 'doble-hazy-ipa-pro', category: 'Hazy IPA', name: "Nebulosa DDH - Doble Hazy", targetVolume: 20, og: 1.080, fg: 1.018, abv: 8.2,
-    ingredients: { malts: [{ name: "Malta Pilsen", amount: 6.0, unit: 'kg' }, { name: "Trigo Maltedo", amount: 1.5, unit: 'kg' }], hops: [{ name: "Galaxy", amount: 100, unit: 'g' }], yeast: {name: 'Verdant', amount: 2, unit: 'sobre'}, water: {strike: 25, sparge: 12} },
+    id: 'doble-hazy-ipa-pro', category: 'Hazy IPA', name: "Nebulosa DDH - Doble Hazy", targetVolume: 20, og: 1.080, fg: 1.018, abv: 8.2, ibu: 55, colorSRM: 6,
+    waterProfile: { Ca: 130, Mg: 15, SO4: 80, Cl: 220, HCO3: 50 },
+    ingredients: { 
+      malts: [{ name: "Malta Pilsen", amount: 6.0, unit: 'kg' }, { name: "Trigo en hojuelas", amount: 1.5, unit: 'kg' }, { name: "Avena en hojuelas", amount: 1.0, unit: 'kg' }], 
+      hops: [{ name: "Magnum", amount: 15, unit: 'g', time: "60 min", stage: "Hervor" }, { name: "Galaxy", amount: 80, unit: 'g', time: "30 min", stage: "Whirlpool a 78°C" }, { name: "Citra", amount: 40, unit: 'g', time: "30 min", stage: "Whirlpool a 78°C" }, { name: "Galaxy", amount: 100, unit: 'g', time: "Día 4", stage: "Dry Hop" }], 
+      yeast: {name: 'Verdant', amount: 2, unit: 'sobres'}, water: {strike: 25, sparge: 12} 
+    },
     steps: [
-      { id: 1, title: "Maceración Densa", desc: "66°C por 60 min. Cuidado con atascos.", details: "Al tener una carga de granos tan alta (7.5kg para 20L), la recirculación debe ser muy lenta al inicio para no compactar la cama de granos en tu equipo.", duration: 60 },
-      { id: 2, title: "Whirlpool Masivo", desc: "Bajar a 78°C e incorporar Galaxy.", details: "El Galaxy aporta notas a maracuyá intensas. Mantenlo a 78°C durante 30 minutos enteros para saturar el mosto de aceites esenciales.", duration: 30 }
+      { id: 1, title: "Maceración Densa", desc: "66°C por 60 min. Cuidado con atascos.", details: "Al tener una carga de granos tan alta (8.5kg para 20L), la recirculación debe ser muy lenta al inicio para no compactar la cama de granos en tu equipo Guten.", duration: 60 },
+      { id: 2, title: "Lavado Controlado", desc: "Lavar con 12L a 75°C.", details: "No te apresures. Lava lentamente para extraer todos los azúcares posibles de esa gran cama de granos.", duration: 20 },
+      { id: 3, title: "Hervor", desc: "Hervir 60 min.", details: "Añade el Magnum al inicio. Vigila posibles derrames (boil-overs) por la alta densidad del mosto.", duration: 60 },
+      { id: 4, title: "Whirlpool Masivo", desc: "Bajar a 78°C e incorporar Galaxy y Citra.", details: "El Galaxy aporta notas a maracuyá intensas. Mantenlo a 78°C durante 30 minutos enteros para saturar el mosto de aceites esenciales.", duration: 30 },
+      { id: 5, title: "Fermentación Doble", desc: "Inocular a 18°C con DOS sobres.", details: "Oxigena el doble de lo normal. La alta densidad estresará a la levadura si no tiene el oxígeno y la cantidad de células suficientes.", duration: 0 }
     ], 
     tips: [
-      { title: "Tasa de Inoculación", desc: "Es una cerveza de alta densidad (1.080). Un solo sobre de levadura sufrirá estrés y generará alcoholes fusel (sabor a solvente o quemado). Asegúrate de usar 2 sobres bien hidratados." }
+      { title: "Tasa de Inoculación (Pitch Rate)", desc: "Es una cerveza de alta densidad (1.080). Un solo sobre de levadura sufrirá estrés y generará alcoholes fusel (sabor a solvente o quemado). Asegúrate de usar 2 sobres bien hidratados." },
+      { title: "Hop Burn", desc: "Cantidades masivas de lúpulo pueden dejar partículas en suspensión que causan 'Hop Burn' (picor en la garganta). Un buen Cold Crash de 3-4 días a 1°C es obligatorio." }
     ], modifications: []
   },
   {
-    id: 'triple-hazy-ipa-pro', category: 'Hazy IPA', name: "Agujero Negro - Triple Hazy", targetVolume: 20, og: 1.100, fg: 1.022, abv: 10.5,
-    ingredients: { malts: [{ name: "Malta Pale Ale", amount: 8.0, unit: 'kg' }, { name: "Maltodextrina", amount: 0.5, unit: 'kg' }], hops: [{ name: "Citra", amount: 150, unit: 'g' }], yeast: {name: 'Verdant', amount: 3, unit: 'sobre'}, water: {strike: 28, sparge: 10} },
+    id: 'triple-hazy-ipa-pro', category: 'Hazy IPA', name: "Agujero Negro - Triple Hazy", targetVolume: 20, og: 1.100, fg: 1.022, abv: 10.5, ibu: 65, colorSRM: 7,
+    waterProfile: { Ca: 140, Mg: 15, SO4: 100, Cl: 250, HCO3: 50 },
+    ingredients: { 
+      malts: [{ name: "Malta Pale Ale", amount: 8.0, unit: 'kg' }, { name: "Avena en hojuelas", amount: 1.5, unit: 'kg' }, { name: "Trigo en hojuelas", amount: 1.0, unit: 'kg' }, { name: "Maltodextrina", amount: 0.5, unit: 'kg' }], 
+      hops: [{ name: "Columbus", amount: 20, unit: 'g', time: "60 min", stage: "Hervor" }, { name: "Citra", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool" }, { name: "Mosaic", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool" }, { name: "Galaxy", amount: 150, unit: 'g', time: "Día 5", stage: "Dry Hop 1" }, { name: "Citra", amount: 100, unit: 'g', time: "Día 10", stage: "Dry Hop 2" }], 
+      yeast: {name: 'Verdant', amount: 3, unit: 'sobres'}, water: {strike: 28, sparge: 10} 
+    },
     steps: [
-      { id: 1, title: "Maceración al Límite", desc: "65°C por 90 min para alta fermentabilidad.", details: "Necesitas extraer cada gota de azúcar. Macera 90 minutos para asegurar la conversión enzimática total. Agrega la maltodextrina en el hervor, no en el macerado.", duration: 90 }
-    ], tips: [ { title: "Cuidado con la Fermentación", desc: "A 10.5% ABV, la levadura genera mucho calor. Controla estrictamente la temperatura a 18°C los primeros 4 días o sabrá a alcohol puro." } ], modifications: []
+      { id: 1, title: "Maceración al Límite", desc: "65°C por 90 min para alta fermentabilidad.", details: "Necesitas extraer cada gota de azúcar. Macera 90 minutos para asegurar la conversión enzimática total. El equipo estará al límite de su capacidad.", duration: 90 },
+      { id: 2, title: "Lavado Corto", desc: "Lavar con solo 10L a 76°C", details: "Al buscar una densidad tan extrema (1.100), no podemos diluir mucho el mosto. El lavado será mínimo.", duration: 15 },
+      { id: 3, title: "Hervor y Azúcares", desc: "Hervir 90 min. Añadir Maltodextrina.", details: "Hierve por 90 minutos para concentrar aún más el mosto. Agrega la Maltodextrina faltando 15 minutos para darle un cuerpo ultra denso y pegajoso.", duration: 90 },
+      { id: 4, title: "Fermentación Extrema", desc: "Inocular 3 sobres a 18°C.", details: "Controla estrictamente la temperatura. La levadura generará muchísimo calor propio. Si sube de 20°C los primeros días, tendrás sabores a alcohol muy ásperos." }
+    ], tips: [ 
+      { title: "Cuidado con la Fermentación", desc: "A 10.5% ABV, la levadura genera mucho calor. Controla estrictamente la temperatura a 18°C los primeros 4 días o sabrá a alcohol puro." },
+      { title: "Nutrientes", desc: "Para este nivel de alcohol, añadir nutrientes de levadura en los últimos 10 min de hervor es la diferencia entre una fermentación limpia y una estancada." }
+    ], modifications: []
   },
   {
-    id: 'oatmeal-stout-pro', category: 'Stout', name: "Expreso de Medianoche", targetVolume: 20, og: 1.058, fg: 1.016, abv: 5.5,
+    id: 'oatmeal-stout-pro', category: 'Stout', name: "Expreso de Medianoche", targetVolume: 20, og: 1.058, fg: 1.016, abv: 5.5, ibu: 32, colorSRM: 38,
     waterProfile: { Ca: 50, Mg: 10, SO4: 50, Cl: 50, HCO3: 150 },
     ingredients: { 
-      malts: [{ name: "Malta Pale Ale", amount: 4.0, unit: 'kg' }, { name: "Avena", amount: 0.8, unit: 'kg' }, { name: "Cebada Tostada (Roasted Barley)", amount: 0.3, unit: 'kg' }, { name: "Malta Chocolate", amount: 0.2, unit: 'kg' }], 
+      malts: [{ name: "Malta Pale Ale", amount: 4.0, unit: 'kg' }, { name: "Avena", amount: 0.8, unit: 'kg' }, { name: "Cebada Tostada", amount: 0.3, unit: 'kg' }, { name: "Malta Chocolate", amount: 0.2, unit: 'kg' }], 
       hops: [{ name: "Fuggles", amount: 40, unit: 'g', time: "60 min", stage: "Hervor" }], 
       yeast: {name: 'S-04', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} 
     },
     steps: [
       { id: 1, title: "Maceración Base", desc: "68°C por 50 min. Solo maltas claras y avena.", details: "TRUCO PRO: Macera a 68°C para dejar azúcares residuales y dar cuerpo dulce. NO agregues las maltas oscuras (Chocolate y Cebada Tostada) todavía. Si las pones desde el principio, el pH caerá mucho y extraerás astringencia.", duration: 50 },
       { id: 2, title: "Adición de Maltas Oscuras", desc: "Minuto 50: Añadir maltas oscuras.", details: "Espolvorea la malta Chocolate y la Cebada Tostada por encima de la cama de granos y remueve solo la capa superior. Déjalo reposar 10 minutos más antes de hacer el Mash Out. Esto extrae el color y aroma a café, pero deja la acidez y astringencia atrás.", duration: 10 },
-      { id: 3, title: "Fermentación Inglesa", desc: "Fermentar a 19°C.", details: "La levadura S-04 aportará un ligero perfil afrutado inglés que combina perfecto con el chocolate." }
-    ], tips: [ { title: "Carbonatación", desc: "Apunta a una carbonatación baja (1.8 a 2.0 volúmenes de CO2). Mucho gas destruye la sensación cremosa que aporta la avena." } ], modifications: []
+      { id: 3, title: "Hervor Clásico", desc: "Hervir 60 minutos con Fuggles.", details: "Añade todo el lúpulo al inicio. En una Stout, el aroma a lúpulo no debe competir con el tostado de las maltas.", duration: 60 },
+      { id: 4, title: "Fermentación Inglesa", desc: "Fermentar a 19°C.", details: "La levadura S-04 aportará un ligero perfil afrutado inglés que combina perfecto con el chocolate." }
+    ], tips: [ 
+      { title: "Control de pH con Maltas Oscuras", desc: "Las maltas muy tostadas son ácidas y pueden bajar el pH de tu macerado a niveles subóptimos (< 5.0). Añadirlas al final del macerado o hacer un 'Cold Steeping' (infusión en frío de 24hs) y agregarlo al hervor es un truco maestro." },
+      { title: "Carbonatación", desc: "Apunta a una carbonatación baja (1.8 a 2.0 volúmenes de CO2). Mucho gas destruye la sensación cremosa que aporta la avena." } 
+    ], modifications: []
   },
   { 
-    id: 'lager-premium-pro', category: 'Lager', name: "Pilsner del Sur", targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, 
-    ingredients: { malts: [{name: 'Malta Pilsen', amount: 4.5, unit: 'kg'}, {name: 'Carapils', amount: 0.2, unit: 'kg'}], hops: [{name: 'Magnum', amount: 15, unit: 'g'}, {name: 'Saaz', amount: 30, unit: 'g'}], yeast: {name: 'W-34/70', amount: 2, unit: 'sobre'}, water: {strike: 18, sparge: 14} }, 
+    id: 'lager-premium-pro', category: 'Lager', name: "Pilsner del Sur", targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, ibu: 28, colorSRM: 4,
+    waterProfile: { Ca: 50, Mg: 5, SO4: 50, Cl: 50, HCO3: 20 },
+    ingredients: { 
+      malts: [{name: 'Malta Pilsen', amount: 4.5, unit: 'kg'}, {name: 'Carapils', amount: 0.2, unit: 'kg'}], 
+      hops: [{name: 'Magnum', amount: 15, unit: 'g', time: '60 min', stage: 'Hervor'}, {name: 'Saaz', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor'}], 
+      yeast: {name: 'W-34/70', amount: 2, unit: 'sobres'}, water: {strike: 18, sparge: 14} 
+    }, 
     steps: [
       { id: 1, title: "Maceración Escalonada", desc: "Escalón proteico y sacarificación.", details: "Comienza a 52°C por 15 min (mejora retención de espuma). Luego sube a 64°C por 45 min para un mosto altamente fermentable y seco.", duration: 60 },
-      { id: 2, title: "Hervor Largo", desc: "Hervir 90 min.", details: "La malta Pilsen contiene precursores de DMS (olor a maíz cocido). Hiérvela destapada por 90 minutos para evaporarlos.", duration: 90 },
+      { id: 2, title: "Hervor Largo", desc: "Hervir 90 min.", details: "La malta Pilsen contiene precursores de DMS (olor a maíz cocido). Hiérvela destapada por 90 minutos para evaporarlos. Agrega Magnum a los 60 min y Saaz a los 15 min del final.", duration: 90 },
       { id: 3, title: "Fermentación Fría y Diacetilo", desc: "Inocular a 10°C.", details: "1. Oxigena al máximo y fermenta a 10-12°C.\n2. Cuando falten 4 puntos de densidad para terminar, SUbE a 16°C por 3 días (Descanso de Diacetilo).\n3. Lagering: Guarda en frío a 1°C por 4 semanas mínimo." }
-    ], tips: [], modifications: [] 
+    ], 
+    tips: [
+      { title: "Descanso de Diacetilo", desc: "Las levaduras Lager producen diacetilo (sabor a mantequilla). Es obligatorio subir la temperatura a 16-18°C cuando falten unos 4 puntos de gravedad para terminar, así la levadura reabsorbe esta mantequilla." },
+      { title: "Inoculación en Frío", desc: "Es un error inocular levadura Lager a 20°C y luego enfriar. Debes enfriar tu mosto a 10°C, y recién ahí inocular DOBLE cantidad de levadura. Esto asegura un perfil extra limpio." }
+    ], modifications: [] 
   },
   { 
-    id: 'amber-ale-pro', category: 'Amber Ale', name: "Red Marzen Americana", targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, 
-    ingredients: { malts: [{name: 'Malta Pale Ale', amount: 4.0, unit: 'kg'}, {name: 'Caramelo 60L', amount: 0.5, unit: 'kg'}, {name: 'Melanoidina', amount: 0.3, unit: 'kg'}], hops: [{name: 'Cascade', amount: 20, unit: 'g'}], yeast: {name: 'US-05', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} }, 
-    steps: [{ id: 1, title: "Maceración", desc: "66°C por 60 min", duration: 60 }], tips: [], modifications: [] 
+    id: 'amber-ale-pro', category: 'Amber Ale', name: "Red Marzen Americana", targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, ibu: 32, colorSRM: 14,
+    waterProfile: { Ca: 80, Mg: 10, SO4: 100, Cl: 80, HCO3: 80 },
+    ingredients: { 
+      malts: [{name: 'Malta Pale Ale', amount: 4.0, unit: 'kg'}, {name: 'Caramelo 60L', amount: 0.5, unit: 'kg'}, {name: 'Melanoidina', amount: 0.3, unit: 'kg'}, {name: 'Cebada Tostada', amount: 0.05, unit: 'kg'}], 
+      hops: [{name: 'Cascade', amount: 20, unit: 'g', time: '60 min', stage: 'Hervor'}, {name: 'Cascade', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor'}], 
+      yeast: {name: 'US-05', amount: 1, unit: 'sobre'}, water: {strike: 18, sparge: 14} 
+    }, 
+    steps: [
+      { id: 1, title: "Maceración Balanceada", desc: "66°C por 60 min", details: "Macerar a esta temperatura nos dará un balance perfecto entre azúcares fermentables y cuerpo residual, ideal para el dulzor del caramelo.", duration: 60 },
+      { id: 2, title: "Hervor y Sabor", desc: "60 min. Adiciones de Cascade.", details: "Añade 20g de Cascade al inicio. A los 45 minutos (faltando 15 min), agrega los otros 30g para fijar el clásico sabor a pomelo/pino americano.", duration: 60 },
+      { id: 3, title: "Fermentación Limpia", desc: "18°C con US-05.", details: "Mantenlo a 18°C para que la levadura no genere ésteres y deje brillar el perfil a malta tostada y caramelo." }
+    ], 
+    tips: [
+      { title: "Ajuste de Color", desc: "Esos 50 gramos de Cebada Tostada no son para sabor, sino para darle ese tono rojo/rubí profundo característico del estilo sin aportar notas a café." }
+    ], modifications: [] 
   }
 ];
 
@@ -167,6 +255,7 @@ const initialInventory = [
   { id: 'inv-m7', category: 'Malta', name: 'Carapils', stock: 2, unit: 'kg', price: 2200 },
   { id: 'inv-m8', category: 'Malta', name: 'Caramelo 60L', stock: 3, unit: 'kg', price: 2200 },
   { id: 'inv-m9', category: 'Malta', name: 'Melanoidina', stock: 1, unit: 'kg', price: 3000 },
+  { id: 'inv-m10', category: 'Malta', name: 'Maltodextrina', stock: 1, unit: 'kg', price: 4000 },
   
   // LÚPULOS
   { id: 'inv-h1', category: 'Lúpulo', name: 'Citra', stock: 500, unit: 'g', price: 80 },
@@ -176,6 +265,7 @@ const initialInventory = [
   { id: 'inv-h5', category: 'Lúpulo', name: 'Fuggles', stock: 250, unit: 'g', price: 60 },
   { id: 'inv-h6', category: 'Lúpulo', name: 'Saaz', stock: 250, unit: 'g', price: 70 },
   { id: 'inv-h7', category: 'Lúpulo', name: 'Cascade', stock: 500, unit: 'g', price: 50 },
+  { id: 'inv-h8', category: 'Lúpulo', name: 'Columbus', stock: 250, unit: 'g', price: 50 },
 
   // LEVADURAS
   { id: 'inv-y1', category: 'Levadura', name: 'Lallemand Verdant IPA', stock: 4, unit: 'sobre', price: 6500 },
@@ -239,9 +329,11 @@ function AutocompleteInput({ value, onChange, placeholder, category, inventory, 
   );
 }
 
-// --- COMPONENTE DE FORMULARIO PARA RECETAS (Añadir / Editar) ---
+// --- COMPONENTE DE FORMULARIO PARA RECETAS (Añadir / Editar) CON IA ---
 function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryItem }) {
   const isEditing = !!initialData;
+  const [isGeneratingIA, setIsGeneratingIA] = useState(false);
+  const [iaPrompt, setIaPrompt] = useState("");
   
   const [formData, setFormData] = useState(() => {
     if (initialData) {
@@ -262,6 +354,8 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
         og: initialData.og || 1.050,
         fg: initialData.fg || 1.010,
         abv: initialData.abv || 5.0,
+        ibu: initialData.ibu || 0,
+        colorSRM: initialData.colorSRM || 0,
         malts: safeMalts,
         hops: safeHops,
         yeast: safeYeast,
@@ -269,12 +363,12 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
         sparge: initialData.ingredients?.water?.sparge || 15,
         waterProfile: initialData.waterProfile || { Ca: 100, Mg: 10, SO4: 100, Cl: 100, HCO3: 50 },
         modifications: initialData.modifications || [],
-        steps: Array.isArray(initialData.steps) ? initialData.steps : [],
-        tips: Array.isArray(initialData.tips) ? initialData.tips : []
+        steps: Array.isArray(initialData.steps) ? [...initialData.steps] : [],
+        tips: Array.isArray(initialData.tips) ? [...initialData.tips] : []
       };
     }
     return {
-      name: '', category: 'Hazy IPA', targetVolume: 20, og: 1.050, fg: 1.010, abv: 5.0,
+      name: '', category: 'Hazy IPA', targetVolume: 20, og: 1.050, fg: 1.010, abv: 5.0, ibu: 30, colorSRM: 5,
       malts: [{ name: '', amount: 0 }],
       hops: [{ name: '', amount: 0, time: '', stage: 'Hervor' }],
       yeast: '', strike: 15, sparge: 15,
@@ -284,6 +378,46 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
   });
   
   const [modNote, setModNote] = useState('');
+
+  const handleAIGenerate = async () => {
+    if (!iaPrompt.trim()) return alert("Por favor, describe la cerveza que deseas generar.");
+    setIsGeneratingIA(true);
+    try {
+      const systemInstruction = "Eres un Maestro Cervecero experto. Genera una receta de cerveza altamente detallada. Responde ÚNICAMENTE con un JSON válido.";
+      const prompt = `Genera una receta profesional de cerveza basada en esta idea: "${iaPrompt}". 
+      Estructura JSON esperada OBLIGATORIA:
+      {
+        "name": "Nombre creativo de la receta",
+        "category": "Estilo oficial (ej. Stout, IPA)",
+        "targetVolume": 20,
+        "og": 1.050, "fg": 1.010, "abv": 5.0, "ibu": 30, "colorSRM": 5,
+        "waterProfile": { "Ca": 100, "Mg": 10, "SO4": 100, "Cl": 100, "HCO3": 50 },
+        "malts": [{ "name": "Nombre Malta", "amount": 5 }],
+        "hops": [{ "name": "Nombre Lúpulo", "amount": 50, "time": "60 min", "stage": "Hervor" }],
+        "yeast": "Nombre de Levadura recomendada",
+        "strike": 15, "sparge": 15,
+        "steps": [{ "title": "Maceración", "desc": "Descripción corta", "details": "Detalles técnicos", "duration": 60 }],
+        "tips": [{ "title": "Tip Importante", "desc": "Explicación técnica" }]
+      }`;
+      
+      const responseJSON = await callGemini(prompt, systemInstruction, true);
+      
+      setFormData(prev => ({
+        ...prev,
+        ...responseJSON,
+        malts: responseJSON.malts || [{ name: '', amount: 0 }],
+        hops: responseJSON.hops || [{ name: '', amount: 0, time: '', stage: 'Hervor' }],
+        steps: (responseJSON.steps || []).map((s, i) => ({ ...s, id: Date.now() + i })),
+        tips: responseJSON.tips || []
+      }));
+      
+    } catch (err) {
+      console.error(err);
+      alert("Hubo un error conectando con la IA. Inténtalo de nuevo más tarde.");
+    } finally {
+      setIsGeneratingIA(false);
+    }
+  };
 
   const handleSave = () => {
     if(!formData.name) return alert("Ponle un nombre a tu receta");
@@ -300,7 +434,8 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
       category: formData.category,
       name: formData.name,
       targetVolume: Number(formData.targetVolume),
-      og: formData.og, fg: formData.fg, abv: formData.abv,
+      og: formData.og, fg: formData.fg, abv: formData.abv, 
+      ibu: Number(formData.ibu), colorSRM: Number(formData.colorSRM),
       waterProfile: {
         Ca: Number(formData.waterProfile?.Ca || 0), Mg: Number(formData.waterProfile?.Mg || 0),
         SO4: Number(formData.waterProfile?.SO4 || 0), Cl: Number(formData.waterProfile?.Cl || 0),
@@ -312,14 +447,31 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
         yeast: { name: formData.yeast || "Levadura Genérica", amount: 1, unit: "sobre" },
         water: { strike: Number(formData.strike), sparge: Number(formData.sparge) }
       },
-      steps: formData.steps.length > 0 ? formData.steps : [
-        { id: 1, title: "Maceración", desc: "Macerar", duration: 60 },
-        { id: 2, title: "Hervor", desc: "Hervir", duration: 60 },
-      ],
-      tips: formData.tips || [],
+      steps: formData.steps.filter(s => s.title !== ''),
+      tips: formData.tips.filter(t => t.title !== ''),
       modifications: newModifications
     };
     onSave(recipeToSave);
+  };
+
+  const updateStep = (idx, field, value) => {
+    const newSteps = [...formData.steps];
+    newSteps[idx][field] = value;
+    setFormData({...formData, steps: newSteps});
+  };
+  const removeStep = (idx) => {
+    const newSteps = formData.steps.filter((_, i) => i !== idx);
+    setFormData({...formData, steps: newSteps});
+  };
+
+  const updateTip = (idx, field, value) => {
+    const newTips = [...formData.tips];
+    newTips[idx][field] = value;
+    setFormData({...formData, tips: newTips});
+  };
+  const removeTip = (idx) => {
+    const newTips = formData.tips.filter((_, i) => i !== idx);
+    setFormData({...formData, tips: newTips});
   };
 
   return (
@@ -328,6 +480,33 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
         <h2 className="text-2xl font-black text-slate-800 dark:text-white">{isEditing ? 'Editar Receta' : 'Crear Nueva Receta'}</h2>
         <button onClick={onCancel} className="text-gray-500 hover:text-red-500 font-bold transition-colors">Cancelar</button>
       </div>
+
+      {/* --- ASISTENTE IA --- */}
+      {!isEditing && (
+        <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-2xl border border-amber-200 dark:border-amber-900/30 mb-8">
+          <label className="block text-sm font-black text-amber-800 dark:text-amber-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Sparkles size={20} /> ✨ Generador de Recetas IA
+          </label>
+          <div className="flex flex-col md:flex-row gap-3">
+            <input 
+              type="text" 
+              placeholder="Ej: Una IPA muy lupulada con notas a mango y 7% ABV" 
+              className="flex-1 p-4 border border-amber-200 dark:border-amber-800/50 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400" 
+              value={iaPrompt}
+              onChange={e => setIaPrompt(e.target.value)}
+              disabled={isGeneratingIA}
+            />
+            <button 
+              onClick={handleAIGenerate} 
+              disabled={isGeneratingIA}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black px-6 py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50"
+            >
+               {isGeneratingIA ? <><Loader2 className="animate-spin" size={20}/> Procesando...</> : <><Wand2 size={20}/> Generar Magia</>}
+            </button>
+          </div>
+          <p className="text-xs text-amber-700 dark:text-amber-600 mt-3 font-medium">Describe tu cerveza ideal y el Asistente Cervecero construirá la formulación completa de granos, lúpulos y perfil de agua.</p>
+        </div>
+      )}
 
       <div className="space-y-6">
         <div className="grid md:grid-cols-2 gap-4">
@@ -341,23 +520,13 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Vol (L)</label>
-            <input type="number" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.targetVolume} onChange={e => setFormData({...formData, targetVolume: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">ABV (%)</label>
-            <input type="number" step="0.1" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.abv} onChange={e => setFormData({...formData, abv: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">D. Orig.</label>
-            <input type="number" step="0.001" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.og} onChange={e => setFormData({...formData, og: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">D. Final</label>
-            <input type="number" step="0.001" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={formData.fg} onChange={e => setFormData({...formData, fg: e.target.value})} />
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">Vol (L)</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.targetVolume} onChange={e => setFormData({...formData, targetVolume: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">ABV (%)</label><input type="number" step="0.1" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.abv} onChange={e => setFormData({...formData, abv: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">D. Orig.</label><input type="number" step="0.001" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.og} onChange={e => setFormData({...formData, og: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-500 uppercase">D. Final</label><input type="number" step="0.001" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.fg} onChange={e => setFormData({...formData, fg: e.target.value})} /></div>
+          <div><label className="block text-[10px] font-bold text-orange-500 uppercase">IBU</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800 focus:ring-2 focus:ring-orange-500" value={formData.ibu} onChange={e => setFormData({...formData, ibu: e.target.value})} placeholder="Amargor" /></div>
+          <div><label className="block text-[10px] font-bold text-amber-700 dark:text-amber-500 uppercase">Color (SRM)</label><input type="number" className="w-full p-3 border dark:border-slate-600 rounded-xl dark:bg-slate-800" value={formData.colorSRM} onChange={e => setFormData({...formData, colorSRM: e.target.value})} placeholder="Color" /></div>
         </div>
 
         <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
@@ -377,7 +546,8 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
               <div key={i} className="flex gap-2 mb-2 relative">
                 <AutocompleteInput value={h.name} onChange={val => { const newH = [...formData.hops]; newH[i].name = val; setFormData({...formData, hops: newH}) }} placeholder="Buscar lúpulo..." category="Lúpulo" inventory={inventory} onAddNewItem={onAddInventoryItem} />
                 <input type="number" placeholder="Gramos" className="w-20 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={h.amount} onChange={e => { const newH = [...formData.hops]; newH[i].amount = e.target.value; setFormData({...formData, hops: newH}) }} />
-                <input type="text" placeholder="Minuto/DryHop" className="w-32 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 hidden md:block" value={h.time} onChange={e => { const newH = [...formData.hops]; newH[i].time = e.target.value; setFormData({...formData, hops: newH}) }} />
+                <input type="text" placeholder="Min/DryHop" className="w-32 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={h.time} onChange={e => { const newH = [...formData.hops]; newH[i].time = e.target.value; setFormData({...formData, hops: newH}) }} />
+                <input type="text" placeholder="Etapa" className="w-32 p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 hidden md:block" value={h.stage} onChange={e => { const newH = [...formData.hops]; newH[i].stage = e.target.value; setFormData({...formData, hops: newH}) }} />
               </div>
            ))}
            <button onClick={() => setFormData({...formData, hops: [...formData.hops, {name:'', amount:0, time:'', stage:'Hervor'}]})} className="text-sm text-green-600 font-bold hover:text-green-800 transition-colors bg-green-50 dark:bg-green-900/30 px-3 py-2 rounded-lg mt-1">+ Añadir fila</button>
@@ -410,15 +580,57 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
           </div>
         </div>
 
+        {/* NUEVO: CREADOR DE PROCESO (PASOS) */}
+        <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
+           <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2"><ListOrdered size={20} className="text-purple-500"/> Pasos de Producción</h3>
+           {formData.steps.map((step, i) => (
+              <div key={i} className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 mb-4 relative">
+                <button type="button" onClick={() => removeStep(i)} className="absolute top-3 right-3 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                <div className="grid md:grid-cols-3 gap-3 mb-3">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Título del Paso</label>
+                    <input type="text" placeholder="Ej: Hervor Controlado" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-900 dark:text-white" value={step.title} onChange={e => updateStep(i, 'title', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Minutos (Cronómetro)</label>
+                    <input type="number" placeholder="Ej: 60" className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-900 dark:text-white" value={step.duration || ''} onChange={e => updateStep(i, 'duration', e.target.value)} />
+                  </div>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Descripción Breve</label>
+                  <input type="text" placeholder="Ej: Hervir vigorosamente y agregar amargor." className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-900 dark:text-white" value={step.desc} onChange={e => updateStep(i, 'desc', e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Detalle Técnico (Opcional)</label>
+                  <textarea rows="2" placeholder="Instrucciones avanzadas para el maestro cervecero..." className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-slate-900 dark:text-white resize-none" value={step.details || ''} onChange={e => updateStep(i, 'details', e.target.value)} />
+                </div>
+              </div>
+           ))}
+           <button onClick={() => setFormData({...formData, steps: [...formData.steps, {id: Date.now(), title:'', desc:'', details:'', duration: 0}]})} className="text-sm text-purple-600 font-bold hover:text-purple-800 transition-colors bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-xl mt-1 flex items-center gap-2"><Plus size={16}/> Añadir Fase del Proceso</button>
+        </div>
+
+        {/* NUEVO: CREADOR DE TIPS */}
+        <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
+           <h3 className="font-black text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Info size={20} className="text-yellow-500"/> Tips de Elaboración</h3>
+           {formData.tips.map((tip, i) => (
+              <div key={i} className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 mb-3 relative flex flex-col gap-3">
+                <button type="button" onClick={() => removeTip(i)} className="absolute top-3 right-3 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                <input type="text" placeholder="Concepto (Ej: Miedo al Oxígeno)" className="w-[90%] p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-yellow-500 bg-white dark:bg-slate-900 dark:text-white" value={tip.title} onChange={e => updateTip(i, 'title', e.target.value)} />
+                <textarea rows="2" placeholder="Explicación del tip..." className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-yellow-500 bg-white dark:bg-slate-900 dark:text-white resize-none" value={tip.desc} onChange={e => updateTip(i, 'desc', e.target.value)} />
+              </div>
+           ))}
+           <button onClick={() => setFormData({...formData, tips: [...formData.tips, {title:'', desc:''}]})} className="text-sm text-yellow-600 font-bold hover:text-yellow-800 transition-colors bg-yellow-50 dark:bg-yellow-900/30 px-4 py-2 rounded-xl mt-1 flex items-center gap-2"><Plus size={16}/> Añadir Tip</button>
+        </div>
+
         {isEditing && (
-          <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
+          <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
              <label className="block text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Nota de Modificación (Opcional)</label>
-             <input type="text" placeholder="Ej: Cambié el lúpulo Citra por Mosaic para probar." className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={modNote} onChange={e => setModNote(e.target.value)} />
+             <input type="text" placeholder="Ej: Cambié el lúpulo Citra por Mosaic para probar." className="w-full p-4 border border-gray-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={modNote} onChange={e => setModNote(e.target.value)} />
           </div>
         )}
 
-        <button onClick={handleSave} className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white p-4 rounded-2xl font-black text-lg flex justify-center items-center gap-2 mt-6 transition-transform hover:scale-[1.02] shadow-lg">
-          <Save size={24} /> {isEditing ? 'Guardar Cambios' : 'Crear Receta'}
+        <button onClick={handleSave} className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white p-5 rounded-2xl font-black text-xl flex justify-center items-center gap-3 mt-8 transition-transform hover:scale-[1.02] shadow-xl">
+          <Save size={28} /> {isEditing ? 'Guardar Obra Maestra' : 'Registrar Receta'}
         </button>
       </div>
     </div>
@@ -436,7 +648,8 @@ function MainApp() {
   const [inventory, setInventory] = useState([]);
   const [history, setHistory] = useState([]);
 
-  const [view, setView] = useState('list'); 
+  // Cambiamos la vista por defecto al Dashboard
+  const [view, setView] = useState('dashboard'); 
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [activeTab, setActiveTab] = useState('recipe');
   const [targetVol, setTargetVol] = useState(20);
@@ -458,15 +671,26 @@ function MainApp() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [resetMessage, setResetMessage] = useState('');
+  
+  // Estado para la IA de Asesoría
+  const [aiAdvice, setAiAdvice] = useState(null);
+  const [isAdvising, setIsAdvising] = useState(false);
+
+  // --- EFECTO MODO OSCURO (Forzado al tag HTML) ---
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   // --- FIREBASE: Autenticación ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Ya hay una sesión activa guardada (correo o anónimo)
         setUser(currentUser);
       } else {
-        // No hay sesión en memoria, creamos una de respaldo (anónima)
         try {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             await signInWithCustomToken(auth, __initial_auth_token);
@@ -474,7 +698,7 @@ function MainApp() {
             await signInAnonymously(auth);
           }
         } catch (error) {
-          console.error("Error en autenticación anónima de respaldo:", error);
+          console.error("Error en autenticación anónima:", error);
         }
       }
     });
@@ -494,7 +718,6 @@ function MainApp() {
         setInventory(Array.isArray(data.inventory) ? data.inventory : []);
         setHistory(Array.isArray(data.history) ? data.history : []);
       } else {
-        // LÓGICA MAESTRA: Solo damos las recetas a usuarios registrados
         const seedRecipes = user.isAnonymous ? [] : initialRecipes;
         const seedInventory = user.isAnonymous ? [] : initialInventory;
 
@@ -506,7 +729,7 @@ function MainApp() {
       setIsDataLoaded(true);
     }, (error) => {
       console.error("Error cargando base de datos:", error);
-      setIsDataLoaded(true); // Evitar quedarse en loading si Firebase falla por permisos/rutas
+      setIsDataLoaded(true);
     });
     
     return () => unsubscribe();
@@ -537,7 +760,7 @@ function MainApp() {
       } else {
         await signInWithEmailAndPassword(auth, authEmail, authPass);
       }
-      setView('list');
+      setView('dashboard');
     } catch (err) {
       console.error("Error de Auth:", err);
       if (err.code === 'auth/email-already-in-use') setAuthError('Este correo ya está registrado. Intenta iniciar sesión.');
@@ -569,8 +792,7 @@ function MainApp() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    // Ya no forzamos el inicio de sesión anónimo al salir, dejamos que el useEffect se encargue si es necesario.
-    setView('list');
+    setView('dashboard');
   };
 
   const handleAddInventoryItem = (name, category) => {
@@ -578,6 +800,26 @@ function MainApp() {
     const newInv = [...inventory, { id: 'inv-' + Date.now(), category, name, stock: 0, unit, price: 0 }];
     setInventory(newInv);
     updateCloudData({ inventory: newInv });
+  };
+  
+  // Consulta a la IA para asesoría de recetas
+  const handleGetAiAdvice = async () => {
+    if (!selectedRecipe) return;
+    setIsAdvising(true);
+    setAiAdvice(null);
+    try {
+      const prompt = `Como Maestro Cervecero experto, analiza esta receta: ${selectedRecipe.name} (${selectedRecipe.category}). 
+      Formulación: ${JSON.stringify(selectedRecipe.ingredients)}. 
+      Perfil de Agua: ${JSON.stringify(selectedRecipe.waterProfile)}. 
+      Dime 3 sugerencias técnicas breves y profesionales para mejorar la calidad sensorial o el proceso.`;
+      
+      const res = await callGemini(prompt, "Eres un consultor experto en cervecería artesanal de nivel mundial. Responde en español.");
+      setAiAdvice(res);
+    } catch (err) {
+      alert("La IA está ocupada en este momento. Intenta de nuevo.");
+    } finally {
+      setIsAdvising(false);
+    }
   };
 
   // --- CRONÓMETRO ---
@@ -620,9 +862,11 @@ function MainApp() {
   };
 
   const deleteHistoryItem = (id) => {
-    const newHistory = history.filter(item => item.id !== id);
-    setHistory(newHistory);
-    updateCloudData({ history: newHistory });
+    if(window.confirm("¿Seguro que deseas eliminar este registro del historial?")) {
+      const newHistory = history.filter(item => item.id !== id);
+      setHistory(newHistory);
+      updateCloudData({ history: newHistory });
+    }
   };
 
   if (!isDataLoaded) {
@@ -684,8 +928,128 @@ function MainApp() {
     </div>
   );
 
-  // 1. Vista de Lista (DASHBOARD)
-  const renderList = () => {
+  // 1. Vista Dashboard (NUEVO KPIs)
+  const renderDashboard = () => {
+    const safeHistory = Array.isArray(history) ? history : [];
+    
+    // Cálculos de KPIs
+    const totalLiters = safeHistory.reduce((sum, h) => sum + (Number(h.volume) || 0), 0);
+    const totalCost = safeHistory.reduce((sum, h) => sum + (Number(h.totalCost) || 0), 0);
+    const avgCostPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
+    const totalBatches = safeHistory.length;
+    
+    let sumABV = 0; let countABV = 0;
+    safeHistory.forEach(h => { if(h.abv && Number(h.abv) > 0) { sumABV += Number(h.abv); countABV++; } });
+    const avgABV = countABV > 0 ? (sumABV / countABV).toFixed(1) : 0;
+
+    // Volumen por Estilo (Top 4)
+    const volumeByStyle = safeHistory.reduce((acc, h) => {
+        // Buscamos la categoría cruzando con la receta si es posible, o usamos un default
+        const recipeMatch = recipes.find(r => r.name === h.recipeName);
+        const style = recipeMatch ? recipeMatch.category : 'Otros';
+        acc[style] = (acc[style] || 0) + (Number(h.volume) || 0);
+        return acc;
+    }, {});
+    const topStyles = Object.entries(volumeByStyle).sort((a,b) => b[1] - a[1]).slice(0, 4);
+    
+    // Máximo volumen para calcular porcentajes en barras
+    const maxStyleVolume = topStyles.length > 0 ? topStyles[0][1] : 1;
+
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800 mb-8">
+          <div>
+            <h2 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+              <TrendingUp className="text-blue-500" size={32} /> Dashboard de Producción
+            </h2>
+            <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Métricas globales de tu cervecería.</p>
+          </div>
+          <button onClick={() => setView('add')} className="bg-amber-500 hover:bg-amber-400 text-slate-900 px-6 py-3 rounded-xl font-black flex items-center gap-2 transition-colors shadow-md">
+            <Plus size={20} /> Nueva Cocción
+          </button>
+        </div>
+
+        {user && user.isAnonymous && (
+          <div className="bg-amber-500/10 border border-amber-500/20 p-6 md:p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-center gap-6 shadow-inner text-center md:text-left mb-8">
+             <div>
+                <h3 className="font-black text-amber-500 text-xl mb-1 flex items-center justify-center md:justify-start gap-2"><Beaker size={24}/> Modo Invitado Activo</h3>
+                <p className="text-slate-400 text-sm font-medium">Tus estadísticas se perderán. Crea una cuenta gratuita para guardar todo en la nube de forma permanente.</p>
+             </div>
+             <button onClick={() => setView('auth')} className="bg-amber-500 text-slate-900 px-8 py-4 rounded-2xl font-black shadow-[0_10px_30px_rgba(245,158,11,0.3)] hover:bg-amber-400 transition-all whitespace-nowrap active:scale-95">
+                Crear Cuenta Pro
+             </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-3xl text-white shadow-lg relative overflow-hidden">
+            <div className="absolute right-[-20px] top-[-20px] opacity-20"><Droplets size={100} /></div>
+            <span className="text-blue-100 text-xs font-black uppercase tracking-widest block mb-2 relative z-10">Lts Totales</span>
+            <span className="text-4xl font-black relative z-10">{totalLiters} L</span>
+          </div>
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+            <div className="absolute right-[-20px] top-[-20px] opacity-5 dark:opacity-10 text-emerald-500"><Banknote size={100} /></div>
+            <span className="text-slate-400 text-xs font-black uppercase tracking-widest block mb-2 relative z-10">Costo / Litro (Prom)</span>
+            <span className="text-3xl font-black text-emerald-600 relative z-10">{formatCurrency(avgCostPerLiter)}</span>
+          </div>
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+            <div className="absolute right-[-20px] top-[-20px] opacity-5 dark:opacity-10 text-orange-500"><CalendarClock size={100} /></div>
+            <span className="text-slate-400 text-xs font-black uppercase tracking-widest block mb-2 relative z-10">Lotes Cocinados</span>
+            <span className="text-3xl font-black text-slate-800 dark:text-white relative z-10">{totalBatches}</span>
+          </div>
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+            <div className="absolute right-[-20px] top-[-20px] opacity-5 dark:opacity-10 text-red-500"><Thermometer size={100} /></div>
+            <span className="text-slate-400 text-xs font-black uppercase tracking-widest block mb-2 relative z-10">ABV Promedio</span>
+            <span className="text-3xl font-black text-red-500 relative z-10">{avgABV}%</span>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6 mt-8">
+          {/* GRÁFICO BARRAS: Producción por Estilo */}
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm">
+            <h3 className="font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500"/> Producción por Estilo</h3>
+            {topStyles.length === 0 ? (
+              <p className="text-slate-500 italic">No hay datos suficientes. Cocina tu primer lote.</p>
+            ) : (
+              <div className="space-y-5">
+                {topStyles.map(([style, vol], idx) => {
+                  const percentage = Math.max(5, (vol / maxStyleVolume) * 100);
+                  const theme = getThemeForCategory(style);
+                  return (
+                    <div key={idx} className="relative">
+                      <div className="flex justify-between text-sm font-bold mb-1">
+                        <span className="text-slate-700 dark:text-slate-300">{style}</span>
+                        <span className={theme.text}>{vol} L</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${percentage}%`, backgroundColor: theme.colorBase }}></div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* TARJETA INVERSION TOTAL */}
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col justify-between">
+            <div>
+              <h3 className="font-black text-white mb-2 flex items-center gap-2"><PieChart size={20} className="text-emerald-400"/> Inversión Total</h3>
+              <p className="text-slate-400 text-sm font-medium">Suma de todos los costos registrados en tu historial de producción.</p>
+            </div>
+            <div className="mt-8 text-center bg-black/30 p-6 rounded-2xl border border-slate-700/50 backdrop-blur-sm">
+              <span className="block text-5xl font-black text-emerald-400 mb-2 drop-shadow-lg">{formatCurrency(totalCost)}</span>
+              <span className="text-emerald-500/80 text-xs font-black uppercase tracking-widest">CLP Histórico</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    );
+  };
+
+  // 1.5 Vista de Mis Recetas (Antiguo List)
+  const renderRecipes = () => {
     const safeRecipes = Array.isArray(recipes) ? recipes : [];
     const grouped = safeRecipes.reduce((acc, recipe) => {
       const cat = recipe.category || 'Sin Categoría';
@@ -698,11 +1062,10 @@ function MainApp() {
       <div className="space-y-8 animate-fadeIn">
         <div className="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 gap-4">
           <div className="flex items-center">
-            <p className="text-slate-600 dark:text-slate-400 font-medium">Tienes <span className="text-amber-600 font-bold">{safeRecipes.length} recetas</span> guardadas.</p>
+            <p className="text-slate-600 dark:text-slate-400 font-medium">Tienes <span className="text-amber-600 font-bold">{safeRecipes.length} recetas</span> en tu biblioteca.</p>
             {user && !user.isAnonymous && (
               <button 
                 onClick={() => {
-                  // Inyecta las recetas de alta fidelidad si no están
                   const existingIds = safeRecipes.map(r => r.id);
                   const missing = initialRecipes.filter(r => !existingIds.includes(r.id));
                   if(missing.length > 0) {
@@ -720,29 +1083,11 @@ function MainApp() {
             )}
           </div>
           <div className="flex flex-wrap gap-2 w-full md:w-auto justify-center">
-            <button onClick={() => setView('inventory')} className="flex-1 md:flex-none justify-center bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
-              <Package size={18} /> Inventario
-            </button>
-            <button onClick={() => setView('history')} className="flex-1 md:flex-none justify-center bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
-              <History size={18} /> Historial
-            </button>
-            <button onClick={() => setView('add')} className="flex-1 md:flex-none justify-center bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
-              <Plus size={18} /> Nueva
+            <button onClick={() => setView('add')} className="flex-1 md:flex-none justify-center bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm">
+              <Plus size={18} /> Crear / Clonar Receta
             </button>
           </div>
         </div>
-
-        {user && user.isAnonymous && (
-          <div className="bg-amber-500/10 border border-amber-500/20 p-6 md:p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-center gap-6 shadow-inner text-center md:text-left">
-             <div>
-                <h3 className="font-black text-amber-500 text-xl mb-1 flex items-center justify-center md:justify-start gap-2"><Beaker size={24}/> Modo Invitado Activo</h3>
-                <p className="text-slate-400 text-sm font-medium">Crea una cuenta gratuita para desbloquear la biblioteca de recetas maestras (Hazy IPAs, Stouts, Lagers) y gestionar tu bodega de insumos en la nube.</p>
-             </div>
-             <button onClick={() => setView('auth')} className="bg-amber-500 text-slate-900 px-8 py-4 rounded-2xl font-black shadow-[0_10px_30px_rgba(245,158,11,0.3)] hover:bg-amber-400 transition-all whitespace-nowrap active:scale-95">
-                Crear Cuenta Pro
-             </button>
-          </div>
-        )}
 
         {Object.keys(grouped).map(category => {
           const theme = getThemeForCategory(category);
@@ -780,7 +1125,7 @@ function MainApp() {
                          <Trash2 size={18}/>
                       </button>
 
-                      <div className="cursor-pointer" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setView('recipe'); }}>
+                      <div className="cursor-pointer" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setAiAdvice(null); setView('recipe'); }}>
                         <div className="flex justify-between items-start mb-3">
                           <span className={`inline-block px-3 py-1 rounded text-xs font-bold ${theme.badge}`}>{recipe.category || 'Sin Estilo'}</span>
                           
@@ -800,10 +1145,10 @@ function MainApp() {
                         
                         <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors pr-6">{recipe.name || 'Sin Nombre'}</h3>
                       </div>
-                      <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4 cursor-pointer" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setView('recipe'); }}>
-                        <span className="flex items-center gap-1"><Droplets size={16} className="text-blue-500"/> {recipe.targetVolume || 0}L</span>
-                        <span className="flex items-center gap-1"><Thermometer size={16} className="text-red-500"/> {recipe.abv || 0}%</span>
-                        <span className="flex items-center gap-1"><Clock size={16} className="text-slate-400"/> DO: {recipe.og || '-'}</span>
+                      <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4 cursor-pointer" onClick={() => { setSelectedRecipe(recipe); setTargetVol(recipe.targetVolume || 20); setCompletedSteps([]); setActiveTab('recipe'); setAiAdvice(null); setView('recipe'); }}>
+                        <span className="flex items-center gap-1" title="Volumen"><Droplets size={16} className="text-blue-500"/> {recipe.targetVolume || 0}L</span>
+                        <span className="flex items-center gap-1" title="Alcohol Est."><Thermometer size={16} className="text-red-500"/> {recipe.abv || 0}%</span>
+                        {(recipe.ibu > 0) && <span className="flex items-center gap-1" title="Amargor"><Activity size={16} className="text-orange-500"/> {recipe.ibu} IBU</span>}
                       </div>
                     </div>
                   );
@@ -851,7 +1196,7 @@ function MainApp() {
             <button onClick={() => setShowInvForm(!showInvForm)} className="flex-1 md:flex-none justify-center flex items-center gap-2 text-white font-bold bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-colors shadow-sm">
               <Plus size={20} /> Añadir
             </button>
-            <button onClick={() => setView('list')} className="flex-1 md:flex-none justify-center flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 font-bold bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 transition-colors">
+            <button onClick={() => setView('dashboard')} className="flex-1 md:flex-none justify-center flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 font-bold bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 transition-colors">
               <ArrowLeft size={20} /> Volver
             </button>
           </div>
@@ -1010,8 +1355,11 @@ function MainApp() {
       const gypsumGrams = (remainingSO4 * totalWaterLiters) / 558; const gypsumCaContributed = (gypsumGrams * 232) / totalWaterLiters || 0;
 
       const finalEstimates = {
-        Ca: Math.round(baseWater.Ca + cacl2CaContributed + gypsumCaContributed), Mg: Math.round(baseWater.Mg + diff.Mg),
-        SO4: Math.round(baseWater.SO4 + epsomSO4Contributed + remainingSO4), Cl: Math.round(baseWater.Cl + diff.Cl)
+        Ca: Math.round(baseWater.Ca + cacl2CaContributed + gypsumCaContributed), 
+        Mg: Math.round(baseWater.Mg + diff.Mg),
+        SO4: Math.round(baseWater.SO4 + epsomSO4Contributed + remainingSO4), 
+        Cl: Math.round(baseWater.Cl + diff.Cl),
+        HCO3: Math.round(baseWater.HCO3) // Retiene y muestra el HCO3
       };
       return { totalWater: totalWaterLiters.toFixed(1), gypsum: gypsumGrams.toFixed(1), cacl2: cacl2Grams.toFixed(1), epsom: epsomGrams.toFixed(1), finalEstimates };
     };
@@ -1023,8 +1371,8 @@ function MainApp() {
     return (
       <div className="animate-fadeIn">
         <div className="flex justify-between items-center mb-4">
-          <button onClick={() => setView('list')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-white dark:bg-slate-800 px-4 py-2 rounded-xl transition-colors shadow-sm border border-gray-200 dark:border-slate-700">
-            <ArrowLeft size={20} /> Menú Principal
+          <button onClick={() => setView('recipes')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-white dark:bg-slate-800 px-4 py-2 rounded-xl transition-colors shadow-sm border border-gray-200 dark:border-slate-700">
+            <ArrowLeft size={20} /> Mis Recetas
           </button>
           <button onClick={() => setView('edit')} className="flex items-center gap-2 text-white font-bold bg-slate-800 hover:bg-slate-900 px-4 py-2 rounded-xl transition-colors shadow-sm">
             <Edit3 size={18} /> Editar Receta
@@ -1039,9 +1387,11 @@ function MainApp() {
             </span>
             <h2 className="text-4xl md:text-5xl font-black mb-3 leading-tight drop-shadow-md">{scaledRecipe.name || 'Receta Sin Nombre'}</h2>
             <div className="flex flex-wrap gap-3 mt-5 font-bold text-white/90">
-              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10"><Thermometer size={18}/> ABV: {scaledRecipe.abv}%</span>
-              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10"><Clock size={18}/> DO: {scaledRecipe.og}</span>
-              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10"><CheckCircle2 size={18}/> DF: {scaledRecipe.fg}</span>
+              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Alcohol por Volumen"><Thermometer size={18}/> ABV: {scaledRecipe.abv}%</span>
+              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Gravedad Original"><Clock size={18}/> DO: {scaledRecipe.og}</span>
+              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Gravedad Final"><CheckCircle2 size={18}/> DF: {scaledRecipe.fg}</span>
+              {(scaledRecipe.ibu > 0) && <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Amargor (IBU)"><Activity size={18}/> IBU: {scaledRecipe.ibu}</span>}
+              {(scaledRecipe.colorSRM > 0) && <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-lg border border-white/10" title="Color (SRM)"><Palette size={18}/> SRM: {scaledRecipe.colorSRM}</span>}
             </div>
           </div>
           
@@ -1086,6 +1436,31 @@ function MainApp() {
           {/* TAB: RECETA */}
           {activeTab === 'recipe' && (
             <div className="space-y-8 animate-fadeIn">
+              
+              {/* BOTON IA Y CONSEJOS */}
+              <div className="flex justify-end">
+                <button 
+                  onClick={handleGetAiAdvice} 
+                  disabled={isAdvising}
+                  className="bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-400 font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  {isAdvising ? <Loader2 className="animate-spin" size={18} /> : <BrainCircuit size={18} />}
+                  {isAdvising ? 'Analizando...' : '✨ Consultar al Maestro IA'}
+                </button>
+              </div>
+
+              {aiAdvice && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-800 p-6 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-inner relative animate-in zoom-in duration-500">
+                   <div className="absolute top-4 right-4 text-amber-400/20"><Sparkles size={48} /></div>
+                   <h4 className="font-black text-amber-800 dark:text-amber-500 text-lg flex items-center gap-2 mb-3">
+                     <Wand2 size={20} /> Análisis de la Receta
+                   </h4>
+                   <div className="text-slate-700 dark:text-slate-300 font-medium text-sm whitespace-pre-line leading-relaxed">
+                     {aiAdvice}
+                   </div>
+                </div>
+              )}
+
               <div className="bg-emerald-50 dark:bg-emerald-900/10 p-6 rounded-2xl border border-emerald-200 dark:border-emerald-800/50 flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
                  <div className="flex items-center gap-4 w-full md:w-auto">
                    <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 p-4 rounded-2xl text-white shadow-md flex-shrink-0">
@@ -1235,9 +1610,9 @@ function MainApp() {
                          {step.details.split(/(?=\d+\.\s)/).filter(Boolean).map((part, i) => {
                             const match = part.match(/^(\d+\.\s)(.*)/);
                             if (match) {
-                               return <p key={i} className="pl-3 mb-2"><strong>{match[1]}</strong>{match[2]}</p>;
+                               return <p key={i} className="mb-2"><strong>{match[1]}</strong>{match[2]}</p>;
                             }
-                            return <p key={i} className="pl-3 mb-2">{part}</p>;
+                            return <p key={i} className="mb-2">{part}</p>;
                          })}
                       </div>
                     </div>
@@ -1334,13 +1709,17 @@ function MainApp() {
 
                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-amber-200 dark:border-slate-700 shadow-sm">
                      <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-4 text-center">Perfil Final Estimado</h5>
-                     <div className="flex justify-around text-lg font-bold">
+                     <div className="flex justify-around text-lg font-bold flex-wrap gap-4">
                        <span className="text-slate-500">Ca: <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-600' : 'text-amber-600'}>{saltAdditions.finalEstimates.Ca}</span></span>
                        <span className="text-slate-500">Mg: <span className="text-green-600">{saltAdditions.finalEstimates.Mg}</span></span>
                        <span className="text-slate-500">SO4: <span className="text-green-600">{saltAdditions.finalEstimates.SO4}</span></span>
                        <span className="text-slate-500">Cl: <span className="text-green-600">{saltAdditions.finalEstimates.Cl}</span></span>
+                       <span className="text-slate-500" title="Retenido del agua base">HCO3: <span className={(saltAdditions.finalEstimates.HCO3 >= (Number(scaledRecipe.waterProfile.HCO3) || 0)) ? 'text-green-600' : 'text-amber-600'}>{saltAdditions.finalEstimates.HCO3}</span></span>
                      </div>
                    </div>
+                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-4 text-center italic">
+                     * El perfil estimado puede diferir del objetivo porque las sales aportan iones en pares (ej. el Cloruro de Calcio suma Cl y Ca simultáneamente).
+                   </p>
                 </div>
               )}
             </div>
@@ -1426,6 +1805,7 @@ function MainApp() {
           og: recipe.og || '-',
           fg: recipe.fg || '-',
           abv: recipe.abv || '-',
+          category: recipe.category || 'Otros',
           totalCost: totalCost || 0,
           notes: "Producción completada. Insumos descontados."
         };
@@ -1532,10 +1912,10 @@ function MainApp() {
             <History className="text-blue-600" size={32} /> Historial de Producción
           </h2>
           <button 
-            onClick={() => setView('list')}
+            onClick={() => setView('dashboard')}
             className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 transition-colors shadow-sm w-full md:w-auto justify-center"
           >
-            <ArrowLeft size={20} /> Menú Principal
+            <ArrowLeft size={20} /> Volver al Panel
           </button>
         </div>
 
@@ -1646,7 +2026,7 @@ function MainApp() {
       <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans p-4 md:p-6 lg:p-10 selection:bg-amber-200 transition-colors duration-300">
         <div className="max-w-6xl mx-auto">
           
-          {/* HEADER GLOBAL REDISEÑADO (Layout Blindado) */}
+          {/* HEADER GLOBAL REDISEÑADO */}
           <div className="bg-slate-900 text-white p-6 md:p-8 rounded-3xl shadow-xl mb-8 flex flex-col md:flex-row justify-between items-start md:items-center relative overflow-hidden border border-slate-700 gap-6">
             <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse pointer-events-none"></div>
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse pointer-events-none" style={{animationDelay: '2s'}}></div>
@@ -1684,18 +2064,36 @@ function MainApp() {
                 )}
               </div>
 
-              {view !== 'list' && (
-                <button onClick={() => setView('list')} className="bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-xl font-bold transition-all border border-white/10 backdrop-blur-md flex items-center gap-2 hover:scale-105 shadow-sm w-full md:w-auto justify-center">
-                  <BookOpen size={18}/> Mis Recetas
+              {view !== 'dashboard' && (
+                <button onClick={() => setView('dashboard')} className="bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-xl font-bold transition-all border border-white/10 backdrop-blur-md flex items-center gap-2 hover:scale-105 shadow-sm w-full md:w-auto justify-center">
+                  <LayoutDashboard size={18}/> Dashboard
                 </button>
               )}
             </div>
-
           </div>
+
+          {/* Menú Principal Global */}
+          {view !== 'auth' && (
+            <div className="flex bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-x-auto mb-8">
+               <button onClick={() => setView('dashboard')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'dashboard' ? 'text-blue-500 border-b-4 border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                 <TrendingUp size={18}/> Métricas
+               </button>
+               <button onClick={() => setView('list')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'list' ? 'text-amber-500 border-b-4 border-amber-500 bg-amber-50/50 dark:bg-amber-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                 <BookOpen size={18}/> Mis Recetas
+               </button>
+               <button onClick={() => setView('inventory')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'inventory' ? 'text-emerald-500 border-b-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                 <Package size={18}/> Inventario
+               </button>
+               <button onClick={() => setView('history')} className={`flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${view === 'history' ? 'text-purple-500 border-b-4 border-purple-500 bg-purple-50/50 dark:bg-purple-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                 <History size={18}/> Historial
+               </button>
+            </div>
+          )}
 
           {/* CONTENEDOR DE VISTAS */}
           <main className="transition-all duration-300 ease-in-out">
             {view === 'auth' && renderAuth()}
+            {view === 'dashboard' && renderDashboard()}
             {view === 'list' && renderList()}
             {view === 'recipe' && renderRecipeView()}
             {view === 'add' && <RecipeForm onSave={(newRecipe) => { 
