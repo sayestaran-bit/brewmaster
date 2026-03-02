@@ -7,7 +7,7 @@ import {
   Banknote, Wheat, Leaf, Cloud, RefreshCw, Moon, Sun, User, 
   LogOut, Edit3, FileClock, Eye, EyeOff, Activity, Palette, ListOrdered,
   Sparkles, Loader2, BrainCircuit, Wand2, TrendingUp, BarChart3, PieChart,
-  LayoutDashboard, Filter
+  LayoutDashboard, Filter, AlertTriangle
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -20,7 +20,9 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
@@ -690,6 +692,22 @@ function MainApp() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    const provider = new GoogleAuthProvider();
+    setAuthError('');
+    try {
+      await signInWithPopup(auth, provider);
+      setView('dashboard');
+    } catch (err) {
+      console.error(err);
+      if (err.code === 'auth/unauthorized-domain') {
+          setAuthError(`Dominio bloqueado. Habilítalo en Firebase.`);
+      } else {
+          setAuthError('Error al conectar con Google.');
+      }
+    }
+  };
+
   const handleResetPassword = async () => {
     setAuthError(''); setResetMessage('');
     if (!authEmail) return setAuthError('Ingresa tu correo arriba.');
@@ -811,6 +829,19 @@ function MainApp() {
           {resetMessage && <p className="text-emerald-500 text-sm font-medium bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg">{resetMessage}</p>}
           <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 dark:bg-amber-600 dark:hover:bg-amber-500 text-white p-4 rounded-xl font-black transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">{isRegistering ? 'Registrar y Entrar' : 'Entrar'}</button>
         </form>
+
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-gray-200 dark:border-slate-700"></div>
+              <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase">O acceder con</span>
+              <div className="flex-grow border-t border-gray-200 dark:border-slate-700"></div>
+          </div>
+          <button type="button" onClick={handleGoogleSignIn} className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold p-3 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-sm">
+            <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
+            Google
+          </button>
+        </div>
+
         <div className="mt-6 text-center"><button onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setResetMessage(''); }} className="text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors">{isRegistering ? '¿Ya tienes cuenta? Inicia Sesión' : '¿No tienes cuenta? Regístrate'}</button></div>
       </div>
     </div>
@@ -853,6 +884,14 @@ function MainApp() {
     }, {});
     const topStyles = Object.entries(volumeByStyle).sort((a,b) => b[1] - a[1]).slice(0, 4);
     const maxStyleVolume = topStyles.length > 0 ? topStyles[0][1] : 1;
+
+    // Lógica para Alertas de Stock
+    const lowStockItems = inventory.filter(i => {
+      if (i.category === 'Lúpulo' && i.stock <= 100) return true;
+      if (i.category === 'Malta' && i.stock <= 3) return true;
+      if (i.category === 'Levadura' && i.stock <= 1) return true;
+      return false;
+    });
 
     return (
       <div className="space-y-6 animate-fadeIn">
@@ -931,43 +970,74 @@ function MainApp() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mt-2">
-          {/* GRÁFICO BARRAS: Producción por Estilo */}
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm">
-            <h3 className="font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500"/> Top Estilos (Volumen)</h3>
-            {topStyles.length === 0 ? (
-              <p className="text-slate-400 font-medium italic text-center py-8">Cocina tu primer lote para ver estadísticas.</p>
-            ) : (
-              <div className="space-y-5">
-                {topStyles.map(([style, vol], idx) => {
-                  const percentage = Math.max(5, (vol / maxStyleVolume) * 100);
-                  const theme = getThemeForCategory(style);
-                  return (
-                    <div key={idx} className="relative group">
-                      <div className="flex justify-between text-sm font-bold mb-1.5">
-                        <span className="text-slate-700 dark:text-slate-300 group-hover:text-white transition-colors">{style}</span>
-                        <span className={theme.text}>{vol} L</span>
+        <div className="grid lg:grid-cols-3 gap-6 mt-2">
+          {/* GRÁFICO BARRAS: Producción por Estilo (Ocupa 2/3) */}
+          <div className="lg:col-span-2 flex flex-col">
+            <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm flex-1">
+              <h3 className="font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500"/> Top Estilos (Volumen)</h3>
+              {topStyles.length === 0 ? (
+                <p className="text-slate-400 font-medium italic text-center py-8">Cocina tu primer lote para ver estadísticas.</p>
+              ) : (
+                <div className="space-y-5">
+                  {topStyles.map(([style, vol], idx) => {
+                    const percentage = Math.max(5, (vol / maxStyleVolume) * 100);
+                    const theme = getThemeForCategory(style);
+                    return (
+                      <div key={idx} className="relative group">
+                        <div className="flex justify-between text-sm font-bold mb-1.5">
+                          <span className="text-slate-700 dark:text-slate-300 group-hover:text-white transition-colors">{style}</span>
+                          <span className={theme.text}>{vol} L</span>
+                        </div>
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden shadow-inner">
+                          <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${percentage}%`, backgroundColor: theme.colorBase }}></div>
+                        </div>
                       </div>
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden shadow-inner">
-                        <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${percentage}%`, backgroundColor: theme.colorBase }}></div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* TARJETA INVERSION TOTAL */}
-          <div className="bg-gradient-to-br from-slate-800 to-slate-950 p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col justify-between relative overflow-hidden group">
-            <div className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform duration-1000"><PieChart size={250} className="text-emerald-500"/></div>
-            <div className="relative z-10">
-              <h3 className="font-black text-white text-xl mb-2 flex items-center gap-2"><Banknote size={24} className="text-emerald-400"/> Inversión Acumulada</h3>
-              <p className="text-slate-400 text-sm font-medium">Suma de costos de todos los insumos de los lotes en este periodo.</p>
+          {/* COLUMNA DERECHA: Finanzas y Alertas (Ocupa 1/3) */}
+          <div className="space-y-6 flex flex-col">
+            {/* TARJETA INVERSION TOTAL */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-950 p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform duration-1000"><PieChart size={250} className="text-emerald-500"/></div>
+              <div className="relative z-10">
+                <h3 className="font-black text-white text-xl mb-2 flex items-center gap-2"><Banknote size={24} className="text-emerald-400"/> Inversión Acumulada</h3>
+                <p className="text-slate-400 text-sm font-medium">Suma de costos de todos los insumos de los lotes en este periodo.</p>
+              </div>
+              <div className="mt-8 text-center bg-black/40 p-8 rounded-2xl border border-white/5 backdrop-blur-md relative z-10 shadow-inner group-hover:border-emerald-500/30 transition-colors">
+                <span className="block text-5xl md:text-6xl font-black text-emerald-400 mb-2 drop-shadow-[0_0_15px_rgba(52,211,153,0.3)] tracking-tighter">{formatCurrency(totalCost)}</span>
+                <span className="text-emerald-500/70 text-[10px] font-black uppercase tracking-[0.3em]">CLP Histórico</span>
+              </div>
             </div>
-            <div className="mt-8 text-center bg-black/40 p-8 rounded-2xl border border-white/5 backdrop-blur-md relative z-10 shadow-inner group-hover:border-emerald-500/30 transition-colors">
-              <span className="block text-5xl md:text-6xl font-black text-emerald-400 mb-2 drop-shadow-[0_0_15px_rgba(52,211,153,0.3)] tracking-tighter">{formatCurrency(totalCost)}</span>
-              <span className="text-emerald-500/70 text-[10px] font-black uppercase tracking-[0.3em]">CLP Histórico</span>
+
+            {/* ALERTAS DE STOCK (La Nueva Función) */}
+            <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm flex-1">
+              <h3 className="font-black text-slate-800 dark:text-white mb-5 flex items-center gap-2"><AlertTriangle size={20} className="text-red-500"/> Alertas de Stock</h3>
+              {lowStockItems.length === 0 ? (
+                <div className="bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-2xl text-center border border-emerald-100 dark:border-emerald-900/30">
+                  <CheckCircle2 size={24} className="mx-auto text-emerald-500 mb-2"/>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-400 font-bold">Insumos suficientes</p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {lowStockItems.slice(0, 4).map(item => (
+                    <li key={item.id} className="flex justify-between items-center p-3 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20">
+                      <div className="overflow-hidden pr-2">
+                        <span className="font-bold text-slate-700 dark:text-slate-300 block truncate text-sm">{item.name}</span>
+                        <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">{item.category}</span>
+                      </div>
+                      <span className="font-black text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded-md text-xs shrink-0 whitespace-nowrap">{item.stock} {item.unit}</span>
+                    </li>
+                  ))}
+                  {lowStockItems.length > 4 && (
+                    <button onClick={() => setView('inventory')} className="w-full text-center text-xs font-bold text-red-500 hover:text-red-600 pt-3 flex justify-center items-center gap-1 transition-colors">Ver {lowStockItems.length - 4} alertas más <ChevronRight size={14}/></button>
+                  )}
+                </ul>
+              )}
             </div>
           </div>
         </div>
@@ -1076,6 +1146,8 @@ function MainApp() {
 
   // 2. Vista Inventario
   const renderInventory = () => {
+    const totalInventoryValue = inventory.reduce((acc, item) => acc + ((item.stock || 0) * (item.price || 0)), 0);
+
     const handleAddInvItem = () => {
       if (!newInvItem.name.trim()) return;
       const newInv = [...inventory, { ...newInvItem, id: 'inv-' + Date.now(), stock: Number(newInvItem.stock), price: Number(newInvItem.price) }];
@@ -1102,9 +1174,12 @@ function MainApp() {
     return (
       <div className="space-y-6 animate-fadeIn">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-200 dark:border-slate-700 pb-4 gap-4">
-          <h2 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-3">
-            <Package className="text-blue-500" size={32} /> Tu Inventario
-          </h2>
+          <div className="flex flex-col">
+            <h2 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+              <Package className="text-blue-500" size={32} /> Tu Inventario
+            </h2>
+            <p className="text-sm font-bold text-slate-500 mt-2 flex items-center gap-2"><Scale size={16}/> Capital Estimado: <span className="text-emerald-600 dark:text-emerald-400 font-black">{formatCurrency(totalInventoryValue)}</span></p>
+          </div>
           <div className="flex gap-2 w-full md:w-auto">
             <button onClick={() => setShowInvForm(!showInvForm)} className="flex-1 md:flex-none justify-center flex items-center gap-2 text-white font-bold bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-colors shadow-sm">
               <Plus size={20} /> Añadir
