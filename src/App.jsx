@@ -55,7 +55,7 @@ const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
 // --- GEMINI API INTEGRATION ---
 // ATENCIÓN: Si exportas a Vercel u otro hosting, pon tu clave de Google AI Studio aquí.
-const apiKey = "-x~p6cSgnwWK?)";
+const apiKey = "";
 
 const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
