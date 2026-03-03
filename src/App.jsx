@@ -56,7 +56,7 @@ const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 // --- GEMINI API INTEGRATION ---
 // 🚨 ATENCIÓN: ¡NO PONGAS TU CONTRASEÑA DE CORREO AQUÍ!
 // Consigue una API Key gratis en: https://aistudio.google.com/
-const apiKey = "AIzaSyArmabUjOrBxnFC26Re_-yghnqZ3xoPuhE";
+const apiKey = "AIzaSyCl7QPw8JUz3OKW7luyDQBmAqvDoTOwUY0";
 
 const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
   // CAMBIO: Usamos el modelo gemini-1.5-flash, mucho más estable para API Keys públicas
