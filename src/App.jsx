@@ -54,32 +54,36 @@ const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'brewmaster-pro-v1
 const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
 // --- GEMINI API INTEGRATION ---
-// 🚨 ATENCIÓN: ¡NO PONGAS TU CONTRASEÑA DE CORREO AQUÍ!
-// Consigue una API Key gratis en: https://aistudio.google.com/
+// 🚨 ATENCIÓN: Antes de subir a Vercel, pega aquí tu API Key válida.
 const apiKey = "AIzaSyCl7QPw8JUz3OKW7luyDQBmAqvDoTOwUY0";
 
 const callGemini = async (prompt, systemInstruction = "", isJson = false) => {
-  // CAMBIO: Usamos el modelo gemini-1.5-flash, mucho más estable para API Keys públicas
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-  
   const payload = { contents: [{ parts: [{ text: prompt }] }] };
+  
   if (systemInstruction) payload.systemInstruction = { parts: [{ text: systemInstruction }] };
   if (isJson) payload.generationConfig = { responseMimeType: "application/json" };
 
   const delays = [1000, 2000, 4000, 8000, 16000];
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch(url, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload) 
+      });
+      
       if (!response.ok) {
          const errData = await response.json();
-         throw new Error(`HTTP error! status: ${response.status}. Detalles: ${JSON.stringify(errData)}`);
+         throw new Error(errData.error?.message || `Error HTTP: ${response.status}`);
       }
+      
       const result = await response.json();
       const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
       return isJson ? JSON.parse(text) : text;
     } catch (error) {
       console.error(`Intento IA ${attempt + 1} fallido:`, error);
-      if (attempt === 4) throw new Error("No se pudo contactar a la IA después de varios intentos. Revisa la consola para más detalles.");
+      if (attempt === 4) throw error; // Lanza el error real para mostrarlo en la interfaz
       await new Promise(resolve => setTimeout(resolve, delays[attempt]));
     }
   }
@@ -120,7 +124,7 @@ const parseDateToTimestamp = (dateStr) => {
 const generateGoogleCalendarLink = (title, daysFromStart, startDateMs, details) => {
   const targetDate = new Date(startDateMs + daysFromStart * 24 * 60 * 60 * 1000);
   const startStr = targetDate.toISOString().replace(/-|:|\.\d\d\d/g,"");
-  const endDate = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000);
+  const endDate = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000); // Todo el día
   const endStr = endDate.toISOString().replace(/-|:|\.\d\d\d/g,"");
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startStr}/${endStr}&details=${encodeURIComponent(details)}`;
 };
@@ -359,7 +363,7 @@ function AutocompleteInput({ value, onChange, placeholder, category, inventory, 
               onClick={() => { onChange(item.name); setShowDrop(false); }}
             >
               <span>{item.name}</span>
-              <span className="text-gray-400 text-xs">{parseFloat(Number(item.stock).toFixed(2))} {item.unit}</span>
+              <span className="text-gray-400 text-xs">{Number(item.stock).toLocaleString('es-CL', {maximumFractionDigits: 2})} {item.unit}</span>
             </div>
           ))}
           {!exactMatch && (
@@ -502,7 +506,7 @@ function RecipeForm({ initialData, onSave, onCancel, inventory, onAddInventoryIt
       
     } catch (err) {
       console.error("Error al conectar con IA:", err);
-      alert("Hubo un error conectando con la IA. Si has exportado a Vercel u otro hosting, asegúrate de colocar tu API Key de Google AI Studio en la variable 'apiKey' del código.");
+      alert(`Error con la IA: ${err.message}\n\n(Si estás en Vercel, recuerda pegar tu clave de Google AI Studio en la variable 'apiKey' al inicio del código).`);
     } finally {
       setIsGeneratingIA(false);
     }
@@ -872,7 +876,7 @@ function MainApp() {
       setAiAdvice(res);
     } catch (err) {
       console.error("Error AI:", err);
-      alert("Error conectando con la IA. Si has exportado el código a Vercel u otro servidor, recuerda pegar tu clave de Google AI Studio en 'const apiKey = \"\"' en el código.");
+      alert(`Error conectando con la IA: ${err.message}\n\n(Si has exportado el código a Vercel u otro servidor, recuerda pegar tu clave de Google AI Studio en 'const apiKey = \"\"' en el código).`);
     } finally { 
       setIsAdvising(false); 
     }
@@ -1354,7 +1358,7 @@ function MainApp() {
     const updateInvItem = (id, field, value) => {
       const newInv = [...inventory];
       const index = newInv.findIndex(inv => inv.id === id);
-      // Aplicar redondeo maximo 4 decimales cuando se cambia el stock para evitar errores de coma flotante visuales
+      // Aplicar redondeo a 4 decimales cuando se cambia el stock para evitar errores de coma flotante visuales
       newInv[index][field] = field === 'stock' 
         ? parseFloat(Number(value).toFixed(4)) 
         : Number(value) || 0;
@@ -2013,8 +2017,8 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
               });
-              // Redondeo seguro a 2 decimales al descontar de inventario
-              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(m.amount) || 0)).toFixed(2));
+              // Redondeo seguro a 4 decimales al descontar de inventario
+              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(m.amount) || 0)).toFixed(4));
           });
           (recipe.ingredients?.hops || []).forEach(h => {
               const hName = (h.name || '').toLowerCase();
@@ -2022,7 +2026,7 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Lúpulo' && iName && hName.includes(iName);
               });
-              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(h.amount) || 0)).toFixed(2));
+              if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(h.amount) || 0)).toFixed(4));
           });
           const yeastObj = recipe.ingredients?.yeast;
           if (yeastObj) {
@@ -2033,7 +2037,7 @@ function MainApp() {
                   const iName = (i.name || '').toLowerCase();
                   return i.category === 'Levadura' && iName && yName.includes(iName);
               });
-              if (yItem) yItem.stock = parseFloat(Math.max(0, Number(yItem.stock) - yeastAmount).toFixed(2));
+              if (yItem) yItem.stock = parseFloat(Math.max(0, Number(yItem.stock) - yeastAmount).toFixed(4));
           }
 
           // AHORA VA A LOTES ACTIVOS EN LUGAR DE HISTORIAL DIRECTO
