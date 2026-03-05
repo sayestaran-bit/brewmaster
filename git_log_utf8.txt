@@ -1,0 +1,15 @@
+﻿9ba51cd Cambio y otros API Key
+3bc1ab6 Cambio API Key
+a7519c7 Intentando arreglar problema IA
+abb4663 Solucion error IA
+888d6b1 Solucion de error IA
+25b3e58 Se corriegieron errores y se agrego APiKey correcta
+d04868c Correccion de seguridad
+f1075df Correccion de errores y nuevos adicionales
+9bdd836 Agregamos en Proceeso y corregimos errores
+b76198f Solucion de errores
+52d197e Agregados y solucion de errores
+3d47536 Acceso con google y otras mejoras
+08d2079 Solucion de error de finalizar y guardar
+a17c529 Actualizacion General y solucion de errores
+811ccb5 Nuevas funcionalidades y Dashbard
