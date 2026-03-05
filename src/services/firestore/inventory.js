@@ -12,10 +12,10 @@ import { db } from '../firebase';
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
 const inventoryRef = (uid) =>
-    collection(db, 'brewmaster', 'users', uid, 'inventory');
+    collection(db, 'users', uid, 'inventory');
 
 const inventoryDocRef = (uid, itemId) =>
-    doc(db, 'brewmaster', 'users', uid, 'inventory', itemId);
+    doc(db, 'users', uid, 'inventory', itemId);
 
 // ── Suscripción en tiempo real ─────────────────────────────────────────────────
 /**

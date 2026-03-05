@@ -11,13 +11,13 @@ import { db } from '../firebase';
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
 const batchesRef = (uid) =>
-    collection(db, 'brewmaster', 'users', uid, 'activeBatches');
+    collection(db, 'users', uid, 'activeBatches');
 
 const batchDocRef = (uid, batchId) =>
-    doc(db, 'brewmaster', 'users', uid, 'activeBatches', batchId);
+    doc(db, 'users', uid, 'activeBatches', batchId);
 
 const historyRef = (uid) =>
-    collection(db, 'brewmaster', 'users', uid, 'history');
+    collection(db, 'users', uid, 'history');
 
 // ── Suscripción en tiempo real ─────────────────────────────────────────────────
 /**

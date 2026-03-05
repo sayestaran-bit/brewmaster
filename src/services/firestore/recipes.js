@@ -12,10 +12,10 @@ import { db } from '../firebase';
 
 // ── Ruta de la colección de recetas de un usuario ─────────────────────────────
 const recipesRef = (uid) =>
-    collection(db, 'brewmaster', 'users', uid, 'recipes');
+    collection(db, 'users', uid, 'recipes');
 
 const recipeDocRef = (uid, recipeId) =>
-    doc(db, 'brewmaster', 'users', uid, 'recipes', recipeId);
+    doc(db, 'users', uid, 'recipes', recipeId);
 
 // ── Suscripción en tiempo real ─────────────────────────────────────────────────
 /**

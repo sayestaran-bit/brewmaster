@@ -12,10 +12,10 @@ import { db } from '../firebase';
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
 const historyRef = (uid) =>
-    collection(db, 'brewmaster', 'users', uid, 'history');
+    collection(db, 'users', uid, 'history');
 
 const historyDocRef = (uid, historyId) =>
-    doc(db, 'brewmaster', 'users', uid, 'history', historyId);
+    doc(db, 'users', uid, 'history', historyId);
 
 // ── Suscripción en tiempo real (últimas N entradas) ────────────────────────────
 /**

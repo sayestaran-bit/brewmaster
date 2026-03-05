@@ -38,7 +38,7 @@ export default function DataMigrator({ children }) {
                     arr.forEach(item => {
                         // usamos el id original, o generamos uno si no tiene (aunque deberían tener)
                         const id = item.id || crypto.randomUUID();
-                        const colRef = collection(db, 'brewmaster', 'users', currentUser.uid, collectionName);
+                        const colRef = collection(db, 'users', currentUser.uid, collectionName);
                         const docRef = doc(colRef, id);
                         operations.push({ ref: docRef, data: item });
                     });
