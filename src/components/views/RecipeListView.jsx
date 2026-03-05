@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, RefreshCw, Beer, SlidersHorizontal, BookOpen } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { getThemeForCategory } from '../../utils/helpers';
-import { initialRecipes } from '../../utils/helpers';
+import { initialRecipes, initialInventory } from '../../utils/helpers';
 import { useFeasibilityBatch } from '../../hooks/useFeasibility';
 import RecipeCard from '../recipe/RecipeCard';
 import Button from '../ui/Button';
@@ -12,7 +12,7 @@ import EmptyState from '../ui/EmptyState';
 
 export default function RecipeListView() {
     const navigate = useNavigate();
-    const { recipes, setRecipes, updateCloudData, history, inventory } = useAppContext();
+    const { recipes, setRecipes, updateCloudData, history, inventory, setInventory } = useAppContext();
 
     const [showFeasibility, setShowFeasibility] = useState(false);
     const [feasibilityVolume, setFeasibilityVolume] = useState(20);
@@ -33,12 +33,32 @@ export default function RecipeListView() {
     );
 
     const handleUpdateBaseRecipes = () => {
-        if (window.confirm('Esto actualizará las recetas base a su última versión detallada (sin borrar tus recetas propias). ¿Continuar?')) {
-            const myCustom = safeRecipes.filter(r => !initialRecipes.some(base => base.id === r.id));
-            const updated = [...initialRecipes, ...myCustom];
-            setRecipes(updated);
-            updateCloudData({ recipes: updated });
-            alert('¡Recetas base actualizadas con éxito!');
+        if (window.confirm('Esto actualizará las recetas base y agregará de forma automática el catálogo de insumos por defecto con algo de stock. ¿Continuar?')) {
+            // 1. Merge Recipes
+            const myCustomRecipes = safeRecipes.filter(r => !initialRecipes.some(base => base.id === r.id));
+            const updatedRecipes = [...initialRecipes, ...myCustomRecipes];
+            setRecipes(updatedRecipes);
+
+            // 2. Merge Inventory
+            const safeInventory = Array.isArray(inventory) ? inventory : [];
+            const myCustomInv = safeInventory.filter(i => !initialInventory.some(base => base.id === i.id));
+
+            // For base items, keep the user's version if it exists, otherwise use the initial one
+            // We match by ID or by exact Name to avoid duplicates if they renamed IDs.
+            const baseItemsToKeep = initialInventory.map(baseItem => {
+                const existing = safeInventory.find(i =>
+                    i.id === baseItem.id ||
+                    (i.name && i.name.toLowerCase().trim() === baseItem.name.toLowerCase().trim())
+                );
+                return existing ? existing : baseItem;
+            });
+
+            const updatedInventory = [...baseItemsToKeep, ...myCustomInv];
+            setInventory(updatedInventory);
+
+            // 3. Save to Cloud
+            updateCloudData({ recipes: updatedRecipes, inventory: updatedInventory });
+            alert('¡Recetas e insumos base actualizados con éxito!');
         }
     };
 
