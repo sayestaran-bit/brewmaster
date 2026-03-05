@@ -29,5 +29,14 @@ service cloud.firestore {
       // Permitir eliminación solo del propio usuario (documentos internos).
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
+
+    // ===================================================================
+    // NUEVA ESTRUCTURA: Subcolecciones Normalizadas
+    // Path: users/{userId}/{collectionName}/{docId}
+    // ===================================================================
+    match /users/{userId}/{document=**} {
+      // El usuario puede leer y escribir cualquier documento que cuelgue de su propio UID
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
   }
 }
