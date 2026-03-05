@@ -115,6 +115,11 @@ export async function callGemini(prompt, systemInstruction = "", isJson = false)
             body: JSON.stringify({ prompt, systemInstruction, isJson }),
         });
 
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("text/html")) {
+            throw new Error("El proxy backend (/api/gemini) no responde. Si estás desarrollando en tu PC, asegúrate de correr el proyecto con 'vercel dev' o revisar la URL.");
+        }
+
         const data = await response.json();
 
         if (!response.ok) {
@@ -135,7 +140,6 @@ export async function callGemini(prompt, systemInstruction = "", isJson = false)
 
     } catch (err) {
         console.error("❌ Gemini Error:", err.message);
-        if (isJson) return null;
         throw err;
     }
 }
