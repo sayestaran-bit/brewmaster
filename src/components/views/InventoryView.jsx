@@ -1,57 +1,32 @@
 // /src/components/views/InventoryView.jsx
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
+import { useInventory } from '../../hooks/useInventory';
 import { formatCurrency } from '../../utils/formatters';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 
 export default function InventoryView() {
     const navigate = useNavigate();
-    const { inventory, setInventory, updateCloudData } = useAppContext();
+    const { inventory, addItem, updateItem, deleteItem } = useInventory();
     const [showInvForm, setShowInvForm] = useState(false);
     const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0 });
 
     const totalInventoryValue = inventory.reduce((acc, item) => acc + ((item.stock || 0) * (item.price || 0)), 0);
 
-    const handleAddInvItem = () => {
+    const handleAddInvItem = async () => {
         if (!newInvItem.name.trim()) return;
-        const newInv = [...inventory, { ...newInvItem, id: 'inv-' + Date.now(), stock: Number(newInvItem.stock), price: Number(newInvItem.price) }];
-        setInventory(newInv);
-        updateCloudData({ inventory: newInv });
+        await addItem({ ...newInvItem, stock: Number(newInvItem.stock), price: Number(newInvItem.price) });
         setShowInvForm(false);
         setNewInvItem({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0 });
     };
 
-    const handleDeleteInvItem = (id) => {
-        const newInv = inventory.filter(item => item.id !== id);
-        setInventory(newInv);
-        updateCloudData({ inventory: newInv });
+    const handleDeleteInvItem = async (id) => {
+        if (window.confirm('¿Seguro que deseas eliminar este insumo?')) {
+            await deleteItem(id);
+        }
     };
-
-    // VUL-006 FIX: Debounce para evitar escribir a Firestore en cada keystroke.
-    // Espera 1500ms sin actividad antes de persistir en la nube.
-    const debounceRef = useRef(null);
-
-    const debouncedCloudUpdate = useCallback((data) => {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => {
-            updateCloudData(data);
-        }, 1500);
-    }, [updateCloudData]);
-
-    const updateInvItem = (id, field, value) => {
-        const newInv = [...inventory];
-        const index = newInv.findIndex(inv => inv.id === id);
-        if (index === -1) return; // VUL-008 FIX: Guard clause contra índice inválido
-        newInv[index] = { ...newInv[index] }; // copia inmutable del ítem
-        newInv[index][field] = field === 'stock'
-            ? parseFloat(Number(value).toFixed(4))
-            : Number(value) || 0;
-        setInventory(newInv);
-        debouncedCloudUpdate({ inventory: newInv }); // VUL-006: debounced
-    }
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -138,8 +113,8 @@ export default function InventoryView() {
                                                 <div className="flex items-center gap-2">
                                                     <input
                                                         type="number"
-                                                        value={parseFloat(Number(item.stock).toFixed(4))}
-                                                        onChange={(e) => updateInvItem(item.id, 'stock', e.target.value)}
+                                                        defaultValue={parseFloat(Number(item.stock).toFixed(4))}
+                                                        onBlur={(e) => updateItem(item.id, { stock: parseFloat(Number(e.target.value).toFixed(4)) })}
                                                         className="w-full max-w-[100px] p-2 border border-gray-200 dark:border-slate-700 rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none font-medium bg-white dark:bg-slate-800 dark:text-white transition-all"
                                                     />
                                                     <span className="text-gray-400 font-bold shrink-0">{item.unit}</span>
@@ -150,8 +125,8 @@ export default function InventoryView() {
                                                     <span className="shrink-0">$</span>
                                                     <input
                                                         type="number"
-                                                        value={item.price}
-                                                        onChange={(e) => updateInvItem(item.id, 'price', e.target.value)}
+                                                        defaultValue={item.price}
+                                                        onBlur={(e) => updateItem(item.id, { price: Number(e.target.value) || 0 })}
                                                         className="w-full max-w-[100px] p-2 border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 transition-all"
                                                     />
                                                     <span className="text-xs shrink-0">/ {item.unit}</span>

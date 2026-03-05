@@ -1,10 +1,11 @@
 // /src/components/views/RecipeListView.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, Beer, SlidersHorizontal, BookOpen } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
-import { getThemeForCategory } from '../../utils/helpers';
-import { initialRecipes, initialInventory } from '../../utils/helpers';
+import { Plus, RefreshCw, Beer, SlidersHorizontal, BookOpen, Loader2 } from 'lucide-react';
+import { useRecipes } from '../../hooks/useRecipes';
+import { useInventory } from '../../hooks/useInventory';
+import { useHistory } from '../../hooks/useHistory';
+import { getThemeForCategory, initialRecipes, initialInventory } from '../../utils/helpers';
 import { useFeasibilityBatch } from '../../hooks/useFeasibility';
 import RecipeCard from '../recipe/RecipeCard';
 import Button from '../ui/Button';
@@ -12,7 +13,10 @@ import EmptyState from '../ui/EmptyState';
 
 export default function RecipeListView() {
     const navigate = useNavigate();
-    const { recipes, setRecipes, updateCloudData, history, inventory, setInventory } = useAppContext();
+    const { recipes, addRecipe, deleteRecipe } = useRecipes();
+    const { inventory, addItem } = useInventory();
+    const { history } = useHistory();
+    const [isUpdatingBase, setIsUpdatingBase] = useState(false);
 
     const [showFeasibility, setShowFeasibility] = useState(false);
     const [feasibilityVolume, setFeasibilityVolume] = useState(20);
@@ -32,41 +36,40 @@ export default function RecipeListView() {
         feasibilityVolume
     );
 
-    const handleUpdateBaseRecipes = () => {
-        if (window.confirm('Esto actualizará las recetas base y agregará de forma automática el catálogo de insumos por defecto con algo de stock. ¿Continuar?')) {
-            // 1. Merge Recipes
-            const myCustomRecipes = safeRecipes.filter(r => !initialRecipes.some(base => base.id === r.id));
-            const updatedRecipes = [...initialRecipes, ...myCustomRecipes];
-            setRecipes(updatedRecipes);
-
-            // 2. Merge Inventory
-            const safeInventory = Array.isArray(inventory) ? inventory : [];
-            const myCustomInv = safeInventory.filter(i => !initialInventory.some(base => base.id === i.id));
-
-            // For base items, keep the user's version if it exists, otherwise use the initial one
-            // We match by ID or by exact Name to avoid duplicates if they renamed IDs.
-            const baseItemsToKeep = initialInventory.map(baseItem => {
-                const existing = safeInventory.find(i =>
-                    i.id === baseItem.id ||
-                    (i.name && i.name.toLowerCase().trim() === baseItem.name.toLowerCase().trim())
+    const handleUpdateBaseRecipes = async () => {
+        if (window.confirm('Esto agregará las recetas base y algunos insumos por defecto a tu cuenta. Las recetas que ya existan con el mismo nombre se mantendrán. ¿Continuar?')) {
+            setIsUpdatingBase(true);
+            try {
+                // 1. Filter missing base recipes and add them
+                const missingRecipes = initialRecipes.filter(base =>
+                    !safeRecipes.some(r => r.name.toLowerCase() === base.name.toLowerCase())
                 );
-                return existing ? existing : baseItem;
-            });
+                for (const recipe of missingRecipes) {
+                    await addRecipe(recipe);
+                }
 
-            const updatedInventory = [...baseItemsToKeep, ...myCustomInv];
-            setInventory(updatedInventory);
+                // 2. Filter missing base inventory items and add them
+                const safeInventory = Array.isArray(inventory) ? inventory : [];
+                const missingInventory = initialInventory.filter(base =>
+                    !safeInventory.some(i => i.name.toLowerCase() === base.name.toLowerCase())
+                );
+                for (const item of missingInventory) {
+                    await addItem({ ...item, stock: Number(item.stock), price: Number(item.price) });
+                }
 
-            // 3. Save to Cloud
-            updateCloudData({ recipes: updatedRecipes, inventory: updatedInventory });
-            alert('¡Recetas e insumos base actualizados con éxito!');
+                alert('¡Catálogo base actualizado con éxito!');
+            } catch (err) {
+                console.error('Error actualizando base:', err);
+                alert('Hubo un error al actualizar la base de datos.');
+            } finally {
+                setIsUpdatingBase(false);
+            }
         }
     };
 
-    const handleDeleteRecipe = (recipe) => {
+    const handleDeleteRecipe = async (recipe) => {
         if (window.confirm(`¿Seguro que deseas eliminar la receta: ${recipe.name}?`)) {
-            const newRecipes = recipes.filter(r => r.id !== recipe.id);
-            setRecipes(newRecipes);
-            updateCloudData({ recipes: newRecipes });
+            await deleteRecipe(recipe.id);
         }
     };
 
@@ -82,11 +85,12 @@ export default function RecipeListView() {
                     <Button
                         variant="ghost"
                         size="xs"
-                        icon={RefreshCw}
+                        icon={isUpdatingBase ? Loader2 : RefreshCw}
+                        disabled={isUpdatingBase}
                         onClick={handleUpdateBaseRecipes}
                         className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                     >
-                        Actualizar Base
+                        {isUpdatingBase ? 'Actualizando...' : 'Actualizar Base'}
                     </Button>
                 </div>
 

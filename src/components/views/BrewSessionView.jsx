@@ -2,15 +2,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft, AlertTriangle } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
 import { formatTime, getFormattedDate } from '../../utils/formatters';
-import { calculateRecipeCost, deductInventory } from '../../utils/costCalculator';
+import { calculateRecipeCost } from '../../utils/costCalculator';
+import { useRecipes } from '../../hooks/useRecipes';
+import { useInventory } from '../../hooks/useInventory';
+import { useActiveBatches } from '../../hooks/useActiveBatches';
 
 export default function BrewSessionView() {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { recipes, inventory, setInventory, activeBatches, setActiveBatches, updateCloudData } = useAppContext();
+    const { recipes } = useRecipes();
+    const { inventory, deductBatch } = useInventory();
+    const { startBatch } = useActiveBatches();
 
     const [recipe, setRecipe] = useState(null);
     const [targetVolume, setTargetVolume] = useState(20);
@@ -82,15 +86,16 @@ export default function BrewSessionView() {
     const step = stepsArray[safeStepIdx];
     const isLastStep = safeStepIdx === stepsArray.length - 1;
 
-    const handleNextStep = () => {
+    const handleNextStep = async () => {
         if (isLastStep) {
             if (window.confirm(`¿Terminaste el día de cocción para ${recipe.name}? Esto descontará insumos de tu inventario y enviará el lote a Fermentación.`)) {
                 try {
                     const costResult = calculateRecipeCost(recipe, inventory, targetVolume);
-                    const newInventory = deductInventory(inventory, recipe, targetVolume);
+
+                    // Deduct inventory sequentially
+                    await deductBatch(recipe, targetVolume);
 
                     const newBatchItem = {
-                        id: 'batch-' + Date.now(),
                         recipeId: recipe.id,
                         recipeName: recipe.name || 'Sin Nombre',
                         dateBrewed: getFormattedDate(),
@@ -105,16 +110,11 @@ export default function BrewSessionView() {
                         status: 'Fermentando'
                     };
 
-                    const newBatches = [newBatchItem, ...activeBatches];
-
-                    setActiveBatches(newBatches);
-                    setInventory(newInventory);
-                    updateCloudData({ activeBatches: newBatches, inventory: newInventory });
+                    await startBatch(newBatchItem);
                     navigate('/active');
                 } catch (error) {
                     console.error("Error al finalizar cocción:", error);
-                    alert("Hubo un problema descontando el inventario, pero el lote fue guardado en activos.");
-                    navigate('/active');
+                    alert("Hubo un problema descontando el inventario: " + error.message);
                 }
             }
         } else {

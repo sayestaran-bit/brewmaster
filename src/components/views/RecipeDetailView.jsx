@@ -2,16 +2,17 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
-import { formatCurrency } from '../../utils/formatters';
 import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
 import { calculateRecipeCost } from '../../utils/costCalculator';
 import { getRecipeAdvice } from '../../services/gemini';
+import { useRecipes } from '../../hooks/useRecipes';
+import { useInventory } from '../../hooks/useInventory';
 
 export default function RecipeDetailView() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { recipes, inventory } = useAppContext();
+    const { recipes } = useRecipes();
+    const { inventory } = useInventory();
 
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [targetVol, setTargetVol] = useState(20);
@@ -133,7 +134,7 @@ export default function RecipeDetailView() {
             </div>
 
             {/* HEADER DINÁMICO */}
-            <div className={`${theme.header} text-white p-8 md:p-12 rounded-t-[2.5rem] shadow-xl flex flex-col md:flex-row justify-between items-start md:items-end relative overflow-hidden`}>
+            <div className={`${theme.bg} text-white p-8 md:p-12 rounded-t-[2.5rem] shadow-xl flex flex-col md:flex-row justify-between items-start md:items-end relative overflow-hidden`}>
                 <div className="relative z-10 w-full md:w-2/3">
                     <span className="bg-white/20 px-5 py-2 rounded-full text-sm font-black tracking-[0.2em] uppercase mb-4 inline-block shadow-sm backdrop-blur-md">
                         {scaledRecipe.category || 'Sin Categoría'}
@@ -176,20 +177,20 @@ export default function RecipeDetailView() {
 
             {/* TABS NAVEGACIÓN */}
             <div className="flex flex-wrap border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-x-auto rounded-b-none">
-                <button onClick={() => setActiveTab('recipe')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'recipe' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                <button onClick={() => setActiveTab('recipe')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'recipe' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                     <BookOpen size={18} /> Receta
                 </button>
-                <button onClick={() => setActiveTab('process')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'process' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                <button onClick={() => setActiveTab('process')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'process' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                     <CheckCircle2 size={18} /> Proceso
                 </button>
-                <button onClick={() => setActiveTab('water')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'water' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                <button onClick={() => setActiveTab('water')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'water' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                     <Droplets size={18} /> Agua
                 </button>
-                <button onClick={() => setActiveTab('tips')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'tips' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                <button onClick={() => setActiveTab('tips')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'tips' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                     <Info size={18} /> Tips
                 </button>
                 {(Array.isArray(scaledRecipe.modifications) && scaledRecipe.modifications.length > 0) && (
-                    <button onClick={() => setActiveTab('history')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'history' ? `${theme.bg} border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                    <button onClick={() => setActiveTab('history')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'history' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                         <FileClock size={18} /> Cambios
                     </button>
                 )}
@@ -345,7 +346,7 @@ export default function RecipeDetailView() {
                 {/* TAB: PROCESO */}
                 {activeTab === 'process' && (
                     <div className="space-y-6 animate-fadeIn">
-                        <div className={`${theme.header} text-white p-8 md:p-12 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 mb-10`}>
+                        <div className={`${theme.bg} text-white p-8 md:p-12 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 mb-10`}>
                             <div className="text-center md:text-left">
                                 <h3 className="text-4xl font-black flex items-center justify-center md:justify-start gap-4 mb-3 tracking-tighter"><Play size={36} className="fill-white" /> Día de Cocción</h3>
                                 <p className="text-white/90 font-bold text-base">Modo guiado paso a paso. Al finalizar descontaremos de tu inventario.</p>

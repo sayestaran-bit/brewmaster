@@ -2,13 +2,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Hourglass, ArrowLeft, Beaker, CalendarClock, CalendarPlus, Activity, Trash2, CheckCircle2 } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
+import { useActiveBatches } from '../../hooks/useActiveBatches';
+import { useHistory } from '../../hooks/useHistory';
 import { standardizeDate, getFormattedDate } from '../../utils/formatters';
 import { getThemeForCategory } from '../../utils/helpers';
 
 export default function ActiveBatchesView() {
     const navigate = useNavigate();
-    const { activeBatches, setActiveBatches, history, setHistory, updateCloudData } = useAppContext();
+    const { activeBatches, completeBatch, discardBatch } = useActiveBatches();
+    const { history } = useHistory();
 
     // Helper local que estaba en App.jsx para calendar
     const generateGoogleCalendarLink = (title, daysFromNow, startTimestamp, details) => {
@@ -80,22 +82,17 @@ export default function ActiveBatchesView() {
 
                                     <div className="flex flex-col justify-end gap-3 min-w-[200px]">
                                         <button
-                                            onClick={() => {
+                                            onClick={async () => {
                                                 if (window.confirm(`¿Seguro que deseas embotellar y mover ${batch.recipeName} al Historial definitivo?`)) {
                                                     const newHistoryItem = {
                                                         ...batch,
                                                         dateBrewed: batch.dateBrewed || batch.date,
                                                         dateBottled: getFormattedDate(),
                                                         date: batch.dateBrewed || batch.date,
-                                                        id: 'hist-' + Date.now(),
                                                         notes: `Embotellada en el Día ${daysElapsed}`,
                                                         status: 'Embotellada'
                                                     };
-                                                    const newHistory = [newHistoryItem, ...history];
-                                                    const newActive = activeBatches.filter(b => b.id !== batch.id);
-                                                    setHistory(newHistory);
-                                                    setActiveBatches(newActive);
-                                                    updateCloudData({ history: newHistory, activeBatches: newActive });
+                                                    await completeBatch(batch.id, newHistoryItem);
                                                     alert("¡Lote embotellado con éxito!");
                                                     navigate('/history');
                                                 }
@@ -105,11 +102,9 @@ export default function ActiveBatchesView() {
                                             <CheckCircle2 size={20} /> Embotellar Lote
                                         </button>
                                         <button
-                                            onClick={() => {
+                                            onClick={async () => {
                                                 if (window.confirm("¿Seguro que deseas ELIMINAR este lote? No se guardará en el historial.")) {
-                                                    const newActive = activeBatches.filter(b => b.id !== batch.id);
-                                                    setActiveBatches(newActive);
-                                                    updateCloudData({ activeBatches: newActive });
+                                                    await discardBatch(batch.id);
                                                 }
                                             }}
                                             className="bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-500 font-bold py-3 rounded-xl transition-colors w-full flex items-center justify-center gap-2"

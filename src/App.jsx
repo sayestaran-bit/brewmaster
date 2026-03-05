@@ -6,6 +6,7 @@ import { useAppContext } from './context/AppContext';
 // Layout & Protect (always loaded — tiny files, needed for every route)
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
+import DataMigrator from './components/layout/DataMigrator';
 
 // ── Lazy-loaded views ─────────────────────────────────────────────────────────
 // Auth is loaded immediately since it's the landing page for unauthenticated users
@@ -119,11 +120,13 @@ function MainApp() {
   );
 }
 
-// Envolvemos toda la app en el escudo de errores
+// Envolvemos toda la app en el escudo de errores y el migrador de datos
 export default function SafeApp() {
   return (
     <ErrorBoundary>
-      <MainApp />
+      <DataMigrator>
+        <MainApp />
+      </DataMigrator>
     </ErrorBoundary>
   );
 }

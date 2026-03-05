@@ -3,11 +3,14 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, TrendingUp, BarChart3, DollarSign, Beer, Package, Calendar, Filter } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { useHistory } from '../../hooks/useHistory';
+import { useInventory } from '../../hooks/useInventory';
 import { formatCurrency, standardizeDate, parseDateToTimestamp } from '../../utils/formatters';
 
 export default function CostAnalysisView() {
     const navigate = useNavigate();
-    const { history, inventory } = useAppContext();
+    const { history } = useHistory();
+    const { inventory } = useInventory();
 
     const [periodFilter, setPeriodFilter] = useState('all'); // all, 3m, 6m, 1y
 

@@ -2,30 +2,24 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { History, ArrowLeft, CalendarClock, Trash2, Beer, Droplets, Star } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
+import { useHistory } from '../../hooks/useHistory';
 import { formatCurrency, standardizeDate } from '../../utils/formatters';
 
 export default function HistoryView() {
     const navigate = useNavigate();
-    const { history, setHistory, updateCloudData } = useAppContext();
+    const { history, deleteEntry, updateTasting } = useHistory();
 
     const [tastingFormId, setTastingFormId] = useState(null);
     const [tastingData, setTastingData] = useState({ rating: 0, notes: '' });
 
-    const deleteHistoryItem = (id) => {
+    const deleteHistoryItem = async (id) => {
         if (window.confirm("¿Seguro que deseas eliminar el historial de este lote? Esta acción no devolverá insumos al inventario.")) {
-            const newHistory = history.filter(h => h.id !== id);
-            setHistory(newHistory);
-            updateCloudData({ history: newHistory });
+            await deleteEntry(id);
         }
     };
 
-    const saveTasting = () => {
-        const newHistory = history.map(h =>
-            h.id === tastingFormId ? { ...h, tasting: tastingData } : h
-        );
-        setHistory(newHistory);
-        updateCloudData({ history: newHistory });
+    const saveTasting = async () => {
+        await updateTasting(tastingFormId, tastingData);
         setTastingFormId(null);
     };
 

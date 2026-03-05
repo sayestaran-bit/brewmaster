@@ -4,14 +4,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Sparkles, Loader2, Wand2, Wheat, Leaf, Droplets, ListOrdered, Trash2, Plus, Info, Save, BookOpen } from 'lucide-react';
 
 import AutocompleteInput from '../common/AutocompleteInput';
-import { useAppContext } from '../../context/AppContext';
+import { useRecipes } from '../../hooks/useRecipes';
+import { useInventory } from '../../hooks/useInventory';
 import { getFormattedDate } from '../../utils/formatters';
 import { getRecipeAdvice, callGemini } from '../../services/gemini';
 
 export default function RecipeForm() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { recipes, setRecipes, inventory, setInventory, updateCloudData } = useAppContext();
+    const { recipes, addRecipe, updateRecipe } = useRecipes();
+    const { inventory, addItem } = useInventory();
 
     const isEditing = !!id;
     const [initialData, setInitialData] = useState(null);
@@ -72,10 +74,9 @@ export default function RecipeForm() {
         }
     }, [id, recipes, isEditing]);
 
-    const onAddInventoryItem = (name, category) => {
+    const onAddInventoryItem = async (name, category) => {
         const unit = category === 'Levadura' ? 'sobre' : category === 'Lúpulo' ? 'g' : 'kg';
-        const newInv = [...inventory, { id: 'inv-' + Date.now(), category, name, stock: 0, unit, price: 0 }];
-        setInventory(newInv); updateCloudData({ inventory: newInv });
+        await addItem({ category, name, stock: 0, unit, price: 0 });
     };
 
     const handleClone = (e) => {
@@ -166,7 +167,7 @@ export default function RecipeForm() {
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.name) return alert("Ponle un nombre a tu receta");
 
         const newModifications = [...(formData.modifications || [])];
@@ -176,8 +177,7 @@ export default function RecipeForm() {
             newModifications.push({ date: getFormattedDate(), note: "Edición general." });
         }
 
-        const recipeToSave = {
-            id: isEditing ? formData.id : 'recipe-' + Date.now(),
+        const recipeData = {
             category: formData.category,
             name: formData.name,
             description: formData.description || '',
@@ -200,16 +200,17 @@ export default function RecipeForm() {
             modifications: newModifications
         };
 
-        if (isEditing) {
-            const newRecipesList = recipes.map(r => r.id === recipeToSave.id ? recipeToSave : r);
-            setRecipes(newRecipesList);
-            updateCloudData({ recipes: newRecipesList });
-            navigate(`/recipes/${recipeToSave.id}`);
-        } else {
-            const newRecipesList = [...recipes, recipeToSave];
-            setRecipes(newRecipesList);
-            updateCloudData({ recipes: newRecipesList });
-            navigate('/recipes');
+        try {
+            if (isEditing) {
+                await updateRecipe(formData.id, recipeData);
+                navigate(`/recipes/${formData.id}`);
+            } else {
+                await addRecipe(recipeData);
+                navigate('/recipes');
+            }
+        } catch (error) {
+            console.error("Error guardando receta:", error);
+            alert("No se pudo guardar la receta.");
         }
     };
 

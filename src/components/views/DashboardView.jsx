@@ -6,9 +6,11 @@ import {
     Beer, BookOpen
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAppContext } from '../../context/AppContext';
 import { formatCurrency, standardizeDate } from '../../utils/formatters';
 import { getThemeForCategory } from '../../utils/helpers';
+import { useHistory } from '../../hooks/useHistory';
+import { useActiveBatches } from '../../hooks/useActiveBatches';
+import { useInventory } from '../../hooks/useInventory';
 import { useDashboardStats } from '../../hooks/useDashboardStats';
 import { useInventoryAlerts } from '../../hooks/useInventoryAlerts';
 import StatCard from '../ui/StatCard';
@@ -18,7 +20,9 @@ import Button from '../ui/Button';
 
 export default function DashboardView() {
     const navigate = useNavigate();
-    const { history, activeBatches, inventory } = useAppContext();
+    const { history } = useHistory();
+    const { batches: activeBatches } = useActiveBatches();
+    const { inventory } = useInventory();
 
     const {
         totalLiters, totalCost, totalBatches,

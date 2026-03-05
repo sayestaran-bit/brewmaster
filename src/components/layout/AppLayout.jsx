@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
+import { useActiveBatches } from '../../hooks/useActiveBatches';
 
 const NAV_ITEMS = [
     { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard, activeColor: 'text-amber-500  border-amber-500  bg-amber-50/50  dark:bg-amber-900/20' },
@@ -21,7 +22,8 @@ const INACTIVE = 'text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hov
 
 export default function AppLayout() {
     const { currentUser, logout } = useAuth();
-    const { darkMode, setDarkMode, isSaving, forceSyncCloud, activeBatches } = useAppContext();
+    const { darkMode, setDarkMode } = useAppContext();
+    const { batches: activeBatches } = useActiveBatches();
 
     const activeBatchCount = Array.isArray(activeBatches) ? activeBatches.length : 0;
 
@@ -51,20 +53,6 @@ export default function AppLayout() {
 
                         {/* Controls */}
                         <div className="relative z-10 flex items-center gap-2 flex-wrap justify-center">
-                            {currentUser && (
-                                <button
-                                    onClick={forceSyncCloud}
-                                    disabled={isSaving}
-                                    title="Forzar Sincronización"
-                                    className="flex items-center gap-1.5 text-[11px] font-black bg-slate-800/80 hover:bg-slate-700 px-3 py-2 rounded-full border border-slate-600 backdrop-blur-sm transition-colors disabled:cursor-wait shadow-sm"
-                                >
-                                    {isSaving
-                                        ? <><RefreshCw size={12} className="animate-spin text-amber-400" /><span className="text-amber-400">GUARDANDO</span></>
-                                        : <><Cloud size={12} className="text-emerald-400" /><span className="text-emerald-400 hidden sm:inline">SINCRONIZADO</span></>
-                                    }
-                                </button>
-                            )}
-
                             <button
                                 onClick={() => setDarkMode(!darkMode)}
                                 className="flex items-center justify-center w-9 h-9 bg-slate-800/80 hover:bg-slate-700 rounded-full border border-slate-600 backdrop-blur-sm transition-colors shadow-sm text-slate-300 hover:text-amber-300"
