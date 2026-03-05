@@ -33,12 +33,9 @@ export default function RecipeDetailView() {
         }
     }, [id, recipes, navigate]);
 
-    if (!selectedRecipe) return null;
-
-    const theme = getThemeForCategory(selectedRecipe.category);
-
-    // ── Memoized: only recalculate when recipe or target volume changes ─────────
+    // --- HOOKS ALWAYS AT THE TOP TO AVOID REACT ERROR 310 ---
     const scaledRecipe = useMemo(() => {
+        if (!selectedRecipe) return null;
         const scaleFactor = (targetVol || 1) / (selectedRecipe.targetVolume || 1);
         const safeMalts = Array.isArray(selectedRecipe.ingredients?.malts) ? selectedRecipe.ingredients.malts : [];
         const safeHops = Array.isArray(selectedRecipe.ingredients?.hops) ? selectedRecipe.ingredients.hops : [];
@@ -60,12 +57,12 @@ export default function RecipeDetailView() {
     }, [selectedRecipe, targetVol]);
 
     const costInfo = useMemo(
-        () => calculateRecipeCost(selectedRecipe, inventory, targetVol),
+        () => selectedRecipe ? calculateRecipeCost(selectedRecipe, inventory, targetVol) : null,
         [selectedRecipe, inventory, targetVol]
     );
 
     const saltAdditions = useMemo(() => {
-        if (!scaledRecipe.waterProfile) return null;
+        if (!scaledRecipe || !scaledRecipe.waterProfile) return null;
         const target = scaledRecipe.waterProfile;
         const totalWaterLiters = Number(scaledRecipe.ingredients.water.strike) + Number(scaledRecipe.ingredients.water.sparge);
         if (totalWaterLiters <= 0) return null;
@@ -119,6 +116,10 @@ export default function RecipeDetailView() {
             setIsAdvising(false);
         }
     };
+
+    if (!selectedRecipe || !scaledRecipe || !costInfo) return null;
+
+    const theme = getThemeForCategory(selectedRecipe.category);
 
     return (
         <div className="animate-fadeIn">
