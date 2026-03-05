@@ -1,7 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #f8fafc; /* Color slate-50 */
+@layer base {
+  body {
+    @apply bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Smooth scroll */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400 dark:bg-slate-600;
+  }
+}
+
+@layer utilities {
+  /* Staggered animation delays for lists */
+  .animate-delay-1 { animation-delay: 75ms; }
+  .animate-delay-2 { animation-delay: 150ms; }
+  .animate-delay-3 { animation-delay: 225ms; }
+  .animate-delay-4 { animation-delay: 300ms; }
+  .animate-delay-5 { animation-delay: 375ms; }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20 dark:border-slate-700/30;
+  }
 }

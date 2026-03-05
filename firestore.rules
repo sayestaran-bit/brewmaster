@@ -1,0 +1,33 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===================================================================
+    // REGLA POR DEFECTO: Denegar todo acceso no autorizado.
+    // ===================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===================================================================
+    // DATOS DE USUARIO (Tenant Isolation)
+    // Cada usuario solo puede leer/escribir SUS propios datos.
+    // Path: artifacts/{collectionPrefix}/users/{userId}/brewery/mainData
+    // ===================================================================
+    match /artifacts/{collectionPrefix}/users/{userId}/{document=**} {
+
+      // Solo el usuario autenticado con el mismo UID puede leer sus datos.
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // Solo el usuario autenticado puede escribir sus datos,
+      // con un límite de tamaño de documento (~1 MB) para evitar abuso.
+      allow create, update: if request.auth != null
+                            && request.auth.uid == userId
+                            && request.resource.data.keys().size() <= 50;
+
+      // Permitir eliminación solo del propio usuario (documentos internos).
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

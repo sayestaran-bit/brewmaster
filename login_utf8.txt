@@ -1,0 +1,13 @@
+﻿[33m[1m! [22m[39m Authenticating with a `login:ci` token is deprecated and will be removed in a future major version of `firebase-tools`. Instead, use a service account key with `GOOGLE_APPLICATION_CREDENTIALS`: https://cloud.google.com/docs/authentication/getting-started
+
+Visit this URL on this device to log in:
+[1m[4mhttps://accounts.google.com/o/oauth2/auth?client_id=563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com&scope=email%20openid%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloudplatformprojects.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Ffirebase%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&response_type=code&state=258726824&redirect_uri=http%3A%2F%2Flocalhost%3A9005[24m[22m
+
+Waiting for authentication...
+
+[32m[1m+ [22m[39m Success! Use this token to login on a CI server:
+
+[1m1//0hzpxG9KKDHN3CgYIARAAGBESNwF-L9IrINJ3vOgAsR3n8jIxCtRxizlnFDdwEN92rItQAYQ9qjScU2ge6bZbbRGryzCiXYypLTY[22m
+
+Example: firebase deploy --token "$FIREBASE_TOKEN"
+

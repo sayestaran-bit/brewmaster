@@ -82,7 +82,15 @@ export default function ActiveBatchesView() {
                                         <button
                                             onClick={() => {
                                                 if (window.confirm(`¿Seguro que deseas embotellar y mover ${batch.recipeName} al Historial definitivo?`)) {
-                                                    const newHistoryItem = { ...batch, date: getFormattedDate(), id: 'hist-' + Date.now(), notes: `Embotellada en el Día ${daysElapsed}` };
+                                                    const newHistoryItem = {
+                                                        ...batch,
+                                                        dateBrewed: batch.dateBrewed || batch.date,
+                                                        dateBottled: getFormattedDate(),
+                                                        date: batch.dateBrewed || batch.date,
+                                                        id: 'hist-' + Date.now(),
+                                                        notes: `Embotellada en el Día ${daysElapsed}`,
+                                                        status: 'Embotellada'
+                                                    };
                                                     const newHistory = [newHistoryItem, ...history];
                                                     const newActive = activeBatches.filter(b => b.id !== batch.id);
                                                     setHistory(newHistory);

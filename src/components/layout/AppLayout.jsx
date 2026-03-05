@@ -2,96 +2,152 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
-    Beaker, RefreshCw, Cloud, Sun, Moon, LogOut, LayoutDashboard,
-    TrendingUp, BookOpen, Hourglass, Package, History
+    Beaker, RefreshCw, Cloud, Sun, Moon, LogOut,
+    LayoutDashboard, BookOpen, Flame, Package, History,
+    BarChart2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
 
+const NAV_ITEMS = [
+    { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard, activeColor: 'text-amber-500  border-amber-500  bg-amber-50/50  dark:bg-amber-900/20' },
+    { to: '/recipes', label: 'Recetas', Icon: BookOpen, activeColor: 'text-orange-500  border-orange-500  bg-orange-50/50  dark:bg-orange-900/20' },
+    { to: '/active', label: 'Producción', Icon: Flame, activeColor: 'text-emerald-500 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20', badge: true },
+    { to: '/inventory', label: 'Inventario', Icon: Package, activeColor: 'text-sky-500     border-sky-500     bg-sky-50/50     dark:bg-sky-900/20' },
+    { to: '/history', label: 'Historial', Icon: History, activeColor: 'text-violet-500  border-violet-500  bg-violet-50/50  dark:bg-violet-900/20' },
+];
+
+const INACTIVE = 'text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800';
+
 export default function AppLayout() {
     const { currentUser, logout } = useAuth();
-    const {
-        darkMode, setDarkMode, isSaving, forceSyncCloud, activeBatches
-    } = useAppContext();
+    const { darkMode, setDarkMode, isSaving, forceSyncCloud, activeBatches } = useAppContext();
+
+    const activeBatchCount = Array.isArray(activeBatches) ? activeBatches.length : 0;
 
     return (
         <div className={darkMode ? 'dark' : ''}>
-            <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans p-4 md:p-6 lg:p-10 selection:bg-amber-200 transition-colors duration-300">
+            <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans
+                            selection:bg-amber-200 transition-colors duration-300
+                            /* bottom padding for mobile tab bar */
+                            pb-24 md:pb-0
+                            p-4 md:p-6 lg:p-10">
                 <div className="max-w-6xl mx-auto">
 
-                    {/* HEADER GLOBAL REDISEÑADO */}
-                    <div className="bg-slate-900 text-white p-6 md:p-8 rounded-3xl shadow-xl mb-8 flex flex-col md:flex-row justify-between items-start md:items-center relative overflow-hidden border border-slate-700 gap-6">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse pointer-events-none"></div>
-                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse pointer-events-none" style={{ animationDelay: '2s' }}></div>
+                    {/* ── HEADER ────────────────────────────────── */}
+                    <div className="bg-slate-900 text-white p-5 md:p-6 rounded-3xl shadow-xl mb-6 flex flex-col sm:flex-row justify-between items-center relative overflow-hidden border border-slate-700 gap-4">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-pulse-slow pointer-events-none" />
 
-                        {/* Título Izquierda */}
-                        <div className="relative z-10 flex items-center gap-4 text-left w-full md:w-auto">
-                            <div className="bg-gradient-to-br from-amber-400 to-amber-600 p-4 rounded-2xl shadow-lg shrink-0">
-                                <Beaker size={36} className="text-slate-900" />
+                        {/* Logo */}
+                        <div className="relative z-10 flex items-center gap-3 shrink-0">
+                            <div className="bg-gradient-to-br from-amber-400 to-amber-600 p-3 rounded-2xl shadow-lg">
+                                <Beaker size={28} className="text-slate-900" />
                             </div>
                             <div>
-                                <h1 className="text-3xl md:text-4xl lg:text-5xl font-black tracking-tight text-white mb-1">BrewMaster</h1>
-                                <p className="text-slate-400 text-xs md:text-sm font-medium">Sistema operativo cervecero.</p>
+                                <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white leading-none">BrewMaster</h1>
+                                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Sistema Cervecero</p>
                             </div>
                         </div>
 
-                        {/* Controles Derecha */}
-                        <div className="relative z-10 flex flex-col items-start md:items-end gap-4 w-full md:w-auto shrink-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                                {currentUser && (
-                                    <button onClick={forceSyncCloud} disabled={isSaving} title="Forzar Sincronización Manual" className="flex items-center gap-2 text-xs font-black bg-slate-800/80 hover:bg-slate-700 px-4 py-2.5 rounded-full border border-slate-600 backdrop-blur-sm transition-colors disabled:cursor-wait shadow-sm">
-                                        {isSaving ? <><RefreshCw size={14} className="animate-spin text-amber-400" /><span className="text-amber-400">GUARDANDO...</span></> : <><Cloud size={14} className="text-emerald-400" /><span className="text-emerald-400">NUBE SINC.</span></>}
-                                    </button>
-                                )}
-
-                                <button onClick={() => setDarkMode(!darkMode)} className="flex items-center justify-center w-10 h-10 bg-slate-800/80 hover:bg-slate-700 rounded-full border border-slate-600 backdrop-blur-sm transition-colors shadow-sm text-slate-300 hover:text-amber-300">
-                                    {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+                        {/* Controls */}
+                        <div className="relative z-10 flex items-center gap-2 flex-wrap justify-center">
+                            {currentUser && (
+                                <button
+                                    onClick={forceSyncCloud}
+                                    disabled={isSaving}
+                                    title="Forzar Sincronización"
+                                    className="flex items-center gap-1.5 text-[11px] font-black bg-slate-800/80 hover:bg-slate-700 px-3 py-2 rounded-full border border-slate-600 backdrop-blur-sm transition-colors disabled:cursor-wait shadow-sm"
+                                >
+                                    {isSaving
+                                        ? <><RefreshCw size={12} className="animate-spin text-amber-400" /><span className="text-amber-400">GUARDANDO</span></>
+                                        : <><Cloud size={12} className="text-emerald-400" /><span className="text-emerald-400 hidden sm:inline">SINCRONIZADO</span></>
+                                    }
                                 </button>
+                            )}
 
-                                {currentUser ? (
-                                    <button onClick={logout} className="flex items-center gap-2 text-xs font-bold bg-red-900/30 hover:bg-red-900/50 text-red-300 px-4 py-2.5 rounded-full border border-red-800/50 backdrop-blur-sm transition-colors shadow-sm">
-                                        <LogOut size={14} /> Salir ({currentUser.isAnonymous ? 'Invitado' : currentUser.email?.split('@')[0]})
-                                    </button>
-                                ) : null}
-                            </div>
+                            <button
+                                onClick={() => setDarkMode(!darkMode)}
+                                className="flex items-center justify-center w-9 h-9 bg-slate-800/80 hover:bg-slate-700 rounded-full border border-slate-600 backdrop-blur-sm transition-colors shadow-sm text-slate-300 hover:text-amber-300"
+                            >
+                                {darkMode ? <Sun size={14} /> : <Moon size={14} />}
+                            </button>
 
                             {currentUser && (
-                                <NavLink to="/" end className={({ isActive }) => `bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-xl font-bold transition-all border border-white/10 backdrop-blur-md flex items-center gap-2 hover:scale-105 shadow-sm w-full md:w-auto justify-center ${isActive ? 'ring-2 ring-white/50' : ''}`}>
-                                    <LayoutDashboard size={18} /> Dashboard
-                                </NavLink>
+                                <button
+                                    onClick={logout}
+                                    className="flex items-center gap-1.5 text-[11px] font-bold bg-red-900/30 hover:bg-red-900/50 text-red-300 px-3 py-2 rounded-full border border-red-800/50 backdrop-blur-sm transition-colors shadow-sm"
+                                >
+                                    <LogOut size={12} /> Salir ({currentUser.isAnonymous ? 'Invitado' : currentUser.email?.split('@')[0]})
+                                </button>
                             )}
                         </div>
                     </div>
 
-                    {/* Menú Principal Global - Solo visible si hay usuario autenticado */}
+                    {/* ── DESKTOP NAV BAR ───────────────────────── */}
                     {currentUser && (
-                        <div className="flex bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-x-auto mb-8">
-                            <NavLink to="/" end className={({ isActive }) => `flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${isActive ? 'text-blue-500 border-b-4 border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                                <TrendingUp size={18} /> Métricas
-                            </NavLink>
-                            <NavLink to="/recipes" className={({ isActive }) => `flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${isActive ? 'text-amber-500 border-b-4 border-amber-500 bg-amber-50/50 dark:bg-amber-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                                <BookOpen size={18} /> Mis Recetas
-                            </NavLink>
-                            <NavLink to="/active" className={({ isActive }) => `flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${isActive ? 'text-emerald-500 border-b-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                                <Hourglass size={18} /> En Proceso
-                                {(activeBatches?.length > 0) && <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] ml-1">{activeBatches.length}</span>}
-                            </NavLink>
-                            <NavLink to="/inventory" className={({ isActive }) => `flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${isActive ? 'text-blue-500 border-b-4 border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                                <Package size={18} /> Inventario
-                            </NavLink>
-                            <NavLink to="/history" className={({ isActive }) => `flex-1 min-w-[120px] py-4 font-black flex items-center justify-center gap-2 transition-colors ${isActive ? 'text-purple-500 border-b-4 border-purple-500 bg-purple-50/50 dark:bg-purple-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                                <History size={18} /> Historial
-                            </NavLink>
+                        <div className="hidden md:flex bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-x-auto mb-8">
+                            {NAV_ITEMS.map(({ to, label, Icon, activeColor, badge }) => (
+                                <NavLink
+                                    key={to}
+                                    to={to}
+                                    end={to === '/dashboard'}
+                                    className={({ isActive }) =>
+                                        `flex-1 min-w-[100px] py-3.5 font-black text-sm flex items-center justify-center gap-2 transition-all relative
+                                        ${isActive ? `${activeColor} border-b-[3px]` : INACTIVE}`
+                                    }
+                                >
+                                    <Icon size={17} /> {label}
+                                    {badge && activeBatchCount > 0 && (
+                                        <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black absolute top-2 right-4">
+                                            {activeBatchCount}
+                                        </span>
+                                    )}
+                                </NavLink>
+                            ))}
                         </div>
                     )}
 
-                    {/* CONTENEDOR DE VISTAS (Outlet renderiza la ruta actual) */}
+                    {/* ── MAIN CONTENT ──────────────────────────── */}
                     <main className="transition-all duration-300 ease-in-out">
                         <Outlet />
                     </main>
-
                 </div>
             </div>
+
+            {/* ── MOBILE BOTTOM TAB BAR ─────────────────────── */}
+            {currentUser && (
+                <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-gray-200 dark:border-slate-800 shadow-2xl">
+                    <div className="flex items-stretch h-16 max-w-lg mx-auto">
+                        {NAV_ITEMS.map(({ to, label, Icon, badge }) => (
+                            <NavLink
+                                key={to}
+                                to={to}
+                                end={to === '/dashboard'}
+                                className={({ isActive }) =>
+                                    `flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors relative
+                                    ${isActive ? 'text-amber-500' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`
+                                }
+                            >
+                                {({ isActive }) => (
+                                    <>
+                                        <div className={`p-1.5 rounded-xl transition-all ${isActive ? 'bg-amber-50 dark:bg-amber-900/30' : ''}`}>
+                                            <Icon size={20} />
+                                        </div>
+                                        <span>{label}</span>
+                                        {badge && activeBatchCount > 0 && (
+                                            <span className="absolute top-1.5 right-4 bg-emerald-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black">
+                                                {activeBatchCount}
+                                            </span>
+                                        )}
+                                    </>
+                                )}
+                            </NavLink>
+                        ))}
+                    </div>
+                    {/* Safe area for phones with home indicator */}
+                    <div className="h-safe-area-bottom bg-white/90 dark:bg-slate-900/90" />
+                </nav>
+            )}
         </div>
     );
 }

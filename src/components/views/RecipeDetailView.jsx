@@ -1,11 +1,11 @@
 // /src/components/views/RecipeDetailView.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { formatCurrency } from '../../utils/formatters';
-import { getThemeForCategory, getSrmColor } from '../../utils/helpers';
-import { baseWater, defaultPrices } from '../../utils/helpers';
+import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
+import { calculateRecipeCost } from '../../utils/costCalculator';
 import { getRecipeAdvice } from '../../services/gemini';
 
 export default function RecipeDetailView() {
@@ -36,97 +36,78 @@ export default function RecipeDetailView() {
     if (!selectedRecipe) return null;
 
     const theme = getThemeForCategory(selectedRecipe.category);
-    const scaleFactor = (targetVol || 1) / (selectedRecipe.targetVolume || 1);
 
-    // SAFE PARSING DE RECETA
-    const safeMalts = Array.isArray(selectedRecipe.ingredients?.malts) ? selectedRecipe.ingredients.malts : [];
-    const safeHops = Array.isArray(selectedRecipe.ingredients?.hops) ? selectedRecipe.ingredients.hops : [];
-    const safeYeast = typeof selectedRecipe.ingredients?.yeast === 'string'
-        ? { name: selectedRecipe.ingredients.yeast, amount: 1, unit: 'sobre' }
-        : (selectedRecipe.ingredients?.yeast || { name: 'Levadura', amount: 1, unit: 'sobre' });
+    // ── Memoized: only recalculate when recipe or target volume changes ─────────
+    const scaledRecipe = useMemo(() => {
+        const scaleFactor = (targetVol || 1) / (selectedRecipe.targetVolume || 1);
+        const safeMalts = Array.isArray(selectedRecipe.ingredients?.malts) ? selectedRecipe.ingredients.malts : [];
+        const safeHops = Array.isArray(selectedRecipe.ingredients?.hops) ? selectedRecipe.ingredients.hops : [];
+        const safeYeast = typeof selectedRecipe.ingredients?.yeast === 'string'
+            ? { name: selectedRecipe.ingredients.yeast, amount: 1, unit: 'sobre' }
+            : (selectedRecipe.ingredients?.yeast || { name: 'Levadura', amount: 1, unit: 'sobre' });
+        return {
+            ...selectedRecipe,
+            ingredients: {
+                malts: safeMalts.map(m => ({ ...m, amount: ((Number(m.amount) || 0) * scaleFactor).toFixed(2) })),
+                hops: safeHops.map(h => ({ ...h, amount: Math.round((Number(h.amount) || 0) * scaleFactor) })),
+                yeast: safeYeast,
+                water: {
+                    strike: ((Number(selectedRecipe.ingredients?.water?.strike) || 15) * scaleFactor).toFixed(1),
+                    sparge: ((Number(selectedRecipe.ingredients?.water?.sparge) || 15) * scaleFactor).toFixed(1),
+                },
+            },
+        };
+    }, [selectedRecipe, targetVol]);
 
-    const scaledRecipe = {
-        ...selectedRecipe,
-        ingredients: {
-            malts: safeMalts.map(m => ({ ...m, amount: ((Number(m.amount) || 0) * scaleFactor).toFixed(2) })),
-            hops: safeHops.map(h => ({ ...h, amount: Math.round((Number(h.amount) || 0) * scaleFactor) })),
-            yeast: safeYeast,
-            water: {
-                strike: ((Number(selectedRecipe.ingredients?.water?.strike) || 15) * scaleFactor).toFixed(1),
-                sparge: ((Number(selectedRecipe.ingredients?.water?.sparge) || 15) * scaleFactor).toFixed(1)
-            }
-        }
-    };
+    const costInfo = useMemo(
+        () => calculateRecipeCost(selectedRecipe, inventory, targetVol),
+        [selectedRecipe, inventory, targetVol]
+    );
 
-    const calculateCost = () => {
-        let neto = 0; let allFound = true;
-        scaledRecipe.ingredients.malts.forEach(m => {
-            const mName = (m.name || '').toLowerCase();
-            const item = inventory.find(i => {
-                const iName = (i.name || '').toLowerCase();
-                return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
-            });
-            if (item) neto += (Number(m.amount) || 0) * Number(item.price); else { neto += (Number(m.amount) || 0) * defaultPrices.malta; allFound = false; }
-        });
-        scaledRecipe.ingredients.hops.forEach(h => {
-            const hName = (h.name || '').toLowerCase();
-            const item = inventory.find(i => {
-                const iName = (i.name || '').toLowerCase();
-                return i.category === 'Lúpulo' && iName && hName.includes(iName);
-            });
-            if (item) neto += (Number(h.amount) || 0) * Number(item.price); else { neto += (Number(h.amount) || 0) * defaultPrices.lupulo; allFound = false; }
-        });
-
-        const yName = (typeof scaledRecipe.ingredients?.yeast === 'string' ? scaledRecipe.ingredients.yeast : (scaledRecipe.ingredients?.yeast?.name || '')).toLowerCase();
-        const yItem = inventory.find(i => {
-            const iName = (i.name || '').toLowerCase();
-            return i.category === 'Levadura' && iName && yName.includes(iName);
-        });
-        const yAmount = typeof scaledRecipe.ingredients?.yeast === 'string' ? 1 : (Number(scaledRecipe.ingredients?.yeast?.amount) || 1);
-
-        if (yItem) neto += yAmount * Number(yItem.price); else { neto += yAmount * defaultPrices.levadura; allFound = false; }
-
-        const iva = neto * 0.19; const totalConIva = neto + iva;
-        return { neto, iva, totalConIva, perLiter: totalConIva / (targetVol || 1), allFound };
-    };
-    const costInfo = calculateCost();
-
-    const calculateSalts = () => {
+    const saltAdditions = useMemo(() => {
         if (!scaledRecipe.waterProfile) return null;
         const target = scaledRecipe.waterProfile;
         const totalWaterLiters = Number(scaledRecipe.ingredients.water.strike) + Number(scaledRecipe.ingredients.water.sparge);
         if (totalWaterLiters <= 0) return null;
-
         const diff = {
-            Ca: Math.max(0, (Number(target.Ca) || 0) - baseWater.Ca), Mg: Math.max(0, (Number(target.Mg) || 0) - baseWater.Mg),
-            SO4: Math.max(0, (Number(target.SO4) || 0) - baseWater.SO4), Cl: Math.max(0, (Number(target.Cl) || 0) - baseWater.Cl),
-            HCO3: Math.max(0, (Number(target.HCO3) || 0) - baseWater.HCO3)
+            Ca: Math.max(0, (Number(target.Ca) || 0) - baseWater.Ca),
+            Mg: Math.max(0, (Number(target.Mg) || 0) - baseWater.Mg),
+            SO4: Math.max(0, (Number(target.SO4) || 0) - baseWater.SO4),
+            Cl: Math.max(0, (Number(target.Cl) || 0) - baseWater.Cl),
+            HCO3: Math.max(0, (Number(target.HCO3) || 0) - baseWater.HCO3),
         };
-
-        const epsomGrams = (diff.Mg * totalWaterLiters) / 99; const epsomSO4Contributed = (epsomGrams * 390) / totalWaterLiters || 0;
-        const cacl2Grams = (diff.Cl * totalWaterLiters) / 482; const cacl2CaContributed = (cacl2Grams * 272) / totalWaterLiters || 0;
-
+        const epsomGrams = (diff.Mg * totalWaterLiters) / 99;
+        const epsomSO4Contributed = (epsomGrams * 390) / totalWaterLiters || 0;
+        const cacl2Grams = (diff.Cl * totalWaterLiters) / 482;
+        const cacl2CaContributed = (cacl2Grams * 272) / totalWaterLiters || 0;
         const bakingSodaGrams = (diff.HCO3 * totalWaterLiters) / 728;
-
         const remainingSO4 = Math.max(0, diff.SO4 - epsomSO4Contributed);
-        const gypsumGrams = (remainingSO4 * totalWaterLiters) / 558; const gypsumCaContributed = (gypsumGrams * 232) / totalWaterLiters || 0;
-
-        const finalEstimates = {
-            Ca: Math.round(baseWater.Ca + cacl2CaContributed + gypsumCaContributed),
-            Mg: Math.round(baseWater.Mg + diff.Mg),
-            SO4: Math.round(baseWater.SO4 + epsomSO4Contributed + remainingSO4),
-            Cl: Math.round(baseWater.Cl + diff.Cl),
-            HCO3: Math.round(baseWater.HCO3 + diff.HCO3)
+        const gypsumGrams = (remainingSO4 * totalWaterLiters) / 558;
+        const gypsumCaContributed = (gypsumGrams * 232) / totalWaterLiters || 0;
+        return {
+            totalWater: totalWaterLiters.toFixed(1),
+            gypsum: gypsumGrams.toFixed(1),
+            cacl2: cacl2Grams.toFixed(1),
+            epsom: epsomGrams.toFixed(1),
+            bakingSoda: bakingSodaGrams.toFixed(1),
+            finalEstimates: {
+                Ca: Math.round(baseWater.Ca + cacl2CaContributed + gypsumCaContributed),
+                Mg: Math.round(baseWater.Mg + diff.Mg),
+                SO4: Math.round(baseWater.SO4 + epsomSO4Contributed + remainingSO4),
+                Cl: Math.round(baseWater.Cl + diff.Cl),
+                HCO3: Math.round(baseWater.HCO3 + diff.HCO3),
+            },
         };
-
-        return { totalWater: totalWaterLiters.toFixed(1), gypsum: gypsumGrams.toFixed(1), cacl2: cacl2Grams.toFixed(1), epsom: epsomGrams.toFixed(1), bakingSoda: bakingSodaGrams.toFixed(1), finalEstimates };
-    };
-    const saltAdditions = calculateSalts();
+    }, [scaledRecipe]);
 
     const toggleStep = (id) => setCompletedSteps(prev => prev.includes(id) ? prev.filter(stepId => stepId !== id) : [...prev, id]);
     const toggleStepDetails = (e, id) => { e.stopPropagation(); setExpandedStep(prev => prev === id ? null : id); };
 
+    // Debounce ref: prevent spam-clicking the IA button
+    const aiDebounceRef = useRef(null);
     const handleGetAiAdvice = async () => {
+        if (aiDebounceRef.current) return; // already pending / cooling down
+        aiDebounceRef.current = setTimeout(() => { aiDebounceRef.current = null; }, 3000);
         setIsAdvising(true);
         setAiAdvice(null);
         try {
@@ -269,7 +250,7 @@ export default function RecipeDetailView() {
                                 <div className="flex justify-between md:flex-col items-center md:items-end md:justify-center gap-3 pl-0 md:pl-4">
                                     <div className="text-left md:text-right w-full">
                                         <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Lote</span>
-                                        <span className="text-3xl font-black text-emerald-600 leading-none block">{formatCurrency(costInfo.totalConIva)}</span>
+                                        <span className="text-3xl font-black text-emerald-600 leading-none block">{formatCurrency(costInfo.total)}</span>
                                     </div>
                                     <div className="text-right w-full border-l border-gray-100 dark:border-slate-700 pl-4 md:border-none md:pl-0 mt-0 md:mt-2">
                                         <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Costo x Litro</span>
@@ -285,12 +266,24 @@ export default function RecipeDetailView() {
                                     <Wheat className="text-amber-500" size={28} /> Granos y Agua
                                 </h3>
                                 <ul className="space-y-4">
-                                    {scaledRecipe.ingredients.malts.map((malt, idx) => (
-                                        <li key={idx} className="flex justify-between items-center text-lg border-b border-amber-100 dark:border-amber-900/30 pb-4">
-                                            <span className="font-bold text-slate-700 dark:text-slate-300">{malt.name || 'Malta'}</span>
-                                            <span className="bg-white dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{malt.amount} {malt.unit || 'kg'}</span>
-                                        </li>
-                                    ))}
+                                    {scaledRecipe.ingredients.malts.map((malt, idx) => {
+                                        const stockItem = costInfo.ingredients.find(i => i.category === 'Malta' && i.name === (malt.name || 'Malta desconocida'));
+                                        return (
+                                            <li key={idx} className="flex justify-between items-center text-lg border-b border-amber-100 dark:border-amber-900/30 pb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-slate-700 dark:text-slate-300">{malt.name || 'Malta'}</span>
+                                                    {stockItem && (
+                                                        stockItem.hasEnough
+                                                            ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-black" title={`Stock: ${stockItem.available} ${stockItem.unit}`}>✅ {stockItem.available} {stockItem.unit}</span>
+                                                            : stockItem.inInventory
+                                                                ? <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-black" title={`Faltan ${(stockItem.needed - stockItem.available).toFixed(2)} ${stockItem.unit}`}>⚠️ {stockItem.available} {stockItem.unit}</span>
+                                                                : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌ Sin stock</span>
+                                                    )}
+                                                </div>
+                                                <span className="bg-white dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{malt.amount} {malt.unit || 'kg'}</span>
+                                            </li>
+                                        );
+                                    })}
                                     <li className="flex justify-between items-center pt-4 mt-4 border-t border-dashed border-amber-300 dark:border-amber-800/50">
                                         <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={18} /> Agua Strike (Macerar)</span>
                                         <span className="font-black text-blue-800 dark:text-blue-300 text-xl">{scaledRecipe.ingredients.water.strike} L</span>
@@ -307,19 +300,31 @@ export default function RecipeDetailView() {
                                     <Leaf className="text-green-500" size={28} /> Lúpulos
                                 </h3>
                                 <ul className="space-y-5">
-                                    {scaledRecipe.ingredients.hops.map((hop, idx) => (
-                                        <li key={idx} className="flex flex-col border-b border-green-100 dark:border-green-900/30 pb-4 last:border-0">
-                                            <div className="flex justify-between items-center mb-3">
-                                                <span className="font-bold text-slate-800 dark:text-slate-200 text-xl">{hop.name || 'Lúpulo'}</span>
-                                                <span className="bg-white dark:bg-slate-800 border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
-                                            </div>
-                                            {hop.time && (
-                                                <span className="text-green-700 dark:text-green-300 font-bold text-sm flex items-center gap-2 bg-green-100/50 dark:bg-green-900/40 w-fit px-3 py-1.5 rounded-lg border border-green-200/50 dark:border-green-800">
-                                                    <Clock size={16} /> {hop.time} <span className="mx-1 opacity-50">•</span> <span className="uppercase tracking-wider">{hop.stage || 'Hervor'}</span>
-                                                </span>
-                                            )}
-                                        </li>
-                                    ))}
+                                    {scaledRecipe.ingredients.hops.map((hop, idx) => {
+                                        const stockItem = costInfo.ingredients.find(i => i.category === 'Lúpulo' && i.name === (hop.name || 'Lúpulo desconocido'));
+                                        return (
+                                            <li key={idx} className="flex flex-col border-b border-green-100 dark:border-green-900/30 pb-4 last:border-0">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-slate-800 dark:text-slate-200 text-xl">{hop.name || 'Lúpulo'}</span>
+                                                        {stockItem && (
+                                                            stockItem.hasEnough
+                                                                ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-black">✅ {stockItem.available} {stockItem.unit}</span>
+                                                                : stockItem.inInventory
+                                                                    ? <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-black">⚠️ {stockItem.available} {stockItem.unit}</span>
+                                                                    : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌ Sin stock</span>
+                                                        )}
+                                                    </div>
+                                                    <span className="bg-white dark:bg-slate-800 border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
+                                                </div>
+                                                {hop.time && (
+                                                    <span className="text-green-700 dark:text-green-300 font-bold text-sm flex items-center gap-2 bg-green-100/50 dark:bg-green-900/40 w-fit px-3 py-1.5 rounded-lg border border-green-200/50 dark:border-green-800">
+                                                        <Clock size={16} /> {hop.time} <span className="mx-1 opacity-50">•</span> <span className="uppercase tracking-wider">{hop.stage || 'Hervor'}</span>
+                                                    </span>
+                                                )}
+                                            </li>
+                                        );
+                                    })}
                                 </ul>
                             </div>
                         </div>
@@ -345,7 +350,7 @@ export default function RecipeDetailView() {
                                 <p className="text-white/90 font-bold text-base">Modo guiado paso a paso. Al finalizar descontaremos de tu inventario.</p>
                             </div>
                             <button
-                                onClick={() => navigate(`/brew/${id}`)}
+                                onClick={() => navigate(`/brew/${id}?vol=${targetVol}`)}
                                 className="bg-white text-slate-900 px-10 py-5 rounded-2xl font-black text-lg transition-transform shadow-2xl w-full md:w-auto text-center hover:scale-105 active:scale-95"
                             >
                                 ¡Empezar a Cocinar!

@@ -9,8 +9,6 @@ import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext'
 import { AppProvider } from './context/AppContext'
 
-console.log("🛠️ MAIN.JSX: Iniciando el montaje de React...");
-
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
@@ -22,4 +20,4 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </StrictMode>,
 )
-console.log("✅ MAIN.JSX: Montaje solicitado a createRoot.");
+

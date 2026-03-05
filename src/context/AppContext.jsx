@@ -1,8 +1,14 @@
 // /src/context/AppContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
-import { db, collectionPrefix } from '../services/firebase';
+// Contexto global de datos de la aplicación.
+// Usa firestoreService.js para toda la persistencia de datos,
+// con manejo de errores estricto y estado de error para la UI.
+
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import {
+    subscribeToUserData,
+    saveUserData,
+} from '../services/firestoreService';
 
 const AppContext = createContext();
 
@@ -11,16 +17,17 @@ export const useAppContext = () => useContext(AppContext);
 export const AppProvider = ({ children }) => {
     const { currentUser } = useAuth();
 
-    // --- ESTADOS GLOBALES ---
+    // --- ESTADOS GLOBALES DE DATOS ---
     const [recipes, setRecipes] = useState([]);
     const [inventory, setInventory] = useState([]);
     const [history, setHistory] = useState([]);
     const [activeBatches, setActiveBatches] = useState([]);
     const [darkMode, setDarkMode] = useState(true);
 
-    // UI States
+    // --- ESTADOS DE UI ---
     const [isDataLoaded, setIsDataLoaded] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [dataError, setDataError] = useState(null); // Error de Firestore para la UI
 
     // --- EFECTO MODO OSCURO ---
     useEffect(() => {
@@ -28,57 +35,70 @@ export const AppProvider = ({ children }) => {
         else document.documentElement.classList.remove('dark');
     }, [darkMode]);
 
-    // --- OBTENCIÓN DE DATOS DE FIREBASE ---
+    // --- SUSCRIPCIÓN A DATOS DE FIREBASE EN TIEMPO REAL ---
     useEffect(() => {
         if (!currentUser) {
+            // Limpiar estado al cerrar sesión
             setRecipes([]);
             setInventory([]);
             setHistory([]);
             setActiveBatches([]);
+            setDataError(null);
             setIsDataLoaded(true);
             return;
         }
 
-        const docRef = doc(db, 'artifacts', collectionPrefix, 'users', currentUser.uid, 'brewery', 'mainData');
-        const unsubscribe = onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setRecipes(Array.isArray(data.recipes) ? data.recipes : []);
-                setInventory(Array.isArray(data.inventory) ? data.inventory : []);
-                setHistory(Array.isArray(data.history) ? data.history : []);
-                setActiveBatches(Array.isArray(data.activeBatches) ? data.activeBatches : []);
-            } else {
-                // Inicializar datos vacíos para nuevo usuario
-                // Note: initialRecipes y initialInventory se manejan a nivel vista si el usuario presiona "Actualizar Recetas Base" 
-                // para no forzarlas en la base de datos de cada usuario nuevo automáticamente a menos que sea necesario.
-                setDoc(docRef, { recipes: [], inventory: [], history: [], activeBatches: [] });
-                setRecipes([]); setInventory([]); setHistory([]); setActiveBatches([]);
+        setIsDataLoaded(false);
+        setDataError(null);
+
+        const unsubscribe = subscribeToUserData(
+            currentUser.uid,
+            // onData: Firestore tiene nuevos datos
+            (data) => {
+                setRecipes(data.recipes);
+                setInventory(data.inventory);
+                setHistory(data.history);
+                setActiveBatches(data.activeBatches);
+                setIsDataLoaded(true);
+            },
+            // onError: Firestore tuvo un error
+            (error) => {
+                console.error('❌ AppContext: Error al obtener datos de Firestore:', error.message);
+                setDataError('Error al conectar con la base de datos. Actualizando...');
+                setIsDataLoaded(true);
             }
-            setIsDataLoaded(true);
-        }, (error) => {
-            console.error("Error al obtener datos de Firestore:", error);
-            setIsDataLoaded(true);
-        });
+        );
 
         return () => unsubscribe();
     }, [currentUser]);
 
-    // --- FUNCIÓN DE ACTUALIZACIÓN EN NUBE ---
-    const updateCloudData = async (newData) => {
+    // --- FUNCIÓN DE ACTUALIZACIÓN EN LA NUBE ---
+    /**
+     * Guarda datos parciales o totales en la nube (merge).
+     * @param {object} newData - Datos a guardar
+     * @returns {Promise<void>}
+     */
+    const updateCloudData = useCallback(async (newData) => {
         if (!currentUser) return;
         setIsSaving(true);
-        try {
-            await setDoc(doc(db, 'artifacts', collectionPrefix, 'users', currentUser.uid, 'brewery', 'mainData'), newData, { merge: true });
-        }
-        catch (e) {
-            console.error("Error guardando en la Nube:", e);
-        }
-        finally {
-            setTimeout(() => setIsSaving(false), 800);
-        }
-    };
+        setDataError(null);
 
-    const forceSyncCloud = () => updateCloudData({ recipes, inventory, history, activeBatches });
+        const { success, error } = await saveUserData(currentUser.uid, newData);
+
+        if (!success) {
+            setDataError(`Error al guardar: ${error}`);
+        }
+
+        // Mostrar indicador de guardado al menos 800ms para feedback visual
+        setTimeout(() => setIsSaving(false), 800);
+    }, [currentUser]);
+
+    /**
+     * Fuerza una sincronización completa del estado local hacia la nube.
+     */
+    const forceSyncCloud = useCallback(() => {
+        return updateCloudData({ recipes, inventory, history, activeBatches });
+    }, [updateCloudData, recipes, inventory, history, activeBatches]);
 
     // Valores a exportar
     const value = {
@@ -89,8 +109,9 @@ export const AppProvider = ({ children }) => {
         darkMode, setDarkMode,
         isDataLoaded,
         isSaving,
+        dataError,
         updateCloudData,
-        forceSyncCloud
+        forceSyncCloud,
     };
 
     return (

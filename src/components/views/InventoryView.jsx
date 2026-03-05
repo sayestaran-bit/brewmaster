@@ -1,10 +1,14 @@
 // /src/components/views/InventoryView.jsx
-import React, { useState } from 'react';
-import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2 } from 'lucide-react';
+import React, { useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { formatCurrency } from '../../utils/formatters';
+import PageHeader from '../ui/PageHeader';
+import Button from '../ui/Button';
 
 export default function InventoryView() {
+    const navigate = useNavigate();
     const { inventory, setInventory, updateCloudData } = useAppContext();
     const [showInvForm, setShowInvForm] = useState(false);
     const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0 });
@@ -26,40 +30,58 @@ export default function InventoryView() {
         updateCloudData({ inventory: newInv });
     };
 
+    // VUL-006 FIX: Debounce para evitar escribir a Firestore en cada keystroke.
+    // Espera 1500ms sin actividad antes de persistir en la nube.
+    const debounceRef = useRef(null);
+
+    const debouncedCloudUpdate = useCallback((data) => {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            updateCloudData(data);
+        }, 1500);
+    }, [updateCloudData]);
+
     const updateInvItem = (id, field, value) => {
         const newInv = [...inventory];
         const index = newInv.findIndex(inv => inv.id === id);
+        if (index === -1) return; // VUL-008 FIX: Guard clause contra índice inválido
+        newInv[index] = { ...newInv[index] }; // copia inmutable del ítem
         newInv[index][field] = field === 'stock'
             ? parseFloat(Number(value).toFixed(4))
             : Number(value) || 0;
         setInventory(newInv);
-        updateCloudData({ inventory: newInv });
+        debouncedCloudUpdate({ inventory: newInv }); // VUL-006: debounced
     }
 
     return (
         <div className="space-y-6 animate-fadeIn">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-200 dark:border-slate-700 pb-4 gap-4">
-                <div className="flex flex-col">
-                    <h2 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-3">
-                        <Package className="text-blue-500" size={32} /> Tu Inventario
-                    </h2>
-                    <p className="text-sm font-bold text-slate-500 mt-2 flex items-center gap-2"><Scale size={16} /> Capital Estimado: <span className="text-emerald-600 dark:text-emerald-400 font-black">{formatCurrency(totalInventoryValue)}</span></p>
-                </div>
-                <div className="flex gap-2 w-full md:w-auto">
-                    <button onClick={() => setShowInvForm(!showInvForm)} className="flex-1 md:flex-none justify-center flex items-center gap-2 text-white font-bold bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl transition-colors shadow-sm">
-                        <Plus size={20} /> Añadir Insumo
-                    </button>
-                </div>
-            </div>
+            <PageHeader
+                icon={Package}
+                iconColor="text-blue-500"
+                title="Tu Inventario"
+                subtitle={<span className="flex items-center gap-1.5"><Scale size={14} /> Capital Estimado: <span className="text-emerald-600 dark:text-emerald-400 font-black">{formatCurrency(totalInventoryValue)}</span></span>}
+                action={
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" icon={TrendingUp} onClick={() => navigate('/costs')} className="text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                            Costos
+                        </Button>
+                        <Button variant="secondary" size="sm" icon={Plus} onClick={() => setShowInvForm(!showInvForm)}>
+                            Añadir Insumo
+                        </Button>
+                    </div>
+                }
+            />
 
             {showInvForm && (
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-slate-800 flex flex-col md:flex-row gap-4 items-end mb-8 animate-fadeIn">
                     <div className="w-full md:w-1/5">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Categoría</label>
-                        <select className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white" value={newInvItem.category} onChange={e => setNewInvItem({ ...newInvItem, category: e.target.value, unit: e.target.value === 'Levadura' ? 'sobre' : e.target.value === 'Lúpulo' ? 'g' : 'kg' })}>
+                        <select className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white" value={newInvItem.category} onChange={e => setNewInvItem({ ...newInvItem, category: e.target.value, unit: e.target.value === 'Levadura' ? 'sobre' : e.target.value === 'Lúpulo' || e.target.value === 'Sales Minerales' ? 'g' : e.target.value === 'Aditivos' ? 'un' : 'kg' })}>
                             <option value="Malta">Malta</option>
                             <option value="Lúpulo">Lúpulo</option>
                             <option value="Levadura">Levadura</option>
+                            <option value="Sales Minerales">Sales Minerales</option>
+                            <option value="Aditivos">Aditivos</option>
                         </select>
                     </div>
                     <div className="w-full md:w-2/5">
@@ -89,8 +111,8 @@ export default function InventoryView() {
                 </div>
             )}
 
-            {['Malta', 'Lúpulo', 'Levadura'].map(category => {
-                const catIcon = category === 'Malta' ? <Wheat size={18} className="text-amber-500" /> : category === 'Lúpulo' ? <Leaf size={18} className="text-green-500" /> : <Beaker size={18} className="text-blue-500" />;
+            {['Malta', 'Lúpulo', 'Levadura', 'Sales Minerales', 'Aditivos'].map(category => {
+                const catIcon = category === 'Malta' ? <Wheat size={18} className="text-amber-500" /> : category === 'Lúpulo' ? <Leaf size={18} className="text-green-500" /> : category === 'Sales Minerales' ? <Droplets size={18} className="text-blue-500" /> : category === 'Aditivos' ? <Beaker size={18} className="text-purple-500" /> : <Beaker size={18} className="text-blue-500" />;
                 const categoryItems = Array.isArray(inventory) ? inventory.filter(i => i.category === category) : [];
 
                 return (

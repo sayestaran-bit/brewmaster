@@ -6,11 +6,11 @@ import { useAppContext } from '../../context/AppContext';
 import { Beaker } from 'lucide-react';
 
 export default function ProtectedRoute({ children }) {
-    const { currentUser, isAuthLoading } = useAuth();
+    const { currentUser, loadingAuth } = useAuth();
     const { isDataLoaded } = useAppContext();
 
     // Si Firebase Auth aún está determinando la sesión
-    if (isAuthLoading) {
+    if (loadingAuth) {
         return (
             <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center font-sans">
                 <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl flex flex-col items-center">

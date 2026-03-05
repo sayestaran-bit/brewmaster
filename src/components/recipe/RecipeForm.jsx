@@ -6,8 +6,7 @@ import { Sparkles, Loader2, Wand2, Wheat, Leaf, Droplets, ListOrdered, Trash2, P
 import AutocompleteInput from '../common/AutocompleteInput';
 import { useAppContext } from '../../context/AppContext';
 import { getFormattedDate } from '../../utils/formatters';
-import { getRecipeAdvice, callGeminiStr } from '../../services/gemini'; // Asumo que necesitamos acceso a Gemini. Como refactorizamos gemini.js, usaré fetch o callGeminiStr genérico si existe o reescribo temporalmente.
-import { callGemini } from '../../services/gemini'; // <-- Import the corrected method
+import { getRecipeAdvice, callGemini } from '../../services/gemini';
 
 export default function RecipeForm() {
     const { id } = useParams();
@@ -140,7 +139,8 @@ export default function RecipeForm() {
         "tips": [{ "title": "Tip", "desc": "Expl" }]
       }`;
 
-            const responseJSON = await callGemini(Object.assign({ isJson: true }, { prompt, systemInstruction }));
+            // VUL-007 FIX: callGemini(prompt, systemInstruction, isJson) — pasar args posicionalmente
+            const responseJSON = await callGemini(prompt, systemInstruction, true);
 
             let parsed = responseJSON;
             if (typeof responseJSON === 'string') {

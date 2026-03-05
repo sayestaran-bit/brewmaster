@@ -1,24 +1,41 @@
 // /src/App.jsx
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAppContext } from './context/AppContext';
 
-// Layout & Protect
+// Layout & Protect (always loaded — tiny files, needed for every route)
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 
-// Views
+// ── Lazy-loaded views ─────────────────────────────────────────────────────────
+// Auth is loaded immediately since it's the landing page for unauthenticated users
 import AuthView from './components/views/AuthView';
-import DashboardView from './components/views/DashboardView';
-import RecipeListView from './components/views/RecipeListView';
-import RecipeDetailView from './components/views/RecipeDetailView';
-import InventoryView from './components/views/InventoryView';
-import ActiveBatchesView from './components/views/ActiveBatchesView';
-import HistoryView from './components/views/HistoryView';
-import BrewSessionView from './components/views/BrewSessionView';
-import RecipeForm from './components/recipe/RecipeForm';
 
-// --- ESCUDO ANTI-FALLOS (ERROR BOUNDARY) ---
+// These are only needed once the user is logged in — split them out
+const DashboardView = lazy(() => import('./components/views/DashboardView'));
+const RecipeListView = lazy(() => import('./components/views/RecipeListView'));
+const RecipeDetailView = lazy(() => import('./components/views/RecipeDetailView'));
+const RecipeForm = lazy(() => import('./components/recipe/RecipeForm'));
+const InventoryView = lazy(() => import('./components/views/InventoryView'));
+const ActiveBatchesView = lazy(() => import('./components/views/ActiveBatchesView'));
+const HistoryView = lazy(() => import('./components/views/HistoryView'));
+const CostAnalysisView = lazy(() => import('./components/views/CostAnalysisView'));
+// BrewSession is the heaviest view — always defer it
+const BrewSessionView = lazy(() => import('./components/views/BrewSessionView'));
+
+// ── Shared loading skeleton ───────────────────────────────────────────────────
+function PageLoader() {
+  return (
+    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 animate-pulse">
+      <div className="w-16 h-16 rounded-full border-4 border-amber-500 border-t-transparent animate-spin" />
+      <p className="text-slate-500 dark:text-slate-400 font-bold text-sm tracking-widest uppercase">
+        Cargando...
+      </p>
+    </div>
+  );
+}
+
+// ── Error Boundary ────────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -54,55 +71,55 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// ── Main App ──────────────────────────────────────────────────────────────────
 function MainApp() {
   const { darkMode } = useAppContext();
 
-  // Handlers Globales que estaban en RecipeForm se pasan a él internamente o via context.
-  // En nuestro caso RecipeForm los maneja a través de AppContext, pero para las vistas
-  // que editaban pasábamos info via props. Con react-router manejamos el state local allá.
-
   return (
     <div className={darkMode ? 'dark' : ''}>
-      <Routes>
-        {/* Ruta Pública */}
-        <Route path="/auth" element={<AuthView />} />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* Ruta Pública */}
+          <Route path="/auth" element={<AuthView />} />
 
-        {/* Rutas Protegidas en Main Layout */}
-        <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardView />} />
+          {/* Rutas Protegidas en Main Layout */}
+          <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardView />} />
 
-          <Route path="recipes">
-            <Route index element={<RecipeListView />} />
-            <Route path="add" element={<RecipeForm />} />
-            <Route path=":id" element={<RecipeDetailView />} />
-            <Route path=":id/edit" element={<RecipeForm />} />
+            <Route path="recipes">
+              <Route index element={<RecipeListView />} />
+              <Route path="add" element={<RecipeForm />} />
+              <Route path=":id" element={<RecipeDetailView />} />
+              <Route path=":id/edit" element={<RecipeForm />} />
+            </Route>
+
+            <Route path="active" element={<ActiveBatchesView />} />
+            <Route path="inventory" element={<InventoryView />} />
+            <Route path="costs" element={<CostAnalysisView />} />
+            <Route path="history" element={<HistoryView />} />
           </Route>
 
-          <Route path="active" element={<ActiveBatchesView />} />
-          <Route path="inventory" element={<InventoryView />} />
-          <Route path="history" element={<HistoryView />} />
-        </Route>
-
-        {/* Ruta de BrewSession (La separamos del Layout normal pues tiene su propio background dark mode y full screen feel) */}
-        <Route path="/brew/:id" element={
-          <ProtectedRoute>
-            <div className={`min-h-screen font-sans selection:bg-amber-200 bg-slate-100 dark:bg-slate-950 p-4 md:p-6 lg:p-10 transition-colors duration-300`}>
-              <div className="max-w-6xl mx-auto">
-                <BrewSessionView />
+          {/* BrewSession: pantalla completa separada del layout */}
+          <Route path="/brew/:id" element={
+            <ProtectedRoute>
+              <div className="min-h-screen font-sans selection:bg-amber-200 bg-slate-100 dark:bg-slate-950 p-4 md:p-6 lg:p-10 transition-colors duration-300">
+                <div className="max-w-6xl mx-auto">
+                  <BrewSessionView />
+                </div>
               </div>
-            </div>
-          </ProtectedRoute>
-        } />
+            </ProtectedRoute>
+          } />
 
-        {/* 404 - Redirigir al inicio */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* 404 — Redirigir al inicio */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </div>
   );
 }
 
-// Envolvemos toda la aplicación en el escudo
+// Envolvemos toda la app en el escudo de errores
 export default function SafeApp() {
   return (
     <ErrorBoundary>

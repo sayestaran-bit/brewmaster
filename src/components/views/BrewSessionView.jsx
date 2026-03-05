@@ -1,16 +1,21 @@
 // /src/components/views/BrewSessionView.jsx
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { formatTime, getFormattedDate } from '../../utils/formatters';
+import { calculateRecipeCost, deductInventory } from '../../utils/costCalculator';
 
 export default function BrewSessionView() {
     const { id } = useParams();
+    const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { recipes, inventory, setInventory, activeBatches, setActiveBatches, updateCloudData } = useAppContext();
 
     const [recipe, setRecipe] = useState(null);
+    const [targetVolume, setTargetVolume] = useState(20);
+    const [stockWarnings, setStockWarnings] = useState([]);
+    const [showWarningModal, setShowWarningModal] = useState(false);
 
     // Estado local para la sesión
     const [brewState, setBrewState] = useState({
@@ -19,60 +24,56 @@ export default function BrewSessionView() {
         isRunning: false
     });
 
-    // Calculo simplificado de costo para esta vista local importando helpers si fuera necesario
-    // O podemos traernos defaultPrices
-    const defaultPrices = { malta: 2500, lupulo: 40000, levadura: 4500 };
-    const calculateCostForRecipe = (r, targetVol) => {
-        let neto = 0;
-        const safeMalts = Array.isArray(r.ingredients?.malts) ? r.ingredients.malts : [];
-        const safeHops = Array.isArray(r.ingredients?.hops) ? r.ingredients.hops : [];
-        const scaleFactor = (targetVol || 1) / (r.targetVolume || 1);
-
-        safeMalts.forEach(m => {
-            const scaledAmount = (Number(m.amount) || 0) * scaleFactor;
-            const mName = (m.name || '').toLowerCase();
-            const item = inventory.find(i => {
-                const iName = (i.name || '').toLowerCase();
-                return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
-            });
-            if (item) neto += scaledAmount * Number(item.price); else neto += scaledAmount * defaultPrices.malta;
-        });
-        safeHops.forEach(h => {
-            const scaledAmount = Math.round((Number(h.amount) || 0) * scaleFactor);
-            const hName = (h.name || '').toLowerCase();
-            const item = inventory.find(i => {
-                const iName = (i.name || '').toLowerCase();
-                return i.category === 'Lúpulo' && iName && hName.includes(iName);
-            });
-            if (item) neto += scaledAmount * Number(item.price); else neto += scaledAmount * defaultPrices.lupulo;
-        });
-        return neto * 1.19; // con IVA aproximado
-    };
-
+    // VUL-004 FIX: Efecto separado solo para cargar la receta.
+    // Removimos `inventory` y `searchParams` de las dependencias para evitar
+    // que los cambios de stock o re-renders reseteen el estado de la sesión.
     useEffect(() => {
         if (recipes.length > 0) {
             const found = recipes.find(r => r.id === id);
             if (found) {
                 setRecipe(found);
+                const volParam = searchParams.get('vol');
+                const vol = volParam ? Number(volParam) : (found.targetVolume || 20);
+                setTargetVolume(vol);
                 const firstStep = (found.steps && found.steps[0]) ? found.steps[0] : {};
                 setBrewState(prev => ({ ...prev, timeLeft: firstStep.duration ? firstStep.duration * 60 : 0 }));
             } else {
                 navigate('/recipes');
             }
         }
-    }, [id, recipes, navigate]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id, recipes, navigate]); // searchParams e inventory removidos intencionalmente
 
+    // VUL-004 FIX: Efecto separado para verificar stock.
+    // Se ejecuta solo cuando la receta o el volumen cambia, no en cada update de inventory.
     useEffect(() => {
-        let interval;
-        if (brewState.isRunning && brewState.timeLeft > 0) {
-            interval = setInterval(() => {
-                setBrewState(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
-            }, 1000);
-        } else if (brewState.timeLeft === 0) {
-            setBrewState(prev => ({ ...prev, isRunning: false }));
+        if (recipe && inventory && inventory.length > 0) {
+            const costResult = calculateRecipeCost(recipe, inventory, targetVolume);
+            if (costResult.missingItems.length > 0) {
+                setStockWarnings(costResult.missingItems);
+                setShowWarningModal(true);
+            } else {
+                setStockWarnings([]);
+            }
         }
+    }, [recipe, targetVolume]); // No depende del array inventory completo
+
+    // VUL-005 FIX: El timer solo crea/destruye el intervalo cuando isRunning cambia,
+    // no en cada tick de timeLeft. Esto evita crear un nuevo setInterval cada segundo.
+    useEffect(() => {
+        if (!brewState.isRunning) return;
+
+        const interval = setInterval(() => {
+            setBrewState(prev => {
+                if (prev.timeLeft <= 1) {
+                    return { ...prev, timeLeft: 0, isRunning: false };
+                }
+                return { ...prev, timeLeft: prev.timeLeft - 1 };
+            });
+        }, 1000);
+
         return () => clearInterval(interval);
-    }, [brewState.isRunning, brewState.timeLeft]);
+    }, [brewState.isRunning]); // Solo depende de isRunning
 
     if (!recipe) return null;
 
@@ -85,57 +86,30 @@ export default function BrewSessionView() {
         if (isLastStep) {
             if (window.confirm(`¿Terminaste el día de cocción para ${recipe.name}? Esto descontará insumos de tu inventario y enviará el lote a Fermentación.`)) {
                 try {
-                    const totalCost = calculateCostForRecipe(recipe, recipe.targetVolume);
-
-                    let currentInventory = JSON.parse(JSON.stringify(inventory));
-                    (recipe.ingredients?.malts || []).forEach(m => {
-                        const mName = (m.name || '').toLowerCase();
-                        const item = currentInventory.find(i => {
-                            const iName = (i.name || '').toLowerCase();
-                            return i.category === 'Malta' && iName && (iName === mName || mName.includes(iName));
-                        });
-                        if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(m.amount) || 0)).toFixed(4));
-                    });
-                    (recipe.ingredients?.hops || []).forEach(h => {
-                        const hName = (h.name || '').toLowerCase();
-                        const item = currentInventory.find(i => {
-                            const iName = (i.name || '').toLowerCase();
-                            return i.category === 'Lúpulo' && iName && hName.includes(iName);
-                        });
-                        if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - (Number(h.amount) || 0)).toFixed(4));
-                    });
-                    const yeastObj = recipe.ingredients?.yeast;
-                    if (yeastObj) {
-                        const yeastName = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
-                        const yeastAmount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
-                        const yName = (yeastName || '').toLowerCase();
-                        const yItem = currentInventory.find(i => {
-                            const iName = (i.name || '').toLowerCase();
-                            return i.category === 'Levadura' && iName && yName.includes(iName);
-                        });
-                        if (yItem) yItem.stock = parseFloat(Math.max(0, Number(yItem.stock) - yeastAmount).toFixed(4));
-                    }
+                    const costResult = calculateRecipeCost(recipe, inventory, targetVolume);
+                    const newInventory = deductInventory(inventory, recipe, targetVolume);
 
                     const newBatchItem = {
                         id: 'batch-' + Date.now(),
                         recipeId: recipe.id,
                         recipeName: recipe.name || 'Sin Nombre',
+                        dateBrewed: getFormattedDate(),
                         date: getFormattedDate(),
                         timestamp: Date.now(),
-                        volume: recipe.targetVolume || 0,
+                        volume: targetVolume || 0,
                         og: recipe.og || '-',
                         fg: recipe.fg || '-',
                         abv: recipe.abv || '-',
                         category: recipe.category || 'Otros',
-                        totalCost: totalCost || 0,
+                        totalCost: costResult.total || 0,
                         status: 'Fermentando'
                     };
 
                     const newBatches = [newBatchItem, ...activeBatches];
 
                     setActiveBatches(newBatches);
-                    setInventory(currentInventory);
-                    updateCloudData({ activeBatches: newBatches, inventory: currentInventory });
+                    setInventory(newInventory);
+                    updateCloudData({ activeBatches: newBatches, inventory: newInventory });
                     navigate('/active');
                 } catch (error) {
                     console.error("Error al finalizar cocción:", error);
@@ -158,13 +132,67 @@ export default function BrewSessionView() {
         <div className="bg-slate-900 p-6 md:p-12 rounded-3xl shadow-2xl border border-slate-700 animate-fadeIn min-h-[75vh] flex flex-col text-white relative overflow-hidden">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
+            {/* MODAL DE ADVERTENCIA DE STOCK */}
+            {showWarningModal && stockWarnings.length > 0 && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-900 border border-amber-500/50 rounded-3xl p-8 max-w-lg w-full shadow-2xl">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="bg-amber-500/20 p-3 rounded-xl">
+                                <AlertTriangle size={28} className="text-amber-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-black text-white">Stock Insuficiente</h3>
+                                <p className="text-slate-400 text-sm font-medium">Algunos insumos no alcanzan para {targetVolume}L</p>
+                            </div>
+                        </div>
+                        <div className="space-y-3 mb-8 max-h-60 overflow-y-auto">
+                            {stockWarnings.map((item, i) => (
+                                <div key={i} className="flex justify-between items-center bg-red-900/20 border border-red-800/30 p-3 rounded-xl">
+                                    <div>
+                                        <span className="font-bold text-white block">{item.name}</span>
+                                        <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">{item.category}</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-red-400 font-black block">
+                                            {item.available} / {item.needed} {item.unit}
+                                        </span>
+                                        <span className="text-red-500/60 text-[10px] font-bold">
+                                            {item.inInventory ? `Faltan ${(item.needed - item.available).toFixed(2)}` : 'No registrado'}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => navigate(-1)}
+                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl font-bold transition-colors border border-slate-700"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => setShowWarningModal(false)}
+                                className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-900 py-3 rounded-xl font-black transition-colors"
+                            >
+                                Cocinar de todas formas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex justify-between items-center border-b border-slate-700/50 pb-6 mb-8 relative z-10">
                 <h2 className="text-2xl md:text-3xl font-black flex items-center gap-3 text-amber-500">
                     <Beaker size={32} /> Cocinando: <span className="text-white drop-shadow-sm">{recipe.name || 'Lote'}</span>
                 </h2>
-                <span className="bg-slate-800 text-slate-300 px-4 py-2 rounded-full font-black text-sm tracking-wider uppercase border border-slate-700 shadow-inner">
-                    Paso {safeStepIdx + 1} de {stepsArray.length}
-                </span>
+                <div className="flex items-center gap-3">
+                    <span className="bg-blue-900/30 text-blue-400 px-3 py-1.5 rounded-full font-black text-sm border border-blue-800/50">
+                        {targetVolume}L
+                    </span>
+                    <span className="bg-slate-800 text-slate-300 px-4 py-2 rounded-full font-black text-sm tracking-wider uppercase border border-slate-700 shadow-inner">
+                        Paso {safeStepIdx + 1} de {stepsArray.length}
+                    </span>
+                </div>
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center text-center space-y-8 relative z-10">
