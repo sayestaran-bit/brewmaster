@@ -1,21 +1,25 @@
 // /src/components/views/InventoryView.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp, Info } from 'lucide-react';
+import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp, Info, ListChecks } from 'lucide-react';
 import { useInventory } from '../../hooks/useInventory';
 import { formatCurrency } from '../../utils/formatters';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
+import { useAppContext } from '../../context/AppContext';
+import ShoppingListModal from '../inventory/ShoppingListModal';
 
 export default function InventoryView() {
     const navigate = useNavigate();
     const { currentUser } = useAuth();
     const isGuest = currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
+    const { recipes } = useAppContext();
     const { inventory, addItem, updateItem, deleteItem } = useInventory();
     const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
     const [showInvForm, setShowInvForm] = useState(false);
+    const [isShoppingListOpen, setIsShoppingListOpen] = useState(false);
 
     const totalInventoryValue = inventory.reduce((acc, item) => acc + ((item.stock || 0) * (item.price || 0)), 0);
 
@@ -40,6 +44,9 @@ export default function InventoryView() {
                 subtitle={<span className="flex items-center gap-1.5"><Scale size={14} /> Capital Estimado: <span className="text-emerald-600 dark:text-emerald-400 font-black">{formatCurrency(totalInventoryValue)}</span></span>}
                 action={
                     <div className="flex gap-2">
+                        <Button variant="outline" size="sm" icon={ListChecks} onClick={() => setIsShoppingListOpen(true)} className="text-blue-600 border-blue-200 hover:bg-blue-50">
+                            Lista de Compras
+                        </Button>
                         <Button variant="outline" size="sm" icon={TrendingUp} onClick={() => navigate('/costs')} className="text-emerald-600 border-emerald-200 hover:bg-emerald-50">
                             Costos
                         </Button>
@@ -48,6 +55,13 @@ export default function InventoryView() {
                         </Button>
                     </div>
                 }
+            />
+
+            <ShoppingListModal
+                isOpen={isShoppingListOpen}
+                onClose={() => setIsShoppingListOpen(false)}
+                recipes={recipes || []}
+                inventory={inventory || []}
             />
 
             {showInvForm && (
