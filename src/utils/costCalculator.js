@@ -100,6 +100,29 @@ export function calculateRecipeCost(recipe, inventory, targetVolume) {
         cost: yCost
     });
 
+    // Otros (Sales y Aditivos)
+    const safeOthers = Array.isArray(recipe.ingredients?.others) ? recipe.ingredients.others : [];
+    safeOthers.forEach(o => {
+        const scaledAmount = parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4));
+        const item = findInventoryItem(safeInventory, o.name, o.category || 'Aditivos');
+        const unitPrice = item ? Number(item.price) : 0; // No default price assumption for others
+        const cost = scaledAmount * unitPrice;
+        neto += cost;
+
+        if (!item) allFound = false;
+
+        ingredients.push({
+            name: o.name || 'Aditivo desconocido',
+            category: o.category || 'Aditivos',
+            unit: o.unit || 'g',
+            needed: scaledAmount,
+            available: item ? Number(item.stock) : 0,
+            hasEnough: item ? Number(item.stock) >= scaledAmount : false,
+            inInventory: !!item,
+            cost
+        });
+    });
+
     const iva = neto * 0.19;
     const total = neto + iva;
     const perLiter = total / (targetVolume || 1);
@@ -142,5 +165,40 @@ export function deductInventory(inventory, recipe, targetVolume) {
         if (yItem) yItem.stock = parseFloat(Math.max(0, Number(yItem.stock) - yeastAmount).toFixed(4));
     }
 
+    // Otros (Sales y Aditivos)
+    (recipe.ingredients?.others || []).forEach(o => {
+        const scaledAmount = parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4));
+        const item = findInventoryItem(currentInventory, o.name, o.category || 'Aditivos');
+        if (item) item.stock = parseFloat(Math.max(0, Number(item.stock) - scaledAmount).toFixed(4));
+    });
+
     return currentInventory;
+}
+
+/**
+ * Calcula el costo real y genera notas de advertencia basados en las deducciones efectivas
+ * reportadas por el motor de inventario, sumando solo lo que realmente se descontó.
+ * 
+ * @param {Array} actualDeductions - Array retornado por deductBatchFromInventory
+ * @returns {{ addedCost: number, warnings: string[] }}
+ */
+export function calculateActualDeductedCost(actualDeductions) {
+    let addedCost = 0;
+    const warnings = [];
+
+    if (!Array.isArray(actualDeductions)) {
+        return { addedCost: 0, warnings: [] };
+    }
+
+    actualDeductions.forEach(d => {
+        addedCost += (Number(d.cost) || 0);
+
+        if (d.isPartial) {
+            const requested = Number(d.requested).toFixed(2);
+            const actual = Number(d.actualDeducted).toFixed(2);
+            warnings.push(`Stock Incompleto: ${d.name} (${d.category}). Se solicitaron ${requested}, pero solo se descontaron ${actual}.`);
+        }
+    });
+
+    return { addedCost, warnings };
 }

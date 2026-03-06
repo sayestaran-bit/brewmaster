@@ -13,12 +13,12 @@ export default function EmptyState({
         <div className={`flex flex-col items-center justify-center py-16 px-6 text-center ${className}`}>
             {Icon && (
                 <div className="bg-slate-100 dark:bg-slate-800 p-5 rounded-full mb-5">
-                    <Icon size={36} className="text-slate-400 dark:text-slate-500" />
+                    <Icon size={36} className="text-muted" />
                 </div>
             )}
-            <h3 className="text-lg font-black text-slate-700 dark:text-slate-300 mb-2">{title}</h3>
+            <h3 className="text-lg font-black text-content mb-2">{title}</h3>
             {description && (
-                <p className="text-sm text-slate-400 dark:text-slate-500 font-medium max-w-xs leading-relaxed mb-6">
+                <p className="text-sm text-muted font-medium max-w-xs leading-relaxed mb-6">
                     {description}
                 </p>
             )}

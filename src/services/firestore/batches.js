@@ -45,13 +45,35 @@ export function onBatchesSnapshot(uid, onData, onError) {
  */
 export async function startBatch(uid, batchData) {
     const ref = await addDoc(batchesRef(uid), {
-        ...batchData,
         currentStep: 0,
         completedSteps: [],
         status: 'brewing',
+        phase: 'cooking', // default
+        phaseTimestamps: {
+            cookingStart: serverTimestamp(),
+            fermentationStart: null,
+            bottlingStart: null
+        },
         startDate: serverTimestamp(),
+        ...batchData, // Sobre-escribe los defaults si el frontend provee la fase y status
     });
     return ref.id;
+}
+
+/**
+ * Transiciona el lote a la siguiente fase productiva.
+ * @param {string} uid 
+ * @param {string} batchId 
+ * @param {string} nextPhase - 'fermenting' | 'bottling'
+ */
+export async function transitionBatchPhase(uid, batchId, nextPhase) {
+    const updateData = { phase: nextPhase };
+    if (nextPhase === 'fermenting') {
+        updateData['phaseTimestamps.fermentationStart'] = serverTimestamp();
+    } else if (nextPhase === 'bottling') {
+        updateData['phaseTimestamps.bottlingStart'] = serverTimestamp();
+    }
+    await updateDoc(batchDocRef(uid, batchId), updateData);
 }
 
 /**
@@ -66,6 +88,16 @@ export async function updateBatchProgress(uid, batchId, newStep, completedSteps)
         currentStep: newStep,
         completedSteps,
     });
+}
+
+/**
+ * Actualiza parcialmente cualquier campo de un lote activo.
+ * @param {string} uid
+ * @param {string} batchId
+ * @param {object} fields
+ */
+export async function updateBatchField(uid, batchId, fields) {
+    await updateDoc(batchDocRef(uid, batchId), fields);
 }
 
 /**
@@ -100,8 +132,22 @@ export async function completeBatch(uid, batchId, historyEntry) {
 }
 
 /**
- * Elimina un lote activo (descartado sin completar).
+ * Elimina un lote activo (descartado sin completar) y lo manda a historial.
  */
-export async function discardBatch(uid, batchId) {
-    await deleteDoc(batchDocRef(uid, batchId));
+export async function discardBatch(uid, batchId, historyEntry) {
+    const batch = writeBatch(db);
+
+    batch.delete(batchDocRef(uid, batchId));
+
+    if (historyEntry) {
+        const historyDocRef = doc(historyRef(uid));
+        batch.set(historyDocRef, {
+            ...historyEntry,
+            tasting: null,
+            timestamp: Date.now(),
+            createdAt: serverTimestamp(),
+        });
+    }
+
+    await batch.commit();
 }

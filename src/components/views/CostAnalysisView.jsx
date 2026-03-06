@@ -2,7 +2,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, TrendingUp, BarChart3, DollarSign, Beer, Package, Calendar, Filter } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
 import { useHistory } from '../../hooks/useHistory';
 import { useInventory } from '../../hooks/useInventory';
 import { formatCurrency, standardizeDate, parseDateToTimestamp } from '../../utils/formatters';
@@ -80,20 +79,20 @@ export default function CostAnalysisView() {
     return (
         <div className="space-y-8 animate-fadeIn">
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-200 dark:border-slate-700 pb-4">
-                <h2 className="text-3xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-line pb-4">
+                <h2 className="text-3xl font-black text-content flex items-center gap-3">
                     <TrendingUp className="text-emerald-500" size={32} /> Análisis de Costos
                 </h2>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                    <div className="flex bg-panel rounded-xl border border-line overflow-hidden shadow-sm">
                         {[{ key: 'all', label: 'Todo' }, { key: '3m', label: '3 Meses' }, { key: '6m', label: '6 Meses' }, { key: '1y', label: '1 Año' }].map(p => (
                             <button key={p.key} onClick={() => setPeriodFilter(p.key)}
-                                className={`px-4 py-2 text-xs font-black transition-colors ${periodFilter === p.key ? 'bg-emerald-500 text-white' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                                className={`px-4 py-2 text-xs font-black transition-colors ${periodFilter === p.key ? 'bg-emerald-500 text-white' : 'text-muted hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
                                 {p.label}
                             </button>
                         ))}
                     </div>
-                    <button onClick={() => navigate('/inventory')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-slate-700 transition-colors shadow-sm">
+                    <button onClick={() => navigate('/inventory')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-panel px-4 py-2 rounded-xl border border-line transition-colors shadow-sm">
                         <ArrowLeft size={18} /> Inventario
                     </button>
                 </div>
@@ -124,17 +123,17 @@ export default function CostAnalysisView() {
             </div>
 
             {safeHistory.length === 0 ? (
-                <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl text-center shadow-sm border border-gray-100 dark:border-slate-800">
+                <div className="bg-panel p-12 rounded-3xl text-center shadow-sm border border-line">
                     <TrendingUp size={72} className="mx-auto text-gray-200 dark:text-slate-700 mb-5" />
-                    <h3 className="text-2xl font-black text-slate-700 dark:text-slate-300 mb-2">Sin datos para analizar</h3>
-                    <p className="text-slate-500 font-medium">Cocina y embotella algunos lotes para ver tu análisis de costos aquí.</p>
+                    <h3 className="text-2xl font-black text-content mb-2">Sin datos para analizar</h3>
+                    <p className="text-muted font-medium">Cocina y embotella algunos lotes para ver tu análisis de costos aquí.</p>
                 </div>
             ) : (
                 <>
                     {/* Gasto por Mes (barras) */}
                     {costByMonth.length > 0 && (
-                        <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
-                            <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                        <div className="bg-panel p-6 md:p-8 rounded-2xl shadow-sm border border-line">
+                            <h3 className="text-xl font-black text-content mb-6 flex items-center gap-2">
                                 <Calendar size={20} className="text-blue-500" /> Gasto Mensual
                             </h3>
                             <div className="flex items-end gap-2 h-48 overflow-x-auto pb-2">
@@ -157,13 +156,13 @@ export default function CostAnalysisView() {
                     )}
 
                     {/* Costo por Estilo */}
-                    <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
-                        <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                    <div className="bg-panel p-6 md:p-8 rounded-2xl shadow-sm border border-line">
+                        <h3 className="text-xl font-black text-content mb-6 flex items-center gap-2">
                             <Beer size={20} className="text-amber-500" /> Costo por Estilo de Cerveza
                         </h3>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
-                                <thead className="text-xs text-slate-400 uppercase border-b border-gray-100 dark:border-slate-800">
+                                <thead className="text-xs text-slate-400 uppercase border-b border-line">
                                     <tr>
                                         <th className="px-4 py-3 font-bold tracking-wider">Estilo</th>
                                         <th className="px-4 py-3 font-bold tracking-wider text-right">Lotes</th>
@@ -172,11 +171,11 @@ export default function CostAnalysisView() {
                                         <th className="px-4 py-3 font-bold tracking-wider text-right">$/Litro</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+                                <tbody className="divide-y divide-line">
                                     {costByStyle.map((row, i) => (
                                         <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                                            <td className="px-4 py-4 font-black text-slate-700 dark:text-slate-200">{row.style}</td>
-                                            <td className="px-4 py-4 text-right font-bold text-slate-500">{row.batches}</td>
+                                            <td className="px-4 py-4 font-black text-content">{row.style}</td>
+                                            <td className="px-4 py-4 text-right font-bold text-muted">{row.batches}</td>
                                             <td className="px-4 py-4 text-right font-bold text-blue-600 dark:text-blue-400">{row.liters} L</td>
                                             <td className="px-4 py-4 text-right font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(row.cost)}</td>
                                             <td className="px-4 py-4 text-right font-bold text-amber-600 dark:text-amber-400">{formatCurrency(row.avgPerLiter)}</td>
@@ -188,13 +187,13 @@ export default function CostAnalysisView() {
                     </div>
 
                     {/* Historial detallado */}
-                    <div className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
-                        <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                    <div className="bg-panel p-6 md:p-8 rounded-2xl shadow-sm border border-line">
+                        <h3 className="text-xl font-black text-content mb-6 flex items-center gap-2">
                             <Filter size={20} className="text-violet-500" /> Detalle por Lote
                         </h3>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
-                                <thead className="text-xs text-slate-400 uppercase border-b border-gray-100 dark:border-slate-800">
+                                <thead className="text-xs text-slate-400 uppercase border-b border-line">
                                     <tr>
                                         <th className="px-4 py-3 font-bold tracking-wider">Receta</th>
                                         <th className="px-4 py-3 font-bold tracking-wider">Fecha</th>
@@ -203,11 +202,11 @@ export default function CostAnalysisView() {
                                         <th className="px-4 py-3 font-bold tracking-wider text-right">$/Litro</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+                                <tbody className="divide-y divide-line">
                                     {safeHistory.map((h, i) => (
                                         <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                                            <td className="px-4 py-3 font-bold text-slate-700 dark:text-slate-200">{h.recipeName}</td>
-                                            <td className="px-4 py-3 text-slate-500">{standardizeDate(h.dateBrewed || h.date)}</td>
+                                            <td className="px-4 py-3 font-bold text-content">{h.recipeName}</td>
+                                            <td className="px-4 py-3 text-muted">{standardizeDate(h.dateBrewed || h.date)}</td>
                                             <td className="px-4 py-3 text-right font-bold text-blue-600 dark:text-blue-400">{h.volume || 0} L</td>
                                             <td className="px-4 py-3 text-right font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(h.totalCost)}</td>
                                             <td className="px-4 py-3 text-right font-bold text-amber-600 dark:text-amber-400">{formatCurrency((Number(h.totalCost) || 0) / (Number(h.volume) || 1))}</td>

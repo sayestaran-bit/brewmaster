@@ -10,6 +10,8 @@ import {
     updateBatchProgress as _updateProgress,
     completeBatch as _completeBatch,
     discardBatch as _discardBatch,
+    transitionBatchPhase as _transitionBatchPhase,
+    updateBatchField as _updateBatchField
 } from '../services/firestore/batches';
 
 export function useActiveBatches() {
@@ -51,9 +53,17 @@ export function useActiveBatches() {
         return await _completeBatch(currentUser.uid, batchId, historyEntry);
     }, [currentUser]);
 
-    const discardBatch = useCallback(async (batchId) => {
-        await _discardBatch(currentUser.uid, batchId);
+    const discardBatch = useCallback(async (batchId, historyEntry) => {
+        await _discardBatch(currentUser.uid, batchId, historyEntry);
     }, [currentUser]);
 
-    return { batches, loading, error, startBatch, updateProgress, completeBatch, discardBatch };
+    const transitionBatchPhase = useCallback(async (batchId, nextPhase) => {
+        await _transitionBatchPhase(currentUser.uid, batchId, nextPhase);
+    }, [currentUser]);
+
+    const updateBatchField = useCallback(async (batchId, fields) => {
+        await _updateBatchField(currentUser.uid, batchId, fields);
+    }, [currentUser]);
+
+    return { batches, loading, error, startBatch, updateProgress, completeBatch, discardBatch, transitionBatchPhase, updateBatchField };
 }

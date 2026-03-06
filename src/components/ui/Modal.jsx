@@ -41,9 +41,9 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', c
             <div
                 className={`
           relative z-10 w-full ${sizes[size]}
-          bg-white dark:bg-slate-900
+          bg-panel
           rounded-t-3xl sm:rounded-3xl
-          border border-gray-100 dark:border-slate-800
+          border border-line
           shadow-2xl overflow-hidden
           animate-slideUp
           ${className}
@@ -51,8 +51,8 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', c
             >
                 {/* Header */}
                 {title && (
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-800">
-                        <h3 className="text-lg font-black text-slate-800 dark:text-white">{title}</h3>
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+                        <h3 className="text-lg font-black text-content">{title}</h3>
                         <button
                             onClick={onClose}
                             className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"

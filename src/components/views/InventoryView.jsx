@@ -1,25 +1,28 @@
 // /src/components/views/InventoryView.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp } from 'lucide-react';
+import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp, Info } from 'lucide-react';
 import { useInventory } from '../../hooks/useInventory';
 import { formatCurrency } from '../../utils/formatters';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
+import { useAuth } from '../../context/AuthContext';
 
 export default function InventoryView() {
     const navigate = useNavigate();
+    const { currentUser } = useAuth();
+    const isGuest = currentUser?.isAnonymous;
+    const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
     const { inventory, addItem, updateItem, deleteItem } = useInventory();
+    const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
     const [showInvForm, setShowInvForm] = useState(false);
-    const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0 });
 
     const totalInventoryValue = inventory.reduce((acc, item) => acc + ((item.stock || 0) * (item.price || 0)), 0);
 
     const handleAddInvItem = async () => {
         if (!newInvItem.name.trim()) return;
         await addItem({ ...newInvItem, stock: Number(newInvItem.stock), price: Number(newInvItem.price) });
-        setShowInvForm(false);
-        setNewInvItem({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0 });
+        setNewInvItem({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
     };
 
     const handleDeleteInvItem = async (id) => {
@@ -40,7 +43,7 @@ export default function InventoryView() {
                         <Button variant="outline" size="sm" icon={TrendingUp} onClick={() => navigate('/costs')} className="text-emerald-600 border-emerald-200 hover:bg-emerald-50">
                             Costos
                         </Button>
-                        <Button variant="secondary" size="sm" icon={Plus} onClick={() => setShowInvForm(!showInvForm)}>
+                        <Button variant="secondary" size="sm" icon={Plus} disabled={isGuest} title={isGuest ? guestTooltip : undefined} onClick={() => setShowInvForm(!showInvForm)}>
                             Añadir Insumo
                         </Button>
                     </div>
@@ -48,10 +51,10 @@ export default function InventoryView() {
             />
 
             {showInvForm && (
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-slate-800 flex flex-col md:flex-row gap-4 items-end mb-8 animate-fadeIn">
+                <div className="bg-panel p-6 rounded-2xl shadow-sm border border-line flex flex-wrap gap-4 items-end mb-8 animate-fadeIn">
                     <div className="w-full md:w-1/5">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Categoría</label>
-                        <select className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white" value={newInvItem.category} onChange={e => setNewInvItem({ ...newInvItem, category: e.target.value, unit: e.target.value === 'Levadura' ? 'sobre' : e.target.value === 'Lúpulo' || e.target.value === 'Sales Minerales' ? 'g' : e.target.value === 'Aditivos' ? 'un' : 'kg' })}>
+                        <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Categoría</label>
+                        <select className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" value={newInvItem.category} onChange={e => setNewInvItem({ ...newInvItem, category: e.target.value, unit: e.target.value === 'Levadura' ? 'sobre' : e.target.value === 'Lúpulo' || e.target.value === 'Sales Minerales' ? 'g' : e.target.value === 'Aditivos' ? 'un' : 'kg' })}>
                             <option value="Malta">Malta</option>
                             <option value="Lúpulo">Lúpulo</option>
                             <option value="Levadura">Levadura</option>
@@ -60,29 +63,43 @@ export default function InventoryView() {
                         </select>
                     </div>
                     <div className="w-full md:w-2/5">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nombre del Insumo</label>
-                        <input type="text" className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ej: Malta Caramelo" value={newInvItem.name} onChange={e => setNewInvItem({ ...newInvItem, name: e.target.value })} />
+                        <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Insumo</label>
+                        <input type="text" className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" placeholder="Ej: Malta Caramelo" value={newInvItem.name} onChange={e => setNewInvItem({ ...newInvItem, name: e.target.value })} />
                     </div>
                     <div className="w-full md:w-1/5 flex gap-2">
                         <div className="w-1/2">
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Stock</label>
-                            <input type="number" className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center bg-white dark:bg-slate-800 text-slate-900 dark:text-white" value={newInvItem.stock} onChange={e => setNewInvItem({ ...newInvItem, stock: e.target.value })} />
+                            <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Stock</label>
+                            <input type="number" className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center bg-surface text-content" value={newInvItem.stock} onChange={e => setNewInvItem({ ...newInvItem, stock: e.target.value })} />
                         </div>
                         <div className="w-1/2">
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Unidad</label>
-                            <input type="text" className="w-full p-3 border border-gray-200 dark:border-slate-700 rounded-xl outline-none bg-gray-100 dark:bg-slate-900 text-center text-gray-500 dark:text-gray-400 font-bold" value={newInvItem.unit} disabled />
+                            <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Unidad</label>
+                            <input type="text" className="w-full p-3 border border-line rounded-xl outline-none bg-surface text-center text-muted/50 font-bold cursor-not-allowed disabled:bg-surface" value={newInvItem.unit} disabled />
                         </div>
                     </div>
                     <div className="w-full md:w-1/5">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Precio Unit.</label>
+                        <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Precio Unit.</label>
                         <div className="relative">
-                            <span className="absolute left-3 top-3 text-gray-400">$</span>
-                            <input type="number" className="w-full p-3 pl-8 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" value={newInvItem.price} onChange={e => setNewInvItem({ ...newInvItem, price: e.target.value })} />
+                            <span className="absolute left-3 top-3 text-muted">$</span>
+                            <input type="number" className="w-full p-3 pl-8 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" value={newInvItem.price} onChange={e => setNewInvItem({ ...newInvItem, price: e.target.value })} />
                         </div>
                     </div>
-                    <button onClick={handleAddInvItem} className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex justify-center items-center h-[50px] px-8 transition-colors shadow-sm">
-                        <Save size={20} />
-                    </button>
+
+                    <div className="w-full md:flex-1">
+                        <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Descripción (Opcional)</label>
+                        <textarea
+                            className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content resize-none flex-1"
+                            rows="2"
+                            placeholder="Añade notas sobre el perfil de sabor, origen o uso..."
+                            value={newInvItem.description || ''}
+                            onChange={e => setNewInvItem({ ...newInvItem, description: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="w-full md:w-auto flex justify-end mt-2 md:mt-0">
+                        <button onClick={handleAddInvItem} className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex justify-center items-center h-[50px] px-8 transition-colors shadow-sm">
+                            <Save size={20} className="mr-2" /> Guardar Insumo
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -91,49 +108,70 @@ export default function InventoryView() {
                 const categoryItems = Array.isArray(inventory) ? inventory.filter(i => i.category === category) : [];
 
                 return (
-                    <div key={category} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden mb-8">
-                        <div className="bg-gray-50 dark:bg-slate-800/50 px-6 py-4 border-b dark:border-slate-800 font-black text-slate-800 dark:text-white text-lg flex items-center gap-2">
+                    <div key={category} className="bg-panel rounded-2xl shadow-sm border border-line overflow-hidden mb-8">
+                        <div className="bg-black/5 dark:bg-white/5 px-6 py-5 border-b border-line font-black text-content text-lg flex items-center gap-2">
                             {catIcon} {category}s
                         </div>
                         <div className="p-0 overflow-x-auto">
                             <table className="w-full text-left text-sm whitespace-nowrap">
-                                <thead className="text-xs text-slate-400 uppercase bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800">
+                                <thead className="text-xs text-muted uppercase bg-panel border-b border-line">
                                     <tr>
-                                        <th className="px-6 py-4 font-bold tracking-wider text-left w-1/3">Ingrediente</th>
-                                        <th className="px-6 py-4 font-bold tracking-wider text-left w-1/4">Stock Actual</th>
-                                        <th className="px-6 py-4 font-bold tracking-wider text-left w-1/4">Costo Unidad</th>
-                                        <th className="px-6 py-4 text-center w-16">Acciones</th>
+                                        <th className="px-6 py-5 font-bold tracking-wider text-left w-1/3">Ingrediente</th>
+                                        <th className="px-6 py-5 font-bold tracking-wider text-left w-1/4">Stock Actual</th>
+                                        <th className="px-6 py-5 font-bold tracking-wider text-left w-1/4">Costo Unidad</th>
+                                        <th className="px-6 py-5 text-center w-16">Acciones</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+                                <tbody className="divide-y divide-line">
                                     {categoryItems.map((item) => (
-                                        <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 group transition-colors">
-                                            <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">{item.name}</td>
-                                            <td className="px-6 py-4">
+                                        <tr key={item.id} className="hover:bg-black/5 dark:hover:bg-white/5 group transition-colors">
+                                            <td className="px-6 py-5 font-bold text-content relative group/tooltip">
+                                                <div className="flex items-center gap-2">
+                                                    {item.name}
+                                                    {item.description && (
+                                                        <div className="relative flex items-center">
+                                                            <Info size={16} className="text-blue-400 cursor-help" />
+                                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl pointer-events-none whitespace-normal z-[60]">
+                                                                {item.description}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-5">
                                                 <div className="flex items-center gap-2">
                                                     <input
                                                         type="number"
                                                         defaultValue={parseFloat(Number(item.stock).toFixed(4))}
+                                                        disabled={isGuest}
+                                                        title={isGuest ? guestTooltip : undefined}
                                                         onBlur={(e) => updateItem(item.id, { stock: parseFloat(Number(e.target.value).toFixed(4)) })}
-                                                        className="w-full max-w-[100px] p-2 border border-gray-200 dark:border-slate-700 rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none font-medium bg-white dark:bg-slate-800 dark:text-white transition-all"
+                                                        className="w-full max-w-[100px] p-2 border border-line rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none font-medium bg-surface focus:bg-panel text-content transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                                                     />
-                                                    <span className="text-gray-400 font-bold shrink-0">{item.unit}</span>
+                                                    <span className="text-muted font-bold shrink-0">{item.unit}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2 text-gray-400">
+                                            <td className="px-6 py-5">
+                                                <div className="flex items-center gap-2 text-muted">
                                                     <span className="shrink-0">$</span>
                                                     <input
                                                         type="number"
                                                         defaultValue={item.price}
+                                                        disabled={isGuest}
+                                                        title={isGuest ? guestTooltip : undefined}
                                                         onBlur={(e) => updateItem(item.id, { price: Number(e.target.value) || 0 })}
-                                                        className="w-full max-w-[100px] p-2 border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 transition-all"
+                                                        className="w-full max-w-[100px] p-2 border border-line rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-content bg-surface focus:bg-panel transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                                                     />
                                                     <span className="text-xs shrink-0">/ {item.unit}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <button onClick={() => handleDeleteInvItem(item.id)} className="text-gray-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100">
+                                            <td className="px-6 py-5 text-center">
+                                                <button
+                                                    onClick={() => handleDeleteInvItem(item.id)}
+                                                    disabled={isGuest}
+                                                    title={isGuest ? guestTooltip : undefined}
+                                                    className="text-muted hover:text-red-500 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
+                                                >
                                                     <Trash2 size={18} />
                                                 </button>
                                             </td>
@@ -142,9 +180,9 @@ export default function InventoryView() {
                                 </tbody>
                             </table>
                         </div>
-                    </div>
+                    </div >
                 )
             })}
-        </div>
+        </div >
     );
 }

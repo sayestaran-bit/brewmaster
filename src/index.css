@@ -5,8 +5,44 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+    /* FOAM THEME (Light Mode) */
+    --bg-surface: #F8F9FA;
+    --bg-panel: #FFFFFF;
+    --text-primary: #1A1614;
+    /* Stout */
+    --text-muted: #57534E;
+    --border-line: #E5E7EB;
+
+    --color-hazy: #F97316;
+    /* Orange/Mango */
+    --color-hazy-hover: #EA580C;
+    --color-lager: #FBBF24;
+    /* Gold */
+    --color-amber: #DC2626;
+    /* Red */
+  }
+
+  .dark {
+    color-scheme: dark;
+    /* STOUT THEME (Dark Mode) */
+    --bg-surface: #121212;
+    --bg-panel: #1A1614;
+    --text-primary: #FDFBF7;
+    /* Foam */
+    --text-muted: #A8A29E;
+    --border-line: #332C28;
+
+    --color-hazy: #F97316;
+    --color-hazy-hover: #EA580C;
+    --color-lager: #FBBF24;
+    --color-amber: #EF4444;
+  }
+
   body {
-    @apply bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 antialiased;
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -22,24 +58,42 @@
     width: 6px;
     height: 6px;
   }
+
   ::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
+
   ::-webkit-scrollbar-thumb {
     @apply bg-slate-300 dark:bg-slate-700 rounded-full;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-400 dark:bg-slate-600;
   }
 }
 
 @layer utilities {
+
   /* Staggered animation delays for lists */
-  .animate-delay-1 { animation-delay: 75ms; }
-  .animate-delay-2 { animation-delay: 150ms; }
-  .animate-delay-3 { animation-delay: 225ms; }
-  .animate-delay-4 { animation-delay: 300ms; }
-  .animate-delay-5 { animation-delay: 375ms; }
+  .animate-delay-1 {
+    animation-delay: 75ms;
+  }
+
+  .animate-delay-2 {
+    animation-delay: 150ms;
+  }
+
+  .animate-delay-3 {
+    animation-delay: 225ms;
+  }
+
+  .animate-delay-4 {
+    animation-delay: 300ms;
+  }
+
+  .animate-delay-5 {
+    animation-delay: 375ms;
+  }
 
   /* Glass effect */
   .glass {

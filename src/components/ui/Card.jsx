@@ -2,10 +2,10 @@
 import React from 'react';
 
 const variants = {
-    default: 'bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 shadow-sm',
+    default: 'bg-panel border border-line shadow-sm',
     glass: 'glass shadow-sm',
-    dark: 'bg-slate-800 border border-slate-700 shadow-lg',
-    flat: 'bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800',
+    dark: 'bg-surface border border-line shadow-sm',
+    flat: 'bg-black/5 dark:bg-white/5 border border-line',
 };
 
 const paddings = {

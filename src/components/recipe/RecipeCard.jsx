@@ -31,7 +31,7 @@ export default function RecipeCard({ recipe, history = [], feasibility = null, o
 
     return (
         <div
-            className={`relative bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm hover:shadow-xl border-2 transition-all duration-300 hover:-translate-y-1 group flex flex-col justify-between overflow-hidden cursor-pointer ${borderClass}`}
+            className={`relative bg-panel p-6 rounded-2xl shadow-sm hover:shadow-xl border-2 transition-all duration-300 hover:-translate-y-1 group flex flex-col justify-between overflow-hidden cursor-pointer ${borderClass}`}
             onClick={onClick}
         >
             {/* SRM color strip at bottom */}
@@ -41,7 +41,7 @@ export default function RecipeCard({ recipe, history = [], feasibility = null, o
             {onDelete && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onDelete(recipe); }}
-                    className="absolute top-4 right-4 text-gray-300 dark:text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1 bg-white dark:bg-slate-800 rounded-md shadow-sm"
+                    className="absolute top-4 right-4 text-gray-300 dark:text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1 bg-panel rounded-md shadow-sm"
                     title="Eliminar receta"
                 >
                     <Trash2 size={18} />
@@ -74,16 +74,16 @@ export default function RecipeCard({ recipe, history = [], feasibility = null, o
                     )}
                 </div>
 
-                <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-amber-600 transition-colors pr-6 tracking-tight">
+                <h3 className="text-xl font-black text-content leading-tight mb-2 group-hover:text-amber-600 transition-colors pr-6 tracking-tight">
                     {recipe.name || 'Sin Nombre'}
                 </h3>
                 {recipe.description && (
-                    <p className="text-slate-500 dark:text-slate-400 text-xs line-clamp-2 mt-1">{recipe.description}</p>
+                    <p className="text-muted text-xs line-clamp-2 mt-1">{recipe.description}</p>
                 )}
             </div>
 
             {/* Stats row */}
-            <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-gray-100 dark:border-slate-800 pt-4 pb-2">
+            <div className="flex flex-wrap gap-4 mt-5 text-sm text-slate-600 dark:text-slate-400 font-bold border-t border-line pt-4 pb-2">
                 <span className="flex items-center gap-1" title="Volumen">
                     <Droplets size={16} className="text-blue-500" /> {recipe.targetVolume || 0}L
                 </span>

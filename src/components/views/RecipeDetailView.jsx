@@ -3,14 +3,19 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp } from 'lucide-react';
 import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
+import { formatCurrency } from '../../utils/formatters';
 import { calculateRecipeCost } from '../../utils/costCalculator';
 import { getRecipeAdvice } from '../../services/gemini';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
+import { useAuth } from '../../context/AuthContext';
 
 export default function RecipeDetailView() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { currentUser } = useAuth();
+    const isGuest = currentUser?.isAnonymous;
+    const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
     const { recipes } = useRecipes();
     const { inventory } = useInventory();
 
@@ -40,6 +45,7 @@ export default function RecipeDetailView() {
         const scaleFactor = (targetVol || 1) / (selectedRecipe.targetVolume || 1);
         const safeMalts = Array.isArray(selectedRecipe.ingredients?.malts) ? selectedRecipe.ingredients.malts : [];
         const safeHops = Array.isArray(selectedRecipe.ingredients?.hops) ? selectedRecipe.ingredients.hops : [];
+        const safeOthers = Array.isArray(selectedRecipe.ingredients?.others) ? selectedRecipe.ingredients.others : [];
         const safeYeast = typeof selectedRecipe.ingredients?.yeast === 'string'
             ? { name: selectedRecipe.ingredients.yeast, amount: 1, unit: 'sobre' }
             : (selectedRecipe.ingredients?.yeast || { name: 'Levadura', amount: 1, unit: 'sobre' });
@@ -48,6 +54,7 @@ export default function RecipeDetailView() {
             ingredients: {
                 malts: safeMalts.map(m => ({ ...m, amount: ((Number(m.amount) || 0) * scaleFactor).toFixed(2) })),
                 hops: safeHops.map(h => ({ ...h, amount: Math.round((Number(h.amount) || 0) * scaleFactor) })),
+                others: safeOthers.map(o => ({ ...o, amount: ((Number(o.amount) || 0) * scaleFactor).toFixed(2) })),
                 yeast: safeYeast,
                 water: {
                     strike: ((Number(selectedRecipe.ingredients?.water?.strike) || 15) * scaleFactor).toFixed(1),
@@ -125,10 +132,15 @@ export default function RecipeDetailView() {
     return (
         <div className="animate-fadeIn">
             <div className="flex justify-between items-center mb-4">
-                <button onClick={() => navigate('/recipes')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-white dark:bg-slate-800 px-4 py-2 rounded-xl transition-all shadow-sm border border-gray-200 dark:border-slate-700 hover:-translate-x-1">
+                <button onClick={() => navigate('/recipes')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-panel px-4 py-2 rounded-xl transition-all shadow-sm border border-line hover:-translate-x-1">
                     <ArrowLeft size={20} /> Mis Recetas
                 </button>
-                <button onClick={() => navigate(`/recipes/${id}/edit`)} className="flex items-center gap-2 text-white font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-slate-700">
+                <button
+                    onClick={() => { if (!isGuest) navigate(`/recipes/${id}/edit`); else alert(guestTooltip); }}
+                    disabled={isGuest}
+                    title={isGuest ? guestTooltip : undefined}
+                    className="flex items-center gap-2 text-white font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
                     <Edit3 size={18} /> Editar Receta
                 </button>
             </div>
@@ -160,43 +172,52 @@ export default function RecipeDetailView() {
                     </div>
                 </div>
 
-                <div className="mt-8 md:mt-0 flex flex-col items-start md:items-end bg-black/20 p-6 rounded-3xl backdrop-blur-md border border-white/20 relative z-10 shadow-lg">
-                    <label className="font-bold text-white/90 text-xs mb-2 uppercase tracking-widest">Volumen Objetivo</label>
-                    <div className="flex items-center gap-3">
-                        <input
-                            type="number"
-                            value={targetVol}
-                            onChange={(e) => setTargetVol(Number(e.target.value) || 0)}
-                            className="w-28 p-2 bg-white text-slate-800 rounded-2xl text-center focus:ring-4 focus:ring-white/50 outline-none text-3xl font-black shadow-inner"
-                            min="1"
-                        />
-                        <span className="text-white font-black text-3xl italic">L</span>
+                <div className="mt-8 md:mt-0 flex flex-col items-center md:items-end gap-4 relative z-10 w-full md:w-auto">
+                    <div className="flex flex-col items-end bg-black/20 p-5 rounded-3xl backdrop-blur-md border border-white/20 shadow-lg w-full md:w-auto">
+                        <label className="font-bold text-white/90 text-[10px] mb-2 uppercase tracking-widest text-center md:text-right w-full">Volumen Objetivo</label>
+                        <div className="flex items-center justify-center gap-3 w-full">
+                            <input
+                                type="number"
+                                value={targetVol}
+                                onChange={(e) => setTargetVol(Number(e.target.value) || 0)}
+                                className="w-24 p-2 bg-white text-slate-800 rounded-2xl text-center focus:ring-4 focus:ring-white/50 outline-none text-2xl font-black shadow-inner"
+                                min="1"
+                            />
+                            <span className="text-white font-black text-2xl italic">L</span>
+                        </div>
                     </div>
+
+                    <button
+                        onClick={() => navigate(`/brew/${id}?vol=${targetVol}`)}
+                        className="bg-white text-slate-900 px-6 py-4 rounded-[1.5rem] font-black text-lg transition-all duration-300 shadow-2xl hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-full border-4 border-white/10 hover:border-white/30"
+                    >
+                        <Play size={20} className="text-amber-500 fill-amber-500" /> ¡COCI​NAR!
+                    </button>
                 </div>
             </div>
 
             {/* TABS NAVEGACIÓN */}
-            <div className="flex flex-wrap border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-x-auto rounded-b-none">
-                <button onClick={() => setActiveTab('recipe')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'recipe' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+            <div className="flex flex-wrap border-b border-line bg-panel shadow-sm overflow-x-auto rounded-b-none">
+                <button onClick={() => setActiveTab('recipe')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'recipe' ? `bg-surface border-b-4 ${theme.border} ${theme.text}` : 'text-muted hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                     <BookOpen size={18} /> Receta
                 </button>
-                <button onClick={() => setActiveTab('process')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'process' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                <button onClick={() => setActiveTab('process')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'process' ? `bg-surface border-b-4 ${theme.border} ${theme.text}` : 'text-muted hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                     <CheckCircle2 size={18} /> Proceso
                 </button>
-                <button onClick={() => setActiveTab('water')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'water' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                <button onClick={() => setActiveTab('water')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'water' ? `bg-surface border-b-4 ${theme.border} ${theme.text}` : 'text-muted hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                     <Droplets size={18} /> Agua
                 </button>
-                <button onClick={() => setActiveTab('tips')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'tips' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                <button onClick={() => setActiveTab('tips')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'tips' ? `bg-surface border-b-4 ${theme.border} ${theme.text}` : 'text-muted hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                     <Info size={18} /> Tips
                 </button>
                 {(Array.isArray(scaledRecipe.modifications) && scaledRecipe.modifications.length > 0) && (
-                    <button onClick={() => setActiveTab('history')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'history' ? `bg-slate-50 dark:bg-slate-800/50 border-b-4 ${theme.border} ${theme.text}` : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                    <button onClick={() => setActiveTab('history')} className={`flex-1 min-w-[100px] py-5 font-black text-sm md:text-base flex justify-center items-center gap-2 transition-colors ${activeTab === 'history' ? `bg-surface border-b-4 ${theme.border} ${theme.text}` : 'text-muted hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                         <FileClock size={18} /> Cambios
                     </button>
                 )}
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-b-[2.5rem] shadow-sm border border-t-0 border-gray-100 dark:border-slate-800 mt-0">
+            <div className="bg-panel p-6 md:p-10 rounded-b-[2.5rem] shadow-sm border border-t-0 border-line mt-0">
 
                 {/* TAB: RECETA */}
                 {activeTab === 'recipe' && (
@@ -220,7 +241,7 @@ export default function RecipeDetailView() {
                                 <h4 className="font-black text-amber-800 dark:text-amber-500 text-xl flex items-center gap-2 mb-4">
                                     <Wand2 size={24} /> Análisis Experto de la Receta
                                 </h4>
-                                <div className="text-slate-700 dark:text-slate-300 font-medium text-base whitespace-pre-line leading-relaxed">
+                                <div className="text-content font-medium text-base whitespace-pre-line leading-relaxed">
                                     {aiAdvice}
                                 </div>
                             </div>
@@ -237,15 +258,15 @@ export default function RecipeDetailView() {
                                 </div>
                             </div>
 
-                            <div className="flex flex-col md:flex-row gap-8 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-slate-700 w-full md:w-auto flex-1 md:flex-none justify-end">
+                            <div className="flex flex-col md:flex-row gap-8 bg-panel p-6 rounded-2xl shadow-sm border border-emerald-100 dark:border-slate-700 w-full md:w-auto flex-1 md:flex-none justify-end">
                                 <div className="flex flex-col text-sm border-b md:border-b-0 md:border-r border-gray-100 dark:border-slate-700 pb-4 md:pb-0 md:pr-8 justify-center">
-                                    <div className="flex justify-between gap-10 text-slate-500 dark:text-slate-400 mb-2">
+                                    <div className="flex justify-between gap-10 text-muted mb-2">
                                         <span>Neto:</span>
-                                        <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(costInfo.neto)}</span>
+                                        <span className="font-bold text-content">{formatCurrency(costInfo.neto)}</span>
                                     </div>
-                                    <div className="flex justify-between gap-10 text-slate-500 dark:text-slate-400">
+                                    <div className="flex justify-between gap-10 text-muted">
                                         <span>IVA (19%):</span>
-                                        <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(costInfo.iva)}</span>
+                                        <span className="font-bold text-content">{formatCurrency(costInfo.iva)}</span>
                                     </div>
                                 </div>
 
@@ -270,10 +291,21 @@ export default function RecipeDetailView() {
                                 <ul className="space-y-4">
                                     {scaledRecipe.ingredients.malts.map((malt, idx) => {
                                         const stockItem = costInfo.ingredients.find(i => i.category === 'Malta' && i.name === (malt.name || 'Malta desconocida'));
+                                        const invItem = Array.isArray(inventory) ? inventory.find(i => i.category === 'Malta' && (i.name || '').toLowerCase().trim() === (malt.name || '').toLowerCase().trim()) : null;
                                         return (
                                             <li key={idx} className="flex justify-between items-center text-lg border-b border-amber-100 dark:border-amber-900/30 pb-4">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-slate-700 dark:text-slate-300">{malt.name || 'Malta'}</span>
+                                                    <div className="flex items-center gap-1 group/tooltip relative">
+                                                        <span className="font-bold text-content">{malt.name || 'Malta'}</span>
+                                                        {invItem?.description && (
+                                                            <>
+                                                                <Info size={16} className="text-blue-400 cursor-help ml-1" />
+                                                                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl z-50 pointer-events-none whitespace-normal">
+                                                                    {invItem.description}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                     {stockItem && (
                                                         stockItem.hasEnough
                                                             ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-black" title={`Stock: ${stockItem.available} ${stockItem.unit}`}>✅ {stockItem.available} {stockItem.unit}</span>
@@ -282,7 +314,7 @@ export default function RecipeDetailView() {
                                                                 : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌ Sin stock</span>
                                                     )}
                                                 </div>
-                                                <span className="bg-white dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{malt.amount} {malt.unit || 'kg'}</span>
+                                                <span className="bg-panel border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{malt.amount} {malt.unit || 'kg'}</span>
                                             </li>
                                         );
                                     })}
@@ -297,33 +329,49 @@ export default function RecipeDetailView() {
                                 </ul>
                             </div>
 
-                            <div className="bg-green-50/50 dark:bg-green-900/10 p-8 rounded-3xl border border-green-200 dark:border-green-800/30 shadow-sm">
+                            <div className="bg-green-50/50 dark:bg-green-900/10 p-8 rounded-3xl border border-green-200 dark:border-green-800/30 shadow-sm flex flex-col h-full">
                                 <h3 className="text-2xl font-black flex items-center gap-3 border-b border-green-200 dark:border-green-800/50 pb-4 mb-6 text-green-900 dark:text-green-500">
                                     <Leaf className="text-green-500" size={28} /> Lúpulos
                                 </h3>
-                                <ul className="space-y-5">
+                                <ul className="space-y-5 flex-1">
                                     {scaledRecipe.ingredients.hops.map((hop, idx) => {
                                         const stockItem = costInfo.ingredients.find(i => i.category === 'Lúpulo' && i.name === (hop.name || 'Lúpulo desconocido'));
+                                        const invItem = Array.isArray(inventory) ? inventory.find(i => i.category === 'Lúpulo' && (i.name || '').toLowerCase().trim() === (hop.name || '').toLowerCase().trim()) : null;
                                         return (
-                                            <li key={idx} className="flex flex-col border-b border-green-100 dark:border-green-900/30 pb-4 last:border-0">
+                                            <li key={idx} className="flex flex-col border-b border-green-100 dark:border-green-900/30 pb-4 last:border-0 relative">
                                                 <div className="flex justify-between items-center mb-3">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-slate-800 dark:text-slate-200 text-xl">{hop.name || 'Lúpulo'}</span>
+                                                        <div className="flex items-center gap-1 group/tooltip relative">
+                                                            <span className="font-bold text-slate-800 dark:text-slate-200 text-xl">{hop.name || 'Lúpulo'}</span>
+                                                            {invItem?.description && (
+                                                                <>
+                                                                    <Info size={16} className="text-blue-400 cursor-help ml-1" />
+                                                                    <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl z-50 pointer-events-none whitespace-normal">
+                                                                        {invItem.description}
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </div>
                                                         {stockItem && (
                                                             stockItem.hasEnough
-                                                                ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-black">✅ {stockItem.available} {stockItem.unit}</span>
+                                                                ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-black">✅</span>
                                                                 : stockItem.inInventory
-                                                                    ? <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-black">⚠️ {stockItem.available} {stockItem.unit}</span>
-                                                                    : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌ Sin stock</span>
+                                                                    ? <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-black">⚠️</span>
+                                                                    : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌</span>
                                                         )}
                                                     </div>
-                                                    <span className="bg-white dark:bg-slate-800 border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
+                                                    <span className="bg-panel border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
                                                 </div>
-                                                {hop.time && (
-                                                    <span className="text-green-700 dark:text-green-300 font-bold text-sm flex items-center gap-2 bg-green-100/50 dark:bg-green-900/40 w-fit px-3 py-1.5 rounded-lg border border-green-200/50 dark:border-green-800">
-                                                        <Clock size={16} /> {hop.time} <span className="mx-1 opacity-50">•</span> <span className="uppercase tracking-wider">{hop.stage || 'Hervor'}</span>
-                                                    </span>
-                                                )}
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {hop.time && (
+                                                        <span className="text-green-700 dark:text-green-300 font-bold text-sm flex items-center gap-1 bg-green-100/50 dark:bg-green-900/40 w-fit px-3 py-1.5 rounded-lg border border-green-200/50 dark:border-green-800">
+                                                            <Clock size={16} /> {hop.time} | {hop.use || hop.stage || 'Hervor'}
+                                                        </span>
+                                                    )}
+                                                    {hop.phase === 'fermenting' && (
+                                                        <span className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 bg-purple-100/50 dark:bg-purple-900/40 px-3 py-1.5 rounded-lg border border-purple-200/50 dark:border-purple-800"><Activity size={14} className="inline mr-1" />DH</span>
+                                                    )}
+                                                </div>
                                             </li>
                                         );
                                     })}
@@ -331,14 +379,67 @@ export default function RecipeDetailView() {
                             </div>
                         </div>
 
-                        <div className="bg-slate-50 dark:bg-slate-800/50 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
-                            <div className="bg-white dark:bg-slate-700 p-5 rounded-2xl text-slate-600 dark:text-white shadow-md border border-slate-200 dark:border-slate-600 flex-shrink-0">
-                                <Beaker size={36} />
+                        <div className="grid md:grid-cols-2 gap-8">
+                            <div className="bg-surface p-8 rounded-3xl border border-line flex flex-col items-start gap-6 shadow-sm justify-center">
+                                <div className="flex items-center gap-4 border-b border-line pb-4 w-full">
+                                    <div className="bg-white dark:bg-slate-700 p-4 rounded-2xl text-slate-600 dark:text-white shadow-md border border-slate-200 dark:border-slate-600">
+                                        <Beaker size={28} />
+                                    </div>
+                                    <h4 className="font-black text-muted uppercase tracking-widest text-sm">Levadura Recomendada</h4>
+                                </div>
+                                <p className="text-content font-black text-3xl">{scaledRecipe.ingredients.yeast.amount} <span className="text-xl font-bold text-muted">{scaledRecipe.ingredients.yeast.unit || 'sobre'}</span></p>
+                                <div className="group/tooltip relative w-full">
+                                    <p className="flex justify-center items-center gap-2 text-amber-600 dark:text-amber-500 font-bold text-2xl bg-amber-50 dark:bg-amber-900/10 px-4 py-2 rounded-xl w-full text-center border border-amber-100 dark:border-amber-900/30">
+                                        {scaledRecipe.ingredients.yeast.name || 'Genérica'}
+                                        {Array.isArray(inventory) && inventory.find(i => i.category === 'Levadura' && (i.name || '').toLowerCase().trim() === (scaledRecipe.ingredients.yeast.name || '').toLowerCase().trim())?.description && (
+                                            <>
+                                                <Info size={16} className="text-blue-400 cursor-help" />
+                                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl z-50 pointer-events-none whitespace-normal text-left">
+                                                    {inventory.find(i => i.category === 'Levadura' && (i.name || '').toLowerCase().trim() === (scaledRecipe.ingredients.yeast.name || '').toLowerCase().trim()).description}
+                                                </div>
+                                            </>
+                                        )}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h4 className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-xs mb-2">Levadura Recomendada</h4>
-                                <p className="text-slate-800 dark:text-white font-black text-3xl">{scaledRecipe.ingredients.yeast.amount} <span className="text-xl font-bold text-slate-500">{scaledRecipe.ingredients.yeast.unit || 'sobre'}</span> de <span className="text-amber-600 dark:text-amber-500">{scaledRecipe.ingredients.yeast.name || 'Genérica'}</span></p>
-                            </div>
+
+                            {scaledRecipe.ingredients.others && scaledRecipe.ingredients.others.length > 0 && (
+                                <div className="bg-purple-50/50 dark:bg-purple-900/10 p-8 rounded-3xl border border-purple-200 dark:border-purple-800/30 shadow-sm flex flex-col">
+                                    <h3 className="text-2xl font-black flex items-center gap-3 border-b border-purple-200 dark:border-purple-800/50 pb-4 mb-6 text-purple-900 dark:text-purple-500">
+                                        <Sparkles className="text-purple-500" size={28} /> Sales y Aditivos
+                                    </h3>
+                                    <ul className="space-y-4 flex-1">
+                                        {scaledRecipe.ingredients.others.map((other, idx) => {
+                                            const stockItem = costInfo.ingredients.find(i => i.category === (other.category || 'Aditivos') && i.name === (other.name || 'Aditivo desconocido'));
+                                            const invItem = Array.isArray(inventory) ? inventory.find(i => i.category === (other.category || 'Aditivos') && (i.name || '').toLowerCase().trim() === (other.name || '').toLowerCase().trim()) : null;
+                                            return (
+                                                <li key={idx} className="flex flex-col border-b border-purple-100 dark:border-purple-900/30 pb-4 last:border-0 relative">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex items-center gap-1 group/tooltip relative">
+                                                                <span className="font-bold text-slate-800 dark:text-slate-200 text-lg">{other.name || 'Aditivo'}</span>
+                                                                {invItem?.description && (
+                                                                    <>
+                                                                        <Info size={16} className="text-blue-400 cursor-help ml-1" />
+                                                                        <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl z-50 pointer-events-none whitespace-normal">
+                                                                            {invItem.description}
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                            {stockItem && (stockItem.hasEnough ? <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black">✅</span> : stockItem.inInventory ? <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-black">⚠️</span> : <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-black">❌</span>)}
+                                                        </div>
+                                                        <span className="bg-panel border border-purple-200 dark:border-slate-700 text-purple-800 dark:text-purple-400 px-3 py-1 rounded-xl font-black shadow-sm text-sm">{other.amount} {other.unit || 'g'}</span>
+                                                    </div>
+                                                    <span className="text-purple-700 dark:text-purple-300 font-bold text-[11px] flex items-center w-fit px-2 py-1 rounded-md border border-purple-200/50 dark:border-purple-800 bg-purple-100/50 dark:bg-purple-900/40 uppercase tracking-widest">
+                                                        {other.phase === 'fermenting' ? 'Fermentación' : other.phase === 'bottling' ? 'Embotellado' : 'Cocción'}
+                                                    </span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -346,66 +447,74 @@ export default function RecipeDetailView() {
                 {/* TAB: PROCESO */}
                 {activeTab === 'process' && (
                     <div className="space-y-6 animate-fadeIn">
-                        <div className={`${theme.bg} text-white p-8 md:p-12 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 mb-10`}>
+                        <div className={`${theme.bg} text-white p-6 md:p-8 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 mb-10`}>
                             <div className="text-center md:text-left">
-                                <h3 className="text-4xl font-black flex items-center justify-center md:justify-start gap-4 mb-3 tracking-tighter"><Play size={36} className="fill-white" /> Día de Cocción</h3>
-                                <p className="text-white/90 font-bold text-base">Modo guiado paso a paso. Al finalizar descontaremos de tu inventario.</p>
+                                <h3 className="text-3xl font-black flex items-center justify-center md:justify-start gap-3 mb-2 tracking-tighter"><Play size={28} className="fill-white" /> Proceso de Producción</h3>
+                                <p className="text-white/90 font-medium text-sm">Sigue los pasos según cada fase. Al transicionar descontaremos de tu inventario.</p>
                             </div>
-                            <button
-                                onClick={() => navigate(`/brew/${id}?vol=${targetVol}`)}
-                                className="bg-white text-slate-900 px-10 py-5 rounded-2xl font-black text-lg transition-transform shadow-2xl w-full md:w-auto text-center hover:scale-105 active:scale-95"
-                            >
-                                ¡Empezar a Cocinar!
-                            </button>
                         </div>
 
-                        {(scaledRecipe.steps || []).map((step, idx) => (
-                            <div key={step.id || idx} className="flex flex-col group">
-                                <div
-                                    onClick={() => toggleStep(step.id || idx)}
-                                    className={`p-6 md:p-8 rounded-t-3xl md:rounded-3xl border-2 cursor-pointer transition-all duration-300 flex items-start gap-5 md:gap-6 ${completedSteps.includes(step.id || idx) ? 'border-green-400 bg-green-50/50 dark:bg-green-900/20 opacity-60' : 'border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600'} ${expandedStep === (step.id || idx) ? 'rounded-b-none border-b-0' : ''}`}
-                                >
-                                    <button className={`mt-1 rounded-full flex-shrink-0 transition-colors ${completedSteps.includes(step.id || idx) ? 'text-green-500' : 'text-gray-300 dark:text-slate-600 group-hover:text-amber-400'}`}>
-                                        <CheckCircle2 size={36} className={completedSteps.includes(step.id || idx) ? 'fill-green-100 dark:fill-green-900' : ''} />
-                                    </button>
-                                    <div className="flex-1 pt-1">
-                                        <h3 className={`font-black text-2xl ${completedSteps.includes(step.id || idx) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-slate-800 dark:text-white'}`}>
-                                            {idx + 1}. {step.title || 'Paso de Cocción'}
-                                        </h3>
-                                        <p className={`text-lg mt-2 leading-relaxed font-medium ${completedSteps.includes(step.id || idx) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
-                                            {step.desc || ''}
-                                        </p>
-                                    </div>
-                                    {step.details && typeof step.details === 'string' && (
-                                        <button
-                                            onClick={(e) => toggleStepDetails(e, step.id || idx)}
-                                            className="ml-auto text-gray-400 hover:text-amber-600 p-3 flex flex-col items-center justify-center transition-colors bg-gray-50 dark:bg-slate-800 rounded-xl hover:bg-amber-50 dark:hover:bg-slate-700"
-                                            title="Ver detalle del paso"
-                                        >
-                                            {expandedStep === (step.id || idx) ? <ChevronUp size={28} /> : <ChevronDown size={28} />}
-                                            <span className="text-[10px] font-bold mt-1 uppercase tracking-wider">Técnica</span>
-                                        </button>
-                                    )}
-                                </div>
+                        {[
+                            { id: 'cooking', title: 'Fases de Cocción', steps: (scaledRecipe.steps || []).filter(s => !s.phase || s.phase === 'cooking'), icon: <Thermometer size={24} />, colorClass: 'text-amber-600 dark:text-amber-500', bgClass: 'bg-amber-50/50 dark:bg-amber-900/10' },
+                            { id: 'fermenting', title: 'Fases de Fermentación', steps: (scaledRecipe.steps || []).filter(s => s.phase === 'fermenting'), icon: <Activity size={24} />, colorClass: 'text-purple-600 dark:text-purple-500', bgClass: 'bg-purple-50/50 dark:bg-purple-900/10' },
+                            { id: 'bottling', title: 'Fase de Embotellamiento', steps: (scaledRecipe.steps || []).filter(s => s.phase === 'bottling'), icon: <Clock size={24} />, colorClass: 'text-blue-600 dark:text-blue-500', bgClass: 'bg-blue-50/50 dark:bg-blue-900/10' }
+                        ].map(phaseGrp => phaseGrp.steps.length > 0 && (
+                            <div key={phaseGrp.id} className={`p-8 rounded-3xl border border-line shadow-sm mb-8 ${phaseGrp.bgClass}`}>
+                                <h4 className={`text-2xl font-black flex items-center gap-3 mb-6 ${phaseGrp.colorClass} border-b border-gray-200/50 dark:border-slate-700/50 pb-4`}>
+                                    {phaseGrp.icon} {phaseGrp.title}
+                                </h4>
+                                <div className="space-y-4">
+                                    {phaseGrp.steps.map((step, localIdx) => {
+                                        const globalId = step.id || `${phaseGrp.id}-${localIdx}`;
+                                        return (
+                                            <div key={globalId} className="flex flex-col group">
+                                                <div
+                                                    onClick={() => toggleStep(globalId)}
+                                                    className={`p-6 md:p-8 rounded-t-2xl md:rounded-2xl border cursor-pointer transition-all duration-300 flex items-start gap-4 md:gap-5 select-none ${completedSteps.includes(globalId) ? 'border-green-400/50 bg-green-50/30 dark:bg-green-900/10 opacity-70' : 'border-line bg-panel shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600'} ${expandedStep === globalId ? 'rounded-b-none border-b-0' : ''}`}
+                                                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                                                >
+                                                    <button className={`mt-0.5 rounded-full flex-shrink-0 transition-colors ${completedSteps.includes(globalId) ? 'text-green-500' : 'text-gray-300 dark:text-slate-600 group-hover:text-amber-400'}`}>
+                                                        <CheckCircle2 size={32} className={completedSteps.includes(globalId) ? 'fill-green-100 dark:fill-green-900' : ''} />
+                                                    </button>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-3 mb-1">
+                                                            <h3 className={`font-black text-xl md:text-2xl ${completedSteps.includes(globalId) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-content'}`}>
+                                                                {step.title || 'Paso'}
+                                                            </h3>
+                                                            {step.duration && <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-2 py-1 rounded-lg border border-line whitespace-nowrap"><Clock size={12} className="inline mr-1" />{step.duration}</span>}
+                                                        </div>
+                                                        <p className={`text-base md:text-lg leading-relaxed font-medium ${completedSteps.includes(globalId) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
+                                                            {step.desc || ''}
+                                                        </p>
+                                                    </div>
+                                                    {step.details && typeof step.details === 'string' && (
+                                                        <button
+                                                            onClick={(e) => toggleStepDetails(e, globalId)}
+                                                            className="ml-auto text-gray-400 hover:text-amber-600 p-2 flex flex-col items-center justify-center transition-colors bg-surface rounded-xl hover:bg-amber-50 dark:hover:bg-slate-700"
+                                                            title="Ver detalle del paso"
+                                                        >
+                                                            {expandedStep === globalId ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+                                                        </button>
+                                                    )}
+                                                </div>
 
-                                {expandedStep === (step.id || idx) && step.details && typeof step.details === 'string' && (
-                                    <div className="p-6 md:p-8 bg-slate-50 dark:bg-slate-800/50 border-2 border-t-0 border-slate-200 dark:border-slate-700 rounded-b-3xl text-slate-800 dark:text-slate-200 animate-fadeIn text-base md:text-lg shadow-inner">
-                                        <h4 className="font-black flex items-center gap-2 mb-4 text-amber-700 dark:text-amber-500 uppercase tracking-wider text-sm"><Info size={20} /> Guía del Maestro:</h4>
-                                        <div className="pl-6 space-y-4 border-l-4 border-amber-300 dark:border-amber-700 font-medium">
-                                            {step.details.split(/(?=\d+\.\s)/).filter(Boolean).map((part, i) => {
-                                                const match = part.match(/^(\d+\.\s)(.*)/);
-                                                if (match) {
-                                                    return <p key={i} className="mb-2"><strong>{match[1]}</strong>{match[2]}</p>;
-                                                }
-                                                return <p key={i} className="mb-2">{part}</p>;
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
+                                                {expandedStep === globalId && step.details && typeof step.details === 'string' && (
+                                                    <div className="p-6 md:p-8 bg-surface/80 border border-t-0 border-line rounded-b-2xl text-slate-800 dark:text-slate-200 animate-fadeIn text-sm md:text-base shadow-inner">
+                                                        <h4 className="font-black flex items-center gap-2 mb-3 text-amber-700 dark:text-amber-500 uppercase tracking-wider text-xs"><Info size={18} /> Técnica:</h4>
+                                                        <div className="pl-4 border-l-2 border-amber-300 dark:border-amber-700 font-medium whitespace-pre-line text-slate-600 dark:text-slate-300">
+                                                            {step.details}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         ))}
+
                         {(!scaledRecipe.steps || scaledRecipe.steps.length === 0) && (
-                            <div className="p-10 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800">
+                            <div className="p-10 text-center text-muted bg-panel rounded-3xl shadow-sm border border-line">
                                 <p className="font-bold text-lg italic">No hay pasos detallados para esta receta.</p>
                             </div>
                         )}
@@ -429,21 +538,21 @@ export default function RecipeDetailView() {
                             {scaledRecipe.waterProfile ? (
                                 <div className="grid grid-cols-5 gap-3 md:gap-5 text-center relative z-10">
                                     {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
-                                        <div key={ion} className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col transition-transform hover:-translate-y-1">
+                                        <div key={ion} className="bg-panel p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col transition-transform hover:-translate-y-1">
                                             <span className="block font-black text-slate-400 text-xs md:text-sm uppercase tracking-widest mb-2">{ion}</span>
                                             <span className="text-blue-600 dark:text-blue-400 font-black text-3xl md:text-4xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl text-center text-slate-500 font-bold border border-blue-100 dark:border-slate-700 relative z-10 text-lg">
+                                <div className="bg-panel p-8 rounded-2xl text-center text-muted font-bold border border-blue-100 dark:border-slate-700 relative z-10 text-lg">
                                     No hay un perfil estricto para esta receta.
                                 </div>
                             )}
                         </div>
 
-                        <div className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-3xl border border-gray-200 dark:border-slate-800 shadow-sm">
-                            <h4 className="font-black text-slate-800 dark:text-white mb-8 text-2xl flex items-center gap-3">Tu Agua de la Llave (Base)</h4>
+                        <div className="bg-panel p-8 md:p-10 rounded-3xl border border-line shadow-sm">
+                            <h4 className="font-black text-content mb-8 text-2xl flex items-center gap-3">Tu Agua de la Llave (Base)</h4>
                             <div className="grid grid-cols-5 gap-3 md:gap-6">
                                 {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
                                     <div key={ion}>
@@ -452,7 +561,7 @@ export default function RecipeDetailView() {
                                             type="number"
                                             value={baseWater[ion] || 0}
                                             readOnly // Simplificación en esta versión final, se puede hacer que sea de config de app.
-                                            className="w-full p-4 md:p-5 border border-gray-200 dark:border-slate-700 rounded-2xl text-center font-black text-xl md:text-2xl outline-none bg-gray-50 dark:bg-slate-800 text-slate-800 dark:text-white transition-all shadow-inner"
+                                            className="w-full p-4 md:p-5 border border-line rounded-2xl text-center font-black text-xl md:text-2xl outline-none bg-surface text-content transition-all shadow-inner"
                                         />
                                     </div>
                                 ))}
@@ -475,26 +584,26 @@ export default function RecipeDetailView() {
                                 </p>
 
                                 <div className="grid md:grid-cols-4 gap-5 mb-10">
-                                    <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                                    <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
                                         <div className="absolute top-0 left-0 w-full h-2 bg-blue-400"></div>
-                                        <span className="block font-black text-slate-800 dark:text-white text-5xl mb-3">{saltAdditions.cacl2}g</span>
-                                        <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider block">Cloruro de Calcio</span>
+                                        <span className="block font-black text-content text-5xl mb-3">{saltAdditions.cacl2}g</span>
+                                        <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Cloruro de Calcio</span>
                                     </div>
-                                    <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                                    <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
                                         <div className="absolute top-0 left-0 w-full h-2 bg-amber-400"></div>
-                                        <span className="block font-black text-slate-800 dark:text-white text-5xl mb-3">{saltAdditions.gypsum}g</span>
-                                        <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider block">Gypsum (CaSO4)</span>
+                                        <span className="block font-black text-content text-5xl mb-3">{saltAdditions.gypsum}g</span>
+                                        <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Gypsum (CaSO4)</span>
                                     </div>
-                                    <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                                    <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
                                         <div className="absolute top-0 left-0 w-full h-2 bg-green-400"></div>
-                                        <span className="block font-black text-slate-800 dark:text-white text-5xl mb-3">{saltAdditions.epsom}g</span>
-                                        <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider block">Sal de Epsom</span>
+                                        <span className="block font-black text-content text-5xl mb-3">{saltAdditions.epsom}g</span>
+                                        <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Sal de Epsom</span>
                                     </div>
                                     {Number(saltAdditions.bakingSoda) > 0 && (
-                                        <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                                        <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
                                             <div className="absolute top-0 left-0 w-full h-2 bg-purple-400"></div>
-                                            <span className="block font-black text-slate-800 dark:text-white text-5xl mb-3">{saltAdditions.bakingSoda}g</span>
-                                            <span className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-wider block">Bicarbonato Sodio</span>
+                                            <span className="block font-black text-content text-5xl mb-3">{saltAdditions.bakingSoda}g</span>
+                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Bicarbonato Sodio</span>
                                         </div>
                                     )}
                                 </div>
@@ -502,14 +611,14 @@ export default function RecipeDetailView() {
                                 <div className="bg-white dark:bg-slate-950 p-8 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner">
                                     <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-6 text-center">Perfil Final Estimado</h5>
                                     <div className="flex justify-around text-2xl font-black flex-wrap gap-6">
-                                        <span className="text-slate-500 text-sm flex flex-col items-center">Ca <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.Ca}</span></span>
-                                        <span className="text-slate-500 text-sm flex flex-col items-center">Mg <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Mg}</span></span>
-                                        <span className="text-slate-500 text-sm flex flex-col items-center">SO4 <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.SO4}</span></span>
-                                        <span className="text-slate-500 text-sm flex flex-col items-center">Cl <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Cl}</span></span>
-                                        <span className="text-slate-500 text-sm flex flex-col items-center" title="Ajustado con Bicarbonato de Sodio">HCO3 <span className={(saltAdditions.finalEstimates.HCO3 >= (Number(scaledRecipe.waterProfile.HCO3) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.HCO3}</span></span>
+                                        <span className="text-muted text-sm flex flex-col items-center">Ca <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.Ca}</span></span>
+                                        <span className="text-muted text-sm flex flex-col items-center">Mg <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Mg}</span></span>
+                                        <span className="text-muted text-sm flex flex-col items-center">SO4 <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.SO4}</span></span>
+                                        <span className="text-muted text-sm flex flex-col items-center">Cl <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Cl}</span></span>
+                                        <span className="text-muted text-sm flex flex-col items-center" title="Ajustado con Bicarbonato de Sodio">HCO3 <span className={(saltAdditions.finalEstimates.HCO3 >= (Number(scaledRecipe.waterProfile.HCO3) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.HCO3}</span></span>
                                     </div>
                                 </div>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-6 text-center italic font-medium">
+                                <p className="text-sm text-muted mt-6 text-center italic font-medium">
                                     * El perfil estimado puede diferir levemente del objetivo porque las sales aportan iones en pares (ej. el Cloruro de Calcio suma Cl y Ca simultáneamente).
                                 </p>
                             </div>
@@ -521,8 +630,8 @@ export default function RecipeDetailView() {
                 {activeTab === 'tips' && (
                     <div className="space-y-6 animate-fadeIn">
                         {Array.isArray(scaledRecipe.tips) && scaledRecipe.tips.map((tip, idx) => (
-                            <div key={idx} className="bg-slate-50 dark:bg-slate-800 border-l-8 border-amber-500 shadow-md p-8 rounded-r-3xl transition-transform hover:-translate-y-1">
-                                <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-4 flex items-center gap-3">
+                            <div key={idx} className="bg-surface border-l-8 border-amber-500 shadow-md p-8 rounded-r-3xl transition-transform hover:-translate-y-1">
+                                <h3 className="text-2xl font-black text-content mb-4 flex items-center gap-3">
                                     <Star className="text-amber-500 fill-amber-500" /> {tip.title || 'Tip Cervecero'}
                                 </h3>
                                 <p className="text-slate-600 dark:text-slate-300 text-lg leading-relaxed font-medium">
@@ -531,7 +640,7 @@ export default function RecipeDetailView() {
                             </div>
                         ))}
                         {(!scaledRecipe.tips || scaledRecipe.tips.length === 0) && (
-                            <p className="text-gray-500 font-bold text-lg italic text-center py-12 bg-gray-50 dark:bg-slate-800 rounded-3xl">No hay tips específicos para esta receta, ¡aplica las buenas prácticas de siempre!</p>
+                            <p className="text-muted font-bold text-lg italic text-center py-12 bg-surface rounded-3xl">No hay tips específicos para esta receta, ¡aplica las buenas prácticas de siempre!</p>
                         )}
                     </div>
                 )}
@@ -539,13 +648,13 @@ export default function RecipeDetailView() {
                 {/* TAB: HISTORIAL CAMBIOS */}
                 {activeTab === 'history' && (
                     <div className="space-y-6 animate-fadeIn">
-                        <h3 className="text-3xl font-black text-slate-800 dark:text-white mb-8 border-b border-gray-200 dark:border-slate-700 pb-4">Historial de Modificaciones</h3>
+                        <h3 className="text-3xl font-black text-content mb-8 border-b border-line pb-4">Historial de Modificaciones</h3>
                         <div className="border-l-4 border-slate-300 dark:border-slate-600 ml-6 pl-8 space-y-10">
                             {Array.isArray(scaledRecipe.modifications) && [...scaledRecipe.modifications].reverse().map((mod, idx) => (
                                 <div key={idx} className="relative">
-                                    <div className="absolute -left-[45px] top-1 bg-white dark:bg-slate-900 border-4 border-slate-300 dark:border-slate-600 w-6 h-6 rounded-full shadow-sm"></div>
+                                    <div className="absolute -left-[45px] top-1 bg-panel border-4 border-slate-300 dark:border-slate-600 w-6 h-6 rounded-full shadow-sm"></div>
                                     <span className="text-sm font-black text-slate-400 tracking-widest uppercase block mb-2">{mod.date}</span>
-                                    <p className="text-slate-700 dark:text-slate-300 font-medium text-lg bg-slate-50 dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">"{mod.note}"</p>
+                                    <p className="text-content font-medium text-lg bg-surface p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">"{mod.note}"</p>
                                 </div>
                             ))}
                         </div>

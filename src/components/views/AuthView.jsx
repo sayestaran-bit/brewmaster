@@ -122,7 +122,7 @@ export default function AuthView() {
                         <div>
                             <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Correo Electrónico</label>
                             <div className="relative">
-                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={20} />
                                 <input
                                     type="email"
                                     value={email}
@@ -138,7 +138,7 @@ export default function AuthView() {
                             <div>
                                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Contraseña</label>
                                 <div className="relative">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={20} />
                                     <input
                                         type="password"
                                         value={password}
@@ -204,7 +204,7 @@ export default function AuthView() {
                                 {isLogin && (
                                     <button
                                         onClick={() => { setIsResetMode(true); setErrorMsg(''); }}
-                                        className="text-slate-500 hover:text-amber-400 text-xs font-bold transition-colors uppercase tracking-wider underline underline-offset-4"
+                                        className="text-muted hover:text-amber-400 text-xs font-bold transition-colors uppercase tracking-wider underline underline-offset-4"
                                     >
                                         Olvidé mi contraseña
                                     </button>

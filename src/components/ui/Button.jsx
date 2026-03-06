@@ -3,11 +3,11 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 
 const variants = {
-    primary: 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-900 shadow-lg hover:shadow-amber-500/25 hover:-translate-y-0.5',
-    secondary: 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700',
+    primary: 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-sm hover:-translate-y-0.5',
+    secondary: 'bg-surface hover:bg-black/10 dark:hover:bg-white/10 text-content border border-line',
     danger: 'bg-red-600 hover:bg-red-500 text-white shadow-sm',
-    ghost: 'bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400',
-    outline: 'bg-transparent border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300',
+    ghost: 'bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-muted hover:text-content',
+    outline: 'bg-transparent border border-line hover:bg-black/5 dark:hover:bg-white/5 text-content',
     success: 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm',
 };
 

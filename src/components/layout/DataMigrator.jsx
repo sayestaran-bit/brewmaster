@@ -102,5 +102,5 @@ export default function DataMigrator({ children }) {
         );
     }
 
-    return hasMigratedLocal ? children : null;
+    return (hasMigratedLocal || !currentUser) ? children : null;
 }

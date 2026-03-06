@@ -11,6 +11,11 @@ export default {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
+        surface: 'var(--bg-surface)',
+        panel: 'var(--bg-panel)',
+        content: 'var(--text-primary)',
+        muted: 'var(--text-muted)',
+        line: 'var(--border-line)',
         brew: {
           50: '#fffbeb',
           100: '#fef3c7',

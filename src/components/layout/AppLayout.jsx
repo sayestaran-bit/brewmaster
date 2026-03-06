@@ -18,7 +18,7 @@ const NAV_ITEMS = [
     { to: '/history', label: 'Historial', Icon: History, activeColor: 'text-violet-500  border-violet-500  bg-violet-50/50  dark:bg-violet-900/20' },
 ];
 
-const INACTIVE = 'text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800';
+const INACTIVE = 'text-muted hover:text-content hover:bg-black/5 dark:hover:bg-white/5';
 
 export default function AppLayout() {
     const { currentUser, logout } = useAuth();
@@ -29,7 +29,7 @@ export default function AppLayout() {
 
     return (
         <div className={darkMode ? 'dark' : ''}>
-            <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans
+            <div className="min-h-screen bg-surface text-content font-sans
                             selection:bg-amber-200 transition-colors duration-300
                             /* bottom padding for mobile tab bar */
                             pb-24 md:pb-0
@@ -37,7 +37,7 @@ export default function AppLayout() {
                 <div className="max-w-6xl mx-auto">
 
                     {/* ── HEADER ────────────────────────────────── */}
-                    <div className="bg-slate-900 text-white p-5 md:p-6 rounded-3xl shadow-xl mb-6 flex flex-col sm:flex-row justify-between items-center relative overflow-hidden border border-slate-700 gap-4">
+                    <div className="bg-panel text-content p-5 md:p-6 rounded-3xl shadow-sm mb-6 flex flex-col sm:flex-row justify-between items-center relative overflow-hidden border border-line gap-4">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-pulse-slow pointer-events-none" />
 
                         {/* Logo */}
@@ -46,8 +46,8 @@ export default function AppLayout() {
                                 <Beaker size={28} className="text-slate-900" />
                             </div>
                             <div>
-                                <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white leading-none">BrewMaster</h1>
-                                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Sistema Cervecero</p>
+                                <h1 className="text-2xl md:text-3xl font-black tracking-tight leading-none">BrewMaster</h1>
+                                <p className="text-muted text-[10px] font-bold uppercase tracking-widest">Sistema Cervecero</p>
                             </div>
                         </div>
 
@@ -55,7 +55,7 @@ export default function AppLayout() {
                         <div className="relative z-10 flex items-center gap-2 flex-wrap justify-center">
                             <button
                                 onClick={() => setDarkMode(!darkMode)}
-                                className="flex items-center justify-center w-9 h-9 bg-slate-800/80 hover:bg-slate-700 rounded-full border border-slate-600 backdrop-blur-sm transition-colors shadow-sm text-slate-300 hover:text-amber-300"
+                                className="flex items-center justify-center w-9 h-9 bg-surface hover:bg-black/10 dark:hover:bg-white/10 rounded-full border border-line backdrop-blur-sm transition-colors shadow-sm text-muted hover:text-content"
                             >
                                 {darkMode ? <Sun size={14} /> : <Moon size={14} />}
                             </button>
@@ -63,7 +63,7 @@ export default function AppLayout() {
                             {currentUser && (
                                 <button
                                     onClick={logout}
-                                    className="flex items-center gap-1.5 text-[11px] font-bold bg-red-900/30 hover:bg-red-900/50 text-red-300 px-3 py-2 rounded-full border border-red-800/50 backdrop-blur-sm transition-colors shadow-sm"
+                                    className="flex items-center gap-1.5 text-[11px] font-bold bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 px-4 py-2 rounded-full border border-red-200 dark:border-red-800/50 backdrop-blur-sm transition-colors shadow-sm"
                                 >
                                     <LogOut size={12} /> Salir ({currentUser.isAnonymous ? 'Invitado' : currentUser.email?.split('@')[0]})
                                 </button>
@@ -73,7 +73,7 @@ export default function AppLayout() {
 
                     {/* ── DESKTOP NAV BAR ───────────────────────── */}
                     {currentUser && (
-                        <div className="hidden md:flex bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-x-auto mb-8">
+                        <div className="hidden md:flex bg-panel rounded-2xl shadow-sm border border-line overflow-x-auto mb-8">
                             {NAV_ITEMS.map(({ to, label, Icon, activeColor, badge }) => (
                                 <NavLink
                                     key={to}
@@ -103,39 +103,41 @@ export default function AppLayout() {
             </div>
 
             {/* ── MOBILE BOTTOM TAB BAR ─────────────────────── */}
-            {currentUser && (
-                <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-gray-200 dark:border-slate-800 shadow-2xl">
-                    <div className="flex items-stretch h-16 max-w-lg mx-auto">
-                        {NAV_ITEMS.map(({ to, label, Icon, badge }) => (
-                            <NavLink
-                                key={to}
-                                to={to}
-                                end={to === '/dashboard'}
-                                className={({ isActive }) =>
-                                    `flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors relative
-                                    ${isActive ? 'text-amber-500' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`
-                                }
-                            >
-                                {({ isActive }) => (
-                                    <>
-                                        <div className={`p-1.5 rounded-xl transition-all ${isActive ? 'bg-amber-50 dark:bg-amber-900/30' : ''}`}>
-                                            <Icon size={20} />
-                                        </div>
-                                        <span>{label}</span>
-                                        {badge && activeBatchCount > 0 && (
-                                            <span className="absolute top-1.5 right-4 bg-emerald-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black">
-                                                {activeBatchCount}
-                                            </span>
-                                        )}
-                                    </>
-                                )}
-                            </NavLink>
-                        ))}
-                    </div>
-                    {/* Safe area for phones with home indicator */}
-                    <div className="h-safe-area-bottom bg-white/90 dark:bg-slate-900/90" />
-                </nav>
-            )}
-        </div>
+            {
+                currentUser && (
+                    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-panel/90 backdrop-blur-xl border-t border-line shadow-2xl">
+                        <div className="flex items-stretch h-16 max-w-lg mx-auto">
+                            {NAV_ITEMS.map(({ to, label, Icon, badge }) => (
+                                <NavLink
+                                    key={to}
+                                    to={to}
+                                    end={to === '/dashboard'}
+                                    className={({ isActive }) =>
+                                        `flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors relative
+                                    ${isActive ? 'text-amber-500' : 'text-muted hover:text-content'}`
+                                    }
+                                >
+                                    {({ isActive }) => (
+                                        <>
+                                            <div className={`p-1.5 rounded-xl transition-all ${isActive ? 'bg-amber-50 dark:bg-amber-900/30' : ''}`}>
+                                                <Icon size={20} />
+                                            </div>
+                                            <span>{label}</span>
+                                            {badge && activeBatchCount > 0 && (
+                                                <span className="absolute top-1.5 right-4 bg-emerald-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black">
+                                                    {activeBatchCount}
+                                                </span>
+                                            )}
+                                        </>
+                                    )}
+                                </NavLink>
+                            ))}
+                        </div>
+                        {/* Safe area for phones with home indicator */}
+                        <div className="h-safe-area-bottom bg-panel/90" />
+                    </nav>
+                )
+            }
+        </div >
     );
 }

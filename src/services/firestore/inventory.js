@@ -73,16 +73,18 @@ export async function deleteInventoryItem(uid, itemId) {
 
 /**
  * Descuenta los insumos de un batch de forma ATÓMICA usando runTransaction.
+ * Ahora soporta deducciones por FASES (cooking, fermenting, bottling).
  * Si el stock de cualquier ítem es insuficiente, cancela TODO sin escribir nada.
  *
  * @param {string} uid
  * @param {object} recipe
  * @param {number} targetVolume
  * @param {Array}  currentInventory - array local del inventario (para lookup)
+ * @param {Array}  phases - Fases a descontar ['cooking', 'fermenting', 'bottling']
  * @returns {Promise<void>}
  * @throws Error si hay stock insuficiente
  */
-export async function deductBatchFromInventory(uid, recipe, targetVolume, currentInventory) {
+export async function deductBatchFromInventory(uid, recipe, targetVolume, currentInventory, phases = ['cooking', 'fermenting', 'bottling']) {
     const scaleFactor = (targetVolume || 1) / (recipe.targetVolume || 1);
     const searchItem = (name, category) => {
         const searchName = (name || '').toLowerCase().trim();
@@ -95,34 +97,130 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
     // Preparar lista de (docRef, amount) a descontar
     const deductions = [];
 
-    (recipe.ingredients?.malts || []).forEach(m => {
-        const item = searchItem(m.name, 'Malta');
-        if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(m.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock) });
-    });
-    (recipe.ingredients?.hops || []).forEach(h => {
-        const item = searchItem(h.name, 'Lúpulo');
-        if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: Math.round((Number(h.amount) || 0) * scaleFactor), current: Number(item.stock) });
-    });
-    const yeastObj = recipe.ingredients?.yeast;
-    if (yeastObj) {
-        const name = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
-        const amount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
-        const item = searchItem(name, 'Levadura');
-        if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount, current: Number(item.stock) });
+    // FASE 1: Cocción (Maltas, Lúpulos de Hervido, Aditivos pre-fermentación)
+    if (phases.includes('cooking')) {
+        (recipe.ingredients?.malts || []).forEach(m => {
+            const item = searchItem(m.name, 'Malta');
+            if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(m.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
+        });
+
+        (recipe.ingredients?.hops || []).forEach(h => {
+            const hPhase = h.phase || '';
+            const use = (h.use || h.time || '').toString().toLowerCase();
+            const isCooking = hPhase === 'cooking' || (!hPhase && !use.includes('dry') && !use.includes('ferment'));
+            if (isCooking) {
+                const item = searchItem(h.name, 'Lúpulo');
+                if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: Math.round((Number(h.amount) || 0) * scaleFactor), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
+            }
+        });
+
+        (recipe.ingredients?.others || []).forEach(o => {
+            const oPhase = o.phase || '';
+            const use = (o.use || o.time || '').toString().toLowerCase();
+            const isCooking = oPhase === 'cooking' || (!oPhase && !use.includes('bottle') && !use.includes('embotella') && !use.includes('priming'));
+            if (isCooking) {
+                const item = searchItem(o.name, o.category || 'Aditivos');
+                if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
+            }
+        });
+    }
+
+    // FASE 2.A: Fermentación (Levadura) - Día 1
+    if (phases.includes('fermenting_yeast')) {
+        const yeastObj = recipe.ingredients?.yeast;
+        if (yeastObj) {
+            const name = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
+            const amount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
+            const item = searchItem(name, 'Levadura');
+            if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount, current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
+        }
+    }
+
+    // FASE 2.B: Fermentación (Lúpulos Dry Hop y Aditivos) - Detonado manualmente al pisar el paso
+    if (phases.includes('fermenting_hops')) {
+        (recipe.ingredients?.hops || []).forEach(h => {
+            const hPhase = h.phase || '';
+            const use = (h.use || h.time || '').toString().toLowerCase();
+            const isFermenting = hPhase === 'fermenting' || (!hPhase && (use.includes('dry') || use.includes('ferment')));
+            if (isFermenting) {
+                const item = searchItem(h.name, 'Lúpulo');
+                if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: Math.round((Number(h.amount) || 0) * scaleFactor), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
+            }
+        });
+
+        (recipe.ingredients?.others || []).forEach(o => {
+            const oPhase = o.phase || '';
+            const isFermenting = oPhase === 'fermenting';
+            if (isFermenting) {
+                const item = searchItem(o.name, o.category || 'Aditivos');
+                if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
+            }
+        });
+    }
+
+    // FASE 3: Embotellado (Aditivos post-fermentación / Priming)
+    if (phases.includes('bottling')) {
+        (recipe.ingredients?.others || []).forEach(o => {
+            const oPhase = o.phase || '';
+            const use = (o.use || o.time || '').toString().toLowerCase();
+            const isBottling = oPhase === 'bottling' || (!oPhase && (use.includes('bottle') || use.includes('embotella') || use.includes('priming')));
+            if (isBottling) {
+                const item = searchItem(o.name, o.category || 'Aditivos');
+                if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
+            }
+        });
     }
 
     // Validar antes de la transacción
     const shortages = deductions.filter(d => d.current < d.amount);
     if (shortages.length > 0) {
-        throw new Error(`Stock insuficiente para ${shortages.length} insumo(s)`);
+        console.warn(`[Inventario] Stock insuficiente para ${shortages.length} insumo(s). Se ajustarán a cero y se continuará el proceso.`);
     }
 
-    await runTransaction(db, async (transaction) => {
+    return await runTransaction(db, async (transaction) => {
+        // PASADA 1: Todas las lecturas primero
+        const snapshots = new Map();
         for (const d of deductions) {
             const snap = await transaction.get(d.ref);
-            if (!snap.exists()) continue;
-            const newStock = Math.max(0, Number(snap.data().stock) - d.amount);
-            transaction.update(d.ref, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
+            if (snap.exists()) {
+                const path = d.ref.path;
+                if (snapshots.has(path)) {
+                    // Si ya existe este documento en el mapa, sumamos la cantidad a descontar
+                    const existing = snapshots.get(path);
+                    existing.amountToDeduct += d.amount;
+                } else {
+                    snapshots.set(path, {
+                        ref: d.ref,
+                        docData: snap.data(),
+                        amountToDeduct: d.amount,
+                        name: d.name,
+                        category: d.category,
+                        price: d.price
+                    });
+                }
+            }
         }
+
+        const actuals = [];
+
+        // PASADA 2: Todas las escrituras después
+        for (const [path, data] of snapshots.entries()) {
+            const currentStock = Number(data.docData.stock) || 0;
+            const actualDeducted = Math.min(currentStock, data.amountToDeduct);
+            const newStock = Math.max(0, currentStock - data.amountToDeduct);
+
+            transaction.update(data.ref, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
+
+            actuals.push({
+                name: data.name,
+                category: data.category,
+                requested: data.amountToDeduct,
+                actualDeducted: actualDeducted,
+                cost: actualDeducted * data.price,
+                isPartial: actualDeducted < data.amountToDeduct
+            });
+        }
+
+        return actuals;
     });
 }

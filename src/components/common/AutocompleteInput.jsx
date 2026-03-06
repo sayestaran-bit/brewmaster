@@ -31,17 +31,17 @@ export default function AutocompleteInput({ value, onChange, placeholder, catego
             <input
                 type="text"
                 placeholder={placeholder}
-                className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                className="w-full p-3 border border-line rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 bg-surface focus:bg-panel transition-colors text-content"
                 value={value || ''}
                 onChange={e => { onChange(e.target.value); setShowDrop(true); }}
                 onFocus={() => setShowDrop(true)}
             />
             {showDrop && (value || '').trim() !== '' && (
-                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                <div className="absolute z-50 w-full mt-1 bg-panel border border-line rounded-xl shadow-xl max-h-48 overflow-y-auto">
                     {filtered.map(item => (
                         <div
                             key={item.id}
-                            className="p-3 hover:bg-amber-50 dark:hover:bg-slate-700 cursor-pointer text-sm text-slate-800 dark:text-slate-200 font-medium flex justify-between"
+                            className="p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-sm text-content font-medium flex justify-between"
                             onClick={() => { onChange(item.name); setShowDrop(false); }}
                         >
                             <span>{item.name}</span>
@@ -52,7 +52,7 @@ export default function AutocompleteInput({ value, onChange, placeholder, catego
                     ))}
                     {!exactMatch && (
                         <div
-                            className="p-3 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer text-sm text-blue-700 dark:text-blue-300 font-bold flex items-center gap-2 border-t border-blue-100 dark:border-slate-700"
+                            className="p-3 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer text-sm text-blue-700 dark:text-blue-300 font-bold flex items-center gap-2 border-t border-line"
                             onClick={() => { onAddNewItem(value, category); setShowDrop(false); }}
                         >
                             <Plus size={16} /> Añadir "{value}"

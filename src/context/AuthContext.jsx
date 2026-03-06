@@ -13,9 +13,11 @@ import {
     signInWithPopup,
     sendPasswordResetEmail,
     signInAnonymously,
+    getAdditionalUserInfo,
     getIdToken as firebaseGetIdToken,
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
+import { seedGuestData } from '../services/firestore/seedGuestData';
 
 const AuthContext = createContext();
 
@@ -135,7 +137,11 @@ export const AuthProvider = ({ children }) => {
     const loginAsGuest = useCallback(async () => {
         setAuthError(null);
         try {
-            await signInAnonymously(auth);
+            const credential = await signInAnonymously(auth);
+            const additionalInfo = getAdditionalUserInfo(credential);
+            if (additionalInfo && additionalInfo.isNewUser) {
+                await seedGuestData(credential.user.uid);
+            }
             return { success: true };
         } catch (err) {
             const msg = mapAuthError(err.code);

@@ -117,7 +117,7 @@ export async function callGemini(prompt, systemInstruction = "", isJson = false)
 
         const contentType = response.headers.get("content-type");
         if (contentType && contentType.includes("text/html")) {
-            throw new Error("El proxy backend (/api/gemini) no responde. Si estás desarrollando en tu PC, asegúrate de correr el proyecto con 'vercel dev' o revisar la URL.");
+            throw new Error("⚠️ El servidor de Inteligencia Artificial no está activo. Si estás en tu PC, debes correr la aplicación con 'vercel dev' en lugar de 'npm run dev'.");
         }
 
         const data = await response.json();

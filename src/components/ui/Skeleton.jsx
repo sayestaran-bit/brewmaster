@@ -30,7 +30,7 @@ export function SkeletonText({ lines = 1, className = '' }) {
 
 export function SkeletonCard({ className = '' }) {
     return (
-        <div className={`bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-3xl p-6 space-y-4 ${className}`}>
+        <div className={`bg-panel border border-line rounded-3xl p-6 space-y-4 ${className}`}>
             <div className="flex items-center gap-3">
                 <SkeletonBase className="w-10 h-10 rounded-2xl" />
                 <div className="flex-1 space-y-2">

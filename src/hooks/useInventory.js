@@ -54,10 +54,10 @@ export function useInventory() {
 
     /**
      * Descuenta los ingredientes de una receta del inventario (atómico).
-     * Lanza Error si hay stock insuficiente.
+     * Retorna array de deducciones efectivas. Lanza Error si hay fallo.
      */
-    const deductBatch = useCallback(async (recipe, targetVolume) => {
-        await _deductBatch(currentUser.uid, recipe, targetVolume, inventory);
+    const deductBatch = useCallback(async (recipe, targetVolume, phases) => {
+        return await _deductBatch(currentUser.uid, recipe, targetVolume, inventory, phases);
     }, [currentUser, inventory]);
 
     return { inventory, loading, error, lowStockItems, addItem, updateItem, deleteItem, deductBatch };

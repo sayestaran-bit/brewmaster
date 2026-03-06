@@ -26,21 +26,22 @@ export default function StatCard({
     animateDelay = 0,
 }) {
     const delayClass = animateDelay > 0 ? `animate-delay-${animateDelay}` : '';
-    const base = `relative p-6 rounded-3xl shadow-lg overflow-hidden transition-transform duration-200 hover:scale-105 opacity-0 animate-fadeIn ${delayClass}`;
+    const base = `relative p-6 rounded-3xl shadow-sm overflow-hidden transition-transform duration-200 hover:-translate-y-1 opacity-0 animate-fadeIn ${delayClass}`;
 
-    const bg = dark
-        ? 'bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 shadow-sm'
+    const bg = (!gradient || dark)
+        ? 'bg-panel border border-line'
         : `bg-gradient-to-br ${gradient}`;
 
-    const labelColor = dark ? 'text-slate-400' : 'text-white/70';
-    const valueColor = dark ? 'text-slate-800 dark:text-white' : 'text-white';
-    const unitColor = dark ? 'text-slate-500' : 'text-white/60';
+    const isColored = !!gradient && !dark;
+    const labelColor = isColored ? 'text-white/80' : 'text-muted';
+    const valueColor = isColored ? 'text-white' : 'text-content';
+    const unitColor = isColored ? 'text-white/70' : 'text-muted';
 
     return (
         <div className={`${base} ${bg} ${className}`}>
             {/* Background watermark icon */}
             {Icon && (
-                <div className={`absolute -right-4 -bottom-4 opacity-15 ${dark ? 'opacity-5 dark:opacity-10 text-slate-700 dark:text-slate-400' : 'text-white'}`}>
+                <div className={`absolute -right-4 -bottom-4 opacity-15 pointer-events-none ${isColored ? 'text-white' : 'opacity-5 dark:opacity-10 text-muted'}`}>
                     <Icon size={90} />
                 </div>
             )}
