@@ -46,7 +46,7 @@ export default function BrewSessionView() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { recipes } = useRecipes();
-    const { inventory, deductBatch } = useInventory();
+    const { inventory, deductBatch, toggleIngredient } = useInventory();
     const { batches, startBatch, transitionBatchPhase, completeBatch, updateBatchField, updateProgress } = useActiveBatches();
 
     const currentPhase = searchParams.get('phase') || 'cooking';
@@ -284,8 +284,20 @@ export default function BrewSessionView() {
                 lockRunningRef.current = null;
                 alert("No se pudo sincronizar el cambio con la base de datos.");
             }
-        } else {
             setBrewState(prev => ({ ...prev, isRunning: newRunning }));
+        }
+    };
+
+    const handleToggleIngredient = async (ingredient, isConsumed) => {
+        if (!batch) {
+            alert("Inicia el proceso (Play) primero para registrar el consumo de insumos.");
+            return;
+        }
+        try {
+            await toggleIngredient(batch.id, ingredient, isConsumed, targetVolume, recipe.targetVolume);
+        } catch (err) {
+            console.error("Error toggling ingredient:", err);
+            alert("Error al actualizar inventario: " + err.message);
         }
     };
 
@@ -307,9 +319,14 @@ export default function BrewSessionView() {
 
         if (isLastStep) {
             if (currentPhase === 'cooking') {
-                if (window.confirm(`¿Terminaste el día de cocción para ${recipe.name}? Esto descontará insumos y pasará a Fermentación.`)) {
+                if (window.confirm(`¿Terminaste el día de cocción para ${recipe.name}? Esto descontará insumos restantes y pasará a Fermentación.`)) {
                     try {
-                        const actualDeductions = await deductBatch(recipe, targetVolume, ['cooking', 'fermenting_yeast']);
+                        const actualDeductions = await deductBatch(
+                            recipe,
+                            targetVolume,
+                            ['cooking', 'fermenting_yeast'],
+                            batch?.consumedIngredients || {}
+                        );
                         const { addedCost, warnings } = calculateActualDeductedCost(actualDeductions);
                         const updateData = {
                             status: 'Fermentando',
@@ -335,7 +352,12 @@ export default function BrewSessionView() {
                     try {
                         const phasesToDeduct = ['bottling'];
                         if (!batch.deductedHops) phasesToDeduct.push('fermenting_hops');
-                        const actualDeductions = await deductBatch(recipe, batch.volume, phasesToDeduct);
+                        const actualDeductions = await deductBatch(
+                            recipe,
+                            batch.volume,
+                            phasesToDeduct,
+                            batch?.consumedIngredients || {}
+                        );
                         const { addedCost, warnings } = calculateActualDeductedCost(actualDeductions);
                         await updateBatchField(batch.id, {
                             totalCost: (batch.totalCost || 0) + addedCost,
@@ -465,7 +487,95 @@ export default function BrewSessionView() {
         };
     };
 
+    const matchIngredientToStep = (ing, step, phase) => {
+        if (!step) return false;
+        const ingName = (ing.name || '').toLowerCase();
+        const ingStage = (ing.stage || ing.time || '').toLowerCase();
+        const stepTitle = (step.title || '').toLowerCase();
+        const stepDesc = (step.desc || '').toLowerCase();
+        const stepDetails = (step.details || '').toLowerCase();
+
+        // 1. Literal matching by name
+        if (ingName && (stepTitle.includes(ingName) || stepDesc.includes(ingName) || stepDetails.includes(ingName))) return true;
+
+        // 2. Category + Keyword matching
+        if (ing.category === 'Malta' && (stepTitle.includes('maceraci') || stepTitle.includes('mash') || stepTitle.includes('empaste'))) return true;
+        if (ing.category === 'Levadura' && (stepTitle.includes('inocula') || stepTitle.includes('levadura') || stepTitle.includes('pitch'))) return true;
+
+        // 3. Phase-based keywords
+        if (phase === 'cooking') {
+            if (ing.category === 'Lúpulo' && (ingStage.includes('hervor') || ingStage.includes('min'))) {
+                if (stepTitle.includes('hervor') || stepTitle.includes('ebullici') || stepTitle.includes('adici') || stepTitle.includes('amargor') || stepTitle.includes('aroma')) return true;
+            }
+            if (ingStage.includes('whirlpool') && (stepTitle.includes('whirlpool') || stepTitle.includes('aroma') || stepTitle.includes('enfriado'))) return true;
+            if (ingStage.includes('maceraci') && (stepTitle.includes('maceraci') || stepTitle.includes('mash'))) return true;
+        }
+
+        if (phase === 'fermenting') {
+            if (ingStage.includes('dry hop') && (stepTitle.includes('dry hop') || stepTitle.includes('lúpulo'))) return true;
+            if (ingStage.includes('madura') && stepTitle.includes('madura')) return true;
+        }
+
+        // 4. Fallback: textual matching on stage/time
+        if (ingStage && (stepTitle.includes(ingStage) || stepDesc.includes(ingStage))) return true;
+
+        return false;
+    };
+
     const labels = getPhaseLabels();
+
+    const { groupedPhaseIngredients, currentStepIngredientsCount } = useMemo(() => {
+        if (!recipe?.ingredients) return { groupedPhaseIngredients: {}, currentStepIngredientsCount: 0 };
+        const { malts = [], hops = [], others = [], yeast } = recipe.ingredients;
+        let allPhase = [];
+
+        if (currentPhase === 'cooking') {
+            malts.forEach(m => allPhase.push({ ...m, category: 'Malta', logicalStage: 'Maceración' }));
+            hops.filter(h => h.phase === 'cooking' || !h.phase).forEach(h => {
+                const stage = (h.stage || h.time || '').toLowerCase();
+                const logicalStage = stage.includes('whirlpool') ? 'Whirlpool' : 'Hervor';
+                allPhase.push({ ...h, category: 'Lúpulo', logicalStage });
+            });
+            others.filter(o => o.phase === 'cooking' || !o.phase).forEach(o => {
+                const stage = (o.stage || o.time || '').toLowerCase();
+                const logicalStage = stage.includes('whirlpool') ? 'Whirlpool' : (stage.includes('maceraci') ? 'Maceración' : 'Hervor');
+                allPhase.push({ ...o, category: o.category || 'Aditivos', logicalStage });
+            });
+            if (yeast) allPhase.push({ ...(typeof yeast === 'object' ? yeast : { name: yeast, amount: 1 }), category: 'Levadura', logicalStage: 'Final de Cocción/Inoculación' });
+        } else if (currentPhase === 'fermenting') {
+            hops.filter(h => h.phase === 'fermenting').forEach(h => allPhase.push({ ...h, category: 'Lúpulo', logicalStage: 'Dry Hop / Adiciones' }));
+            others.filter(o => o.phase === 'fermenting').forEach(o => allPhase.push({ ...o, category: o.category || 'Aditivos', logicalStage: 'Dry Hop / Adiciones' }));
+        } else if (currentPhase === 'bottling') {
+            others.filter(o => o.phase === 'bottling').forEach(o => allPhase.push({ ...o, category: o.category || 'Aditivos', logicalStage: 'Envasado' }));
+        }
+
+        // Sorting ingredients within phase
+        allPhase.sort((a, b) => {
+            // Sort by logical stage priority
+            const order = { 'Maceración': 1, 'Hervor': 2, 'Whirlpool': 3, 'Final de Cocción/Inoculación': 4, 'Dry Hop / Adiciones': 5, 'Envasado': 6 };
+            if (order[a.logicalStage] !== order[b.logicalStage]) return order[a.logicalStage] - order[b.logicalStage];
+
+            // Within same stage, sort by time (descending for boil)
+            const getMinutes = (timeStr) => {
+                const match = String(timeStr).match(/(\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            };
+            return getMinutes(b.time || b.stage) - getMinutes(a.time || a.stage);
+        });
+
+        // Grouping
+        const groups = {};
+        let currentCount = 0;
+        allPhase.forEach(ing => {
+            if (!groups[ing.logicalStage]) groups[ing.logicalStage] = [];
+            const matchesCurrentStep = matchIngredientToStep(ing, step, currentPhase);
+            if (matchesCurrentStep) currentCount++;
+            groups[ing.logicalStage].push({ ...ing, matchesCurrentStep });
+        });
+
+        return { groupedPhaseIngredients: groups, currentStepIngredientsCount: currentCount };
+    }, [recipe, currentPhase, step]);
+
     if (!recipe) return null;
 
     return (
@@ -569,6 +679,93 @@ export default function BrewSessionView() {
                     </div>
                 )}
 
+                {Object.keys(groupedPhaseIngredients).length > 0 && batch && (
+                    <div className="w-full max-w-3xl bg-slate-800/80 backdrop-blur-md p-6 md:p-8 rounded-2xl border border-slate-600/50 shadow-2xl text-left">
+                        <div className="flex items-center justify-between mb-6">
+                            <span className="font-black flex items-center gap-3 text-emerald-400 uppercase tracking-widest text-sm">
+                                <Package size={22} className="text-emerald-500" /> Control de Insumos: {currentPhase === 'cooking' ? 'Cocción' : currentPhase === 'fermenting' ? 'Fermentación' : 'Embotellado'}
+                            </span>
+                            {currentStepIngredientsCount > 0 && (
+                                <span className="bg-emerald-500 text-slate-900 text-[10px] font-black px-2 py-1 rounded-full animate-pulse uppercase tracking-tighter">
+                                    {currentStepIngredientsCount} para este paso
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="space-y-10">
+                            {Object.entries(groupedPhaseIngredients).map(([stageName, ings]) => {
+                                const hasMatches = ings.some(i => i.matchesCurrentStep);
+                                return (
+                                    <div key={stageName} className={`space-y-4 p-4 rounded-2xl transition-all ${hasMatches ? 'bg-emerald-500/5 border border-emerald-500/20 shadow-lg' : ''}`}>
+                                        <div className="flex items-center gap-3">
+                                            <span className={`text-[11px] font-black uppercase tracking-[0.2em] whitespace-nowrap ${hasMatches ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                                {stageName}
+                                            </span>
+                                            <div className={`h-[1px] flex-1 ${hasMatches ? 'bg-emerald-500/30' : 'bg-slate-700/50'}`}></div>
+                                            {hasMatches && <span className="text-[10px] font-bold text-emerald-500 italic">Corresponde al paso actual</span>}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {ings.map((ing, idx) => {
+                                                const key = `${ing.category}_${ing.name}`.replace(/[~*/\[\].#$]/g, '_');
+                                                const isConsumed = !!batch.consumedIngredients?.[key];
+                                                const scaleFactor = targetVolume / (recipe.targetVolume || 20);
+                                                const scaledAmount = ing.category === 'Lúpulo' || ing.category === 'Levadura'
+                                                    ? Math.round(ing.amount * scaleFactor)
+                                                    : (ing.amount * scaleFactor).toFixed(2);
+
+                                                return (
+                                                    <div
+                                                        key={idx}
+                                                        onClick={() => handleToggleIngredient(ing, !isConsumed)}
+                                                        className={`flex flex-col p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden ${isConsumed
+                                                            ? 'bg-emerald-500/20 border-emerald-500/50 shadow-inner scale-[0.98]'
+                                                            : hasMatches
+                                                                ? 'bg-slate-700/50 border-emerald-500/30 hover:border-emerald-400 shadow-md translate-y-[-2px]'
+                                                                : 'bg-slate-700/20 border-slate-700 hover:border-slate-500 opacity-80 hover:opacity-100'
+                                                            }`}
+                                                    >
+                                                        {ing.matchesCurrentStep && !isConsumed && (
+                                                            <div className="absolute top-0 right-0 bg-emerald-500 w-2 h-full"></div>
+                                                        )}
+
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-6 h-6 rounded border flex items-center justify-center transition-all ${isConsumed ? 'bg-emerald-500 border-emerald-500' : 'bg-slate-900 border-slate-600 group-hover:border-slate-400'
+                                                                    }`}>
+                                                                    {isConsumed && <CheckCircle2 size={16} className="text-slate-900" />}
+                                                                </div>
+                                                                <p className={`text-sm font-bold ${isConsumed ? 'text-emerald-400 line-through opacity-70' : 'text-white'}`}>{ing.name}</p>
+                                                            </div>
+                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase ${isConsumed ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-500' : 'bg-slate-800 border-slate-700 text-slate-400'
+                                                                }`}>
+                                                                {ing.time || ing.stage || 'General'}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between pl-9 mt-1">
+                                                            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
+                                                                {ing.category} • {scaledAmount} {ing.unit || (ing.category === 'Malta' ? 'kg' : 'g')}
+                                                            </p>
+                                                            {isConsumed && (
+                                                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Añadido</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="mt-8 pt-6 border-t border-slate-700/50 flex flex-col items-center gap-2">
+                            <p className="text-[10px] text-slate-600 uppercase tracking-widest font-black">Recordatorio Profesional</p>
+                            <p className="text-[10px] text-slate-500 italic text-center max-w-md">Marca los insumos en el momento exacto que los agregas. El inventario se actualizará en tiempo real y el costo final del lote será milimétrico.</p>
+                        </div>
+                    </div>
+                )}
+
                 {batch && (
                     <div className="w-full max-w-3xl bg-slate-800/50 p-6 rounded-2xl border border-slate-700/50 text-left">
                         <label className="block text-xs font-black text-amber-500/80 uppercase tracking-widest mb-3">Notas de Producción</label>
@@ -590,6 +787,6 @@ export default function BrewSessionView() {
                     {isLastStep ? <>{labels.btnIcon} {labels.btnText}</> : <>Siguiente Paso <SkipForward size={28} /></>}
                 </button>
             </div>
-        </div>
+        </div >
     );
 }

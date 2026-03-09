@@ -6,11 +6,13 @@
 
 import {
     collection, doc, addDoc, updateDoc, deleteDoc,
-    onSnapshot, query, orderBy, runTransaction, serverTimestamp
+    onSnapshot, query, orderBy, runTransaction, serverTimestamp, getDoc, getDocs
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
+export const batchDocRef = (uid, batchId) =>
+    doc(db, 'users', uid, 'activeBatches', batchId);
 const inventoryRef = (uid) =>
     collection(db, 'users', uid, 'inventory');
 
@@ -84,10 +86,13 @@ export async function deleteInventoryItem(uid, itemId) {
  * @returns {Promise<void>}
  * @throws Error si hay stock insuficiente
  */
-export async function deductBatchFromInventory(uid, recipe, targetVolume, currentInventory, phases = ['cooking', 'fermenting', 'bottling']) {
+export async function deductBatchFromInventory(uid, recipe, targetVolume, currentInventory, phases = ['cooking', 'fermenting', 'bottling'], ignoredIngredients = {}) {
     const scaleFactor = (targetVolume || 1) / (recipe.targetVolume || 1);
     const searchItem = (name, category) => {
         const searchName = (name || '').toLowerCase().trim();
+        const key = `${category}_${name}`.replace(/[\.#$\[\]]/g, '_');
+        if (ignoredIngredients[key]) return null; // Skip if already consumed
+
         return currentInventory.find(i =>
             i.category === category &&
             (i.name || '').toLowerCase().trim().includes(searchName)
@@ -222,5 +227,75 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
         }
 
         return actuals;
+    });
+}
+
+/**
+ * Toggles consumption of a single ingredient in real-time.
+ */
+export async function toggleIngredientConsumption(uid, batchId, ingredient, isConsumed, targetVolume, recipeTargetVolume, currentInventory = []) {
+    const scaleFactor = (targetVolume || 1) / (recipeTargetVolume || 1);
+    const amountToToggle = ingredient.category === 'Lúpulo' || ingredient.category === 'Levadura'
+        ? Math.round((Number(ingredient.amount) || 0) * scaleFactor)
+        : parseFloat(((Number(ingredient.amount) || 0) * scaleFactor).toFixed(4));
+
+    const searchName = (ingredient.name || '').toLowerCase().trim();
+    const batchRef = batchDocRef(uid, batchId);
+
+    // Sanitize key (unified)
+    const ingredientKey = `${ingredient.category}_${ingredient.name}`.replace(/[~*/\[\].#$]/g, '_');
+
+    return await runTransaction(db, async (transaction) => {
+        // 1. Get Batch
+        const batchSnap = await transaction.get(batchRef);
+        if (!batchSnap.exists()) throw new Error("Batch not found");
+        const batchData = batchSnap.data();
+
+        // 2. Find relevant inventory item from passed currentInventory
+        const invItem = currentInventory.find(i =>
+            i.category === (ingredient.category || 'Malta') &&
+            (i.name || '').toLowerCase().trim().includes(searchName)
+        );
+
+        if (!invItem) throw new Error(`Stock item not found: ${ingredient.name}`);
+        const invDocRef = doc(db, 'users', uid, 'inventory', invItem.id);
+        const currentInvSnap = await transaction.get(invDocRef);
+        const currentStock = Number(currentInvSnap.data().stock) || 0;
+
+        const consumed = batchData.consumedIngredients || {};
+        const currentCost = Number(batchData.totalCost) || 0;
+        const itemPrice = Number(invItem.price) || 0;
+        const toggleCost = amountToToggle * itemPrice;
+
+        if (isConsumed) {
+            // Deduct from stock
+            const newStock = Math.max(0, currentStock - amountToToggle);
+            transaction.update(invDocRef, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
+
+            // Add to batch record
+            transaction.update(batchRef, {
+                [`consumedIngredients.${ingredientKey}`]: {
+                    name: ingredient.name,
+                    category: ingredient.category,
+                    amount: amountToToggle,
+                    cost: toggleCost,
+                    timestamp: Date.now()
+                },
+                totalCost: Number((currentCost + toggleCost).toFixed(2))
+            });
+        } else {
+            // Restore to stock
+            const newStock = currentStock + amountToToggle;
+            transaction.update(invDocRef, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
+
+            // Remove from batch record
+            const updatedConsumed = { ...consumed };
+            delete updatedConsumed[ingredientKey];
+
+            transaction.update(batchRef, {
+                consumedIngredients: updatedConsumed,
+                totalCost: Number(Math.max(0, currentCost - toggleCost).toFixed(2))
+            });
+        }
     });
 }

@@ -11,6 +11,7 @@ import {
     updateInventoryItem as _updateItem,
     deleteInventoryItem as _deleteItem,
     deductBatchFromInventory as _deductBatch,
+    toggleIngredientConsumption as _toggleIngredient
 } from '../services/firestore/inventory';
 import { getLowStockItems } from '../utils/validators';
 
@@ -56,10 +57,14 @@ export function useInventory() {
      * Descuenta los ingredientes de una receta del inventario (atómico).
      * Retorna array de deducciones efectivas. Lanza Error si hay fallo.
      */
-    const deductBatch = useCallback(async (recipe, targetVolume, phases) => {
-        return await _deductBatch(currentUser.uid, recipe, targetVolume, inventory, phases);
-    }, [currentUser.uid]); // inventory removed from dependencies as per audit
+    const deductBatch = useCallback(async (recipe, targetVolume, phases, ignoredIngredients = {}) => {
+        return await _deductBatch(currentUser.uid, recipe, targetVolume, inventory, phases, ignoredIngredients);
+    }, [currentUser.uid, inventory]);
+
+    const toggleIngredient = useCallback(async (batchId, ingredient, isConsumed, targetVolume, recipeTargetVolume) => {
+        return await _toggleIngredient(currentUser.uid, batchId, ingredient, isConsumed, targetVolume, recipeTargetVolume, inventory);
+    }, [currentUser.uid, inventory]);
 
 
-    return { inventory, loading, error, lowStockItems, addItem, updateItem, deleteItem, deductBatch };
+    return { inventory, loading, error, lowStockItems, addItem, updateItem, deleteItem, deductBatch, toggleIngredient };
 }
