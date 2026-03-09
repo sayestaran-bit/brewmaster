@@ -138,10 +138,8 @@ export const AuthProvider = ({ children }) => {
         setAuthError(null);
         try {
             const credential = await signInAnonymously(auth);
-            const additionalInfo = getAdditionalUserInfo(credential);
-            if (additionalInfo && additionalInfo.isNewUser) {
-                await seedGuestData(credential.user.uid);
-            }
+            // El check de si ya existe data se movió adentro de seedGuestData para mayor robustez
+            await seedGuestData(credential.user.uid);
             return { success: true };
         } catch (err) {
             const msg = mapAuthError(err.code);

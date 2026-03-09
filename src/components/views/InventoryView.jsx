@@ -1,7 +1,7 @@
 // /src/components/views/InventoryView.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp, Info, ListChecks } from 'lucide-react';
+import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp, Info, ListChecks, AlertTriangle } from 'lucide-react';
 import { useInventory } from '../../hooks/useInventory';
 import { useRecipes } from '../../hooks/useRecipes';
 import { formatCurrency } from '../../utils/formatters';
@@ -137,63 +137,75 @@ export default function InventoryView() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-line">
-                                    {categoryItems.map((item) => (
-                                        <tr key={item.id} className="hover:bg-black/5 dark:hover:bg-white/5 group transition-colors">
-                                            <td className="px-6 py-5 font-bold text-content relative group/tooltip">
-                                                <div className="flex items-center gap-2">
-                                                    {item.name}
-                                                    {item.description && (
-                                                        <div className="relative flex items-center">
-                                                            <Info size={16} className="text-blue-400 cursor-help" />
-                                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl pointer-events-none whitespace-normal z-[60]">
-                                                                {item.description}
+                                    {categoryItems.map((item) => {
+                                        const isLowStock = (item) => {
+                                            const stock = Number(item.stock);
+                                            if (item.category === 'Malta') return stock < 2;
+                                            if (item.category === 'Lúpulo' || item.category === 'Sales Minerales' || item.category === 'Aditivos') return stock < 100;
+                                            if (item.category === 'Levadura') return stock < 2;
+                                            return stock < 1;
+                                        };
+                                        const low = isLowStock(item);
+
+                                        return (
+                                            <tr key={item.id} className="hover:bg-black/5 dark:hover:bg-white/5 group transition-colors">
+                                                <td className={`px-6 py-5 font-bold ${low ? 'text-red-500' : 'text-content'} relative group/tooltip`}>
+                                                    <div className="flex items-center gap-2">
+                                                        {low && <AlertTriangle size={16} className="text-red-500 animate-pulse" />}
+                                                        {item.name}
+                                                        {item.description && (
+                                                            <div className="relative flex items-center">
+                                                                <Info size={16} className={`${low ? 'text-red-400' : 'text-blue-400'} cursor-help`} />
+                                                                <div className="absolute left-6 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl pointer-events-none whitespace-normal z-[60]">
+                                                                    {item.description}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="flex items-center gap-2">
-                                                    <input
-                                                        type="number"
-                                                        defaultValue={parseFloat(Number(item.stock).toFixed(4))}
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="number"
+                                                            defaultValue={parseFloat(Number(item.stock).toFixed(4))}
+                                                            disabled={isGuest}
+                                                            title={isGuest ? guestTooltip : undefined}
+                                                            onBlur={(e) => updateItem(item.id, { stock: parseFloat(Number(e.target.value).toFixed(4)) })}
+                                                            className={`w-full max-w-[100px] p-2 border ${low ? 'border-red-500/50 focus:ring-red-500' : 'border-line focus:ring-blue-500'} rounded-lg text-center outline-none font-medium bg-surface focus:bg-panel ${low ? 'text-red-600' : 'text-content'} transition-all disabled:opacity-75 disabled:cursor-not-allowed`}
+                                                        />
+                                                        <span className={`text-muted font-bold shrink-0 ${low ? 'text-red-400' : ''}`}>{item.unit}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center gap-2 text-muted">
+                                                        <span className="shrink-0">$</span>
+                                                        <input
+                                                            type="number"
+                                                            defaultValue={item.price}
+                                                            disabled={isGuest}
+                                                            title={isGuest ? guestTooltip : undefined}
+                                                            onBlur={(e) => updateItem(item.id, { price: Number(e.target.value) || 0 })}
+                                                            className="w-full max-w-[100px] p-2 border border-line rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-content bg-surface focus:bg-panel transition-all disabled:opacity-75 disabled:cursor-not-allowed"
+                                                        />
+                                                        <span className="text-xs shrink-0">/ {item.unit}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5 text-center">
+                                                    <button
+                                                        onClick={() => handleDeleteInvItem(item.id)}
                                                         disabled={isGuest}
                                                         title={isGuest ? guestTooltip : undefined}
-                                                        onBlur={(e) => updateItem(item.id, { stock: parseFloat(Number(e.target.value).toFixed(4)) })}
-                                                        className="w-full max-w-[100px] p-2 border border-line rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none font-medium bg-surface focus:bg-panel text-content transition-all disabled:opacity-75 disabled:cursor-not-allowed"
-                                                    />
-                                                    <span className="text-muted font-bold shrink-0">{item.unit}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="flex items-center gap-2 text-muted">
-                                                    <span className="shrink-0">$</span>
-                                                    <input
-                                                        type="number"
-                                                        defaultValue={item.price}
-                                                        disabled={isGuest}
-                                                        title={isGuest ? guestTooltip : undefined}
-                                                        onBlur={(e) => updateItem(item.id, { price: Number(e.target.value) || 0 })}
-                                                        className="w-full max-w-[100px] p-2 border border-line rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-content bg-surface focus:bg-panel transition-all disabled:opacity-75 disabled:cursor-not-allowed"
-                                                    />
-                                                    <span className="text-xs shrink-0">/ {item.unit}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <button
-                                                    onClick={() => handleDeleteInvItem(item.id)}
-                                                    disabled={isGuest}
-                                                    title={isGuest ? guestTooltip : undefined}
-                                                    className="text-muted hover:text-red-500 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                        className="text-muted hover:text-red-500 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
-                        </div>
+                        </div >
                     </div >
                 )
             })}

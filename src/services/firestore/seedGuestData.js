@@ -1,4 +1,4 @@
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 
 /**
@@ -9,6 +9,16 @@ export async function seedGuestData(uid) {
     if (!uid) return;
 
     try {
+        // Verificar si ya tiene recetas para no duplicar
+        const recipesRefCheck = collection(db, 'users', uid, 'recipes');
+        const q = query(recipesRefCheck, limit(1));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+            console.log("🌱 [Seed] El usuario ya tiene datos. Omitiendo seed.");
+            return;
+        }
+
         console.log("🌱 [Seed] Iniciando inyección de datos para Guest:", uid);
 
         const timestamp = serverTimestamp();
