@@ -370,6 +370,11 @@ export default function RecipeForm() {
 
                         <div>
                             <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><Wheat size={20} className="text-amber-500" /> Granos (kg)</h3>
+                            <div className="flex px-3 mb-1 uppercase text-[10px] font-black text-muted tracking-widest">
+                                <span className="flex-1">Nombre de la Malta</span>
+                                <span className="w-24 text-center">Cantidad (kg)</span>
+                                <span className="w-10"></span>
+                            </div>
                             <div className="space-y-2">
                                 {formData.malts.map((m, i) => (
                                     <div key={i} className="flex gap-2">
@@ -384,6 +389,13 @@ export default function RecipeForm() {
 
                         <div>
                             <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><Leaf size={20} className="text-green-500" /> Lúpulos y Aditivos de Cocción</h3>
+                            <div className="hidden md:flex px-6 mb-1 uppercase text-[10px] font-black text-muted tracking-widest gap-2">
+                                <span className="flex-1">Ingrediente</span>
+                                <span className="w-20 text-center">Cantidad</span>
+                                <span className="w-24 text-center">Tiempo</span>
+                                <span className="w-24 text-center">Etapa/Uso</span>
+                                <span className="w-10"></span>
+                            </div>
                             <div className="space-y-2">
                                 {formData.hops.filter(h => h.phase === 'cooking').map((h, i) => {
                                     const actualIdx = formData.hops.indexOf(h);
@@ -463,6 +475,12 @@ export default function RecipeForm() {
 
                         <div>
                             <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><Leaf size={20} className="text-purple-500" /> Lúpulos (Dry Hop) y Aditivos Fermentación</h3>
+                            <div className="hidden md:flex px-6 mb-1 uppercase text-[10px] font-black text-muted tracking-widest gap-2">
+                                <span className="flex-1">Ingrediente</span>
+                                <span className="w-20 text-center">Gramos</span>
+                                <span className="w-24 text-center">Momento (Ej: Día 3)</span>
+                                <span className="w-10"></span>
+                            </div>
                             <div className="space-y-2">
                                 {formData.hops.filter(h => h.phase === 'fermenting').map((h, i) => {
                                     const actualIdx = formData.hops.indexOf(h);
@@ -521,6 +539,12 @@ export default function RecipeForm() {
                     <div className="space-y-8 animate-fadeIn">
                         <div>
                             <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><Sparkles size={20} className="text-blue-500" /> Aditivos de Envasado (Priming / Clarificantes)</h3>
+                            <div className="hidden md:flex px-6 mb-1 uppercase text-[10px] font-black text-muted tracking-widest gap-2">
+                                <span className="flex-1">Aditivo / Azúcar</span>
+                                <span className="w-24 text-center">Cantidad</span>
+                                <span className="w-24 text-center">Unidad</span>
+                                <span className="w-10"></span>
+                            </div>
                             <div className="space-y-2">
                                 {(formData.others || []).filter(o => o.phase === 'bottling').map((o, i) => {
                                     const actualIdx = formData.others.indexOf(o);
