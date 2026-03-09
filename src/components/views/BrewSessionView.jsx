@@ -113,7 +113,8 @@ export default function BrewSessionView() {
 
                 // FIX: Use 86400 (seconds in a day) for non-cooking phases
                 const multiplier = currentPhase === 'cooking' ? 60 : 86400;
-                const recipeDuration = currentStep.duration ? parseFloat(currentStep.duration) * multiplier : 0;
+                const rawDuration = parseFloat(currentStep.duration);
+                const recipeDuration = !isNaN(rawDuration) ? rawDuration * multiplier : 0;
                 let initialTime = recipeDuration;
                 let dbIsRunning = false;
 
@@ -248,7 +249,8 @@ export default function BrewSessionView() {
                 let remainingSecs = Number(brewState.timeLeft) || 0;
                 if (remainingSecs <= 0 && step?.duration) {
                     const multiplier = currentPhase === 'cooking' ? 60 : 86400;
-                    remainingSecs = parseFloat(step.duration) * multiplier;
+                    const rawDur = parseFloat(step.duration);
+                    remainingSecs = !isNaN(rawDur) ? rawDur * multiplier : 0;
                 }
                 updates['timer.targetEndTime'] = now + (remainingSecs * 1000);
                 updates['timer.pausedAt'] = null;
@@ -265,7 +267,7 @@ export default function BrewSessionView() {
                         stepIdx: brewState.stepIdx,
                         title: step.title,
                         startedAt: now,
-                        planned: (Number(step.duration) || 0) * multiplier
+                        planned: (!isNaN(parseFloat(step.duration)) ? parseFloat(step.duration) * multiplier : 0)
                     };
                 }
             } else {
@@ -394,7 +396,8 @@ export default function BrewSessionView() {
             const nextIdx = safeStepIdx + 1;
             const nextStep = stepsArray[nextIdx];
             const multiplier = currentPhase === 'cooking' ? 60 : 86400;
-            const nextTime = (nextStep && nextStep.duration) ? parseFloat(nextStep.duration) * multiplier : 0;
+            const rawNextDur = nextStep ? parseFloat(nextStep.duration) : NaN;
+            const nextTime = !isNaN(rawNextDur) ? rawNextDur * multiplier : 0;
             if (batch) {
                 const newCompleted = Array.from(new Set([...(batch.completedSteps || []), safeStepIdx]));
                 await updateBatchField(batch.id, {

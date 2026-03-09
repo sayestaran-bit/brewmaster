@@ -9,6 +9,24 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
 import { useActiveBatches } from '../../hooks/useActiveBatches';
+import { seedGuestData } from '../../services/firestore/seedGuestData';
+
+/**
+ * GuestSeeder: Componente interno que asegura que los invitados tengan datos.
+ * Se encarga de la auto-curación si por alguna razón el primer seed falló 
+ * o el usuario entra con una sesión anónima persistente pero vacía.
+ */
+function GuestSeeder({ user }) {
+    React.useEffect(() => {
+        if (user?.isAnonymous) {
+            console.log("🔍 [GuestSeeder] Validando integridad de cuenta de invitado...");
+            seedGuestData(user.uid).catch(err => {
+                console.error("❌ [GuestSeeder] Error en auto-seeding:", err);
+            });
+        }
+    }, [user]);
+    return null;
+}
 
 const NAV_ITEMS = [
     { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard, activeColor: 'text-amber-500  border-amber-500  bg-amber-50/50  dark:bg-amber-900/20' },
@@ -29,6 +47,7 @@ export default function AppLayout() {
 
     return (
         <div className={darkMode ? 'dark' : ''}>
+            <GuestSeeder user={currentUser} />
             <div className="min-h-screen bg-surface text-content font-sans
                             selection:bg-amber-200 transition-colors duration-300
                             /* bottom padding for mobile tab bar */
