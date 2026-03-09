@@ -34,9 +34,14 @@ service cloud.firestore {
     // NUEVA ESTRUCTURA: Subcolecciones Normalizadas
     // Path: users/{userId}/{collectionName}/{docId}
     // ===================================================================
-    match /users/{userId}/{document=**} {
+    match /users/{userId}/{collectionName}/{docId} {
       // El usuario puede leer y escribir cualquier documento que cuelgue de su propio UID
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      
+      // Validaciones para creación y actualización
+      allow create, update: if request.auth != null 
+                             && request.auth.uid == userId
+                             && request.resource.data.keys().size() <= 100;
     }
   }
 }

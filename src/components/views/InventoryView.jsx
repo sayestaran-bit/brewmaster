@@ -3,11 +3,11 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp, Info, ListChecks } from 'lucide-react';
 import { useInventory } from '../../hooks/useInventory';
+import { useRecipes } from '../../hooks/useRecipes';
 import { formatCurrency } from '../../utils/formatters';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
-import { useAppContext } from '../../context/AppContext';
 import ShoppingListModal from '../inventory/ShoppingListModal';
 
 export default function InventoryView() {
@@ -15,7 +15,7 @@ export default function InventoryView() {
     const { currentUser } = useAuth();
     const isGuest = currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
-    const { recipes } = useAppContext();
+    const { recipes } = useRecipes();
     const { inventory, addItem, updateItem, deleteItem } = useInventory();
     const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
     const [showInvForm, setShowInvForm] = useState(false);

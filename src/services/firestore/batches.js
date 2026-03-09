@@ -31,7 +31,7 @@ export function onBatchesSnapshot(uid, onData, onError) {
     const q = query(batchesRef(uid), orderBy('startDate', 'desc'));
     return onSnapshot(
         q,
-        (snap) => onData(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+        (snap) => onData(snap.docs.map(d => ({ ...d.data(), id: d.id }))),
         onError
     );
 }

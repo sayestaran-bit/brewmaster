@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { X, ShoppingCart, FileText, Download, Trash2, Plus, Info, Scale } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import Button from '../ui/Button';
 
@@ -10,10 +10,18 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
     const [selectedRecipes, setSelectedRecipes] = useState([]);
 
     const addRecipeSelection = () => {
-        if (recipes.length > 0) {
-            setSelectedRecipes([...selectedRecipes, { recipeId: recipes[0].id, volume: recipes[0].targetVolume || 20 }]);
+        const safeRecipes = Array.isArray(recipes) ? recipes : [];
+        if (safeRecipes.length > 0) {
+            setSelectedRecipes(prev => [...prev, {
+                recipeId: safeRecipes[0].id,
+                volume: Number(safeRecipes[0].targetVolume) || 20
+            }]);
+        } else {
+            console.warn("ShoppingListModal: No hay recetas disponibles.");
         }
     };
+
+    const clearAll = () => setSelectedRecipes([]);
 
     const updateRecipeSelection = (idx, field, value) => {
         const newSelected = [...selectedRecipes];
@@ -22,7 +30,7 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
     };
 
     const removeRecipeSelection = (idx) => {
-        setSelectedRecipes(selectedRecipes.filter((_, i) => i !== idx));
+        setSelectedRecipes(prev => prev.filter((_, i) => i !== idx));
     };
 
     // Lógica de Consolidación
@@ -31,9 +39,10 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
         if (selectedRecipes.length === 0) return [];
 
         const needed = {}; // { itemName: { amount, unit, category } }
+        const safeRecipes = Array.isArray(recipes) ? recipes : [];
 
         selectedRecipes.forEach(sel => {
-            const recipe = recipes.find(r => r.id === sel.recipeId);
+            const recipe = safeRecipes.find(r => r.id === sel.recipeId);
             if (!recipe) return;
 
             const scaleFactor = Number(sel.volume) / (recipe.targetVolume || 1);
@@ -69,8 +78,9 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
         });
 
         // Comparar con inventario
+        const safeInventory = Array.isArray(inventory) ? inventory : [];
         return Object.values(needed).map(item => {
-            const invItem = inventory.find(i => (i.name || '').trim().toLowerCase() === item.name.trim().toLowerCase());
+            const invItem = safeInventory.find(i => (i.name || '').trim().toLowerCase() === item.name.trim().toLowerCase());
             const currentStock = invItem ? (Number(invItem.stock) || 0) : 0;
             const toBuy = Math.max(0, item.amount - currentStock);
 
@@ -86,45 +96,55 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
     if (!isOpen) return null;
 
     const exportToPDF = () => {
-        const doc = jsPDF();
-        doc.setFontSize(20);
-        doc.text("Lista de Compras - BrewMaster", 14, 22);
-        doc.setFontSize(11);
-        doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 30);
+        try {
+            const doc = jsPDF();
+            doc.setFontSize(20);
+            doc.text("Lista de Compras - BrewMaster", 14, 22);
+            doc.setFontSize(11);
+            doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 30);
 
-        const tableData = shoppingList.map(item => [
-            item.name,
-            item.category,
-            `${item.needed.toFixed(2)} ${item.unit}`,
-            `${item.current.toFixed(2)} ${item.unit}`,
-            `${item.toBuy.toFixed(2)} ${item.unit}`
-        ]);
+            const tableData = shoppingList.map(item => [
+                item.name,
+                item.category,
+                `${item.needed.toFixed(2)} ${item.unit}`,
+                `${item.current.toFixed(2)} ${item.unit}`,
+                `${item.toBuy.toFixed(2)} ${item.unit}`
+            ]);
 
-        doc.autoTable({
-            startY: 35,
-            head: [['Ítem', 'Categoría', 'Necesario', 'En Stock', 'A Comprar']],
-            body: tableData,
-            theme: 'striped',
-            headStyles: { fillColor: [59, 130, 246] }
-        });
+            autoTable(doc, {
+                startY: 35,
+                head: [['Ítem', 'Categoría', 'Necesario', 'En Stock', 'A Comprar']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [59, 130, 246] }
+            });
 
-        doc.save(`Lista_Compras_${new Date().toISOString().slice(0, 10)}.pdf`);
+            doc.save(`Lista_Compras_${new Date().toISOString().slice(0, 10)}.pdf`);
+        } catch (err) {
+            console.error("PDF Export Error:", err);
+            alert("No se pudo generar el PDF. Revisa la consola.");
+        }
     };
 
     const exportToExcel = () => {
-        const data = shoppingList.map(item => ({
-            "Ítem": item.name,
-            "Categoría": item.category,
-            "Total Necesario": item.needed.toFixed(2),
-            "Stock Actual": item.current.toFixed(2),
-            "Faltante (A Comprar)": item.toBuy.toFixed(2),
-            "Unidad": item.unit
-        }));
+        try {
+            const data = shoppingList.map(item => ({
+                "Ítem": item.name,
+                "Categoría": item.category,
+                "Total Necesario": item.needed.toFixed(2),
+                "Stock Actual": item.current.toFixed(2),
+                "Faltante": item.toBuy.toFixed(2),
+                "Unidad": item.unit
+            }));
 
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Lista de Compras");
-        XLSX.writeFile(wb, `Lista_Compras_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Lista de Compras");
+            XLSX.writeFile(wb, `Lista_Compras_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        } catch (err) {
+            console.error("Excel Export Error:", err);
+            alert("No se pudo generar el Excel.");
+        }
     };
 
     return (
@@ -154,12 +174,22 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
                             <h3 className="font-black text-slate-800 dark:text-white flex items-center gap-2 uppercase text-sm tracking-widest">
                                 <Plus size={18} className="text-blue-500" /> Recetas a Programar
                             </h3>
-                            <button
-                                onClick={addRecipeSelection}
-                                className="text-xs font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-4 py-2 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all border border-blue-100 dark:border-blue-800"
-                            >
-                                + Agregar Receta
-                            </button>
+                            <div className="flex gap-2">
+                                {selectedRecipes.length > 0 && (
+                                    <button
+                                        onClick={clearAll}
+                                        className="text-xs font-black bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-all border border-red-100 dark:border-red-900/30"
+                                    >
+                                        Limpiar
+                                    </button>
+                                )}
+                                <button
+                                    onClick={addRecipeSelection}
+                                    className="text-xs font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-4 py-2 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all border border-blue-100 dark:border-blue-800"
+                                >
+                                    + Agregar Receta
+                                </button>
+                            </div>
                         </div>
 
                         {selectedRecipes.length === 0 ? (

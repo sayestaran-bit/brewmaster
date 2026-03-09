@@ -46,10 +46,15 @@ export function useActiveBatches() {
     /**
      * Completa un batch: lo elimina y lo mueve al historial en una sola operación atómica.
      * @param {string} batchId
-     * @param {object} historyEntry - datos del registro histórico incluyendo brewDate y bottlingDate
-     * @returns {Promise<string>} id de la nueva entrada de historial
+     * @param {object} historyData - datos específicos del lote para el registro histórico
      */
-    const completeBatch = useCallback(async (batchId, historyEntry) => {
+    const completeBatch = useCallback(async (batchId, historyData) => {
+        // Enriquecer el registro de historial con metadatos de sistema si falta alguno
+        const historyEntry = {
+            ...historyData,
+            status: historyData.status || 'Completada',
+            updatedAt: Date.now()
+        };
         return await _completeBatch(currentUser.uid, batchId, historyEntry);
     }, [currentUser]);
 

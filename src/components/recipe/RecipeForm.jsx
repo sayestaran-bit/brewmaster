@@ -38,48 +38,44 @@ export default function RecipeForm() {
     };
 
     const [formData, setFormData] = useState(defaultEmptyState);
+    const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        if (isEditing && recipes.length > 0) {
+        setIsInitialized(false);
+    }, [id]);
+
+    useEffect(() => {
+        if (isEditing && recipes.length > 0 && !isInitialized) {
             const found = recipes.find(r => r.id === id);
             if (found) {
                 setInitialData(found);
 
-                const safeMalts = Array.isArray(found.ingredients?.malts) ? [...found.ingredients.malts] : [{ name: '', amount: 0 }];
-                const safeHops = Array.isArray(found.ingredients?.hops) ? [...found.ingredients.hops] : [{ name: '', amount: 0, time: '', use: 'Hervor', phase: 'cooking' }];
-                const safeOthers = Array.isArray(found.ingredients?.others) ? [...found.ingredients.others] : [];
-
-                let safeYeast = '';
-                if (found.ingredients?.yeast) {
-                    if (typeof found.ingredients.yeast === 'string') safeYeast = found.ingredients.yeast;
-                    else safeYeast = found.ingredients.yeast.name || '';
-                }
-
                 setFormData({
                     id: found.id,
                     name: found.name || '',
-                    category: found.category || 'Hazy IPA',
+                    category: found.category || 'Otros',
                     description: found.description || '',
-                    targetVolume: found.targetVolume || 20,
+                    abv: found.abv || 5.0,
                     og: found.og || 1.050,
                     fg: found.fg || 1.010,
-                    abv: found.abv || 5.0,
                     ibu: found.ibu || 0,
                     colorSRM: found.colorSRM || 0,
-                    malts: safeMalts,
-                    hops: safeHops,
-                    others: safeOthers,
-                    yeast: safeYeast,
+                    targetVolume: found.targetVolume || 20,
+                    malts: (found.ingredients?.malts || []).length > 0 ? found.ingredients.malts : [{ name: '', amount: '', unit: 'kg' }],
+                    hops: (found.ingredients?.hops || []).length > 0 ? found.ingredients.hops : [{ name: '', amount: '', unit: 'g', time: '60 min', phase: 'cooking' }],
+                    others: (found.ingredients?.others || []).length > 0 ? found.ingredients.others : [],
+                    yeast: found.ingredients?.yeast?.name || found.ingredients?.yeast || '',
                     strike: found.ingredients?.water?.strike || 15,
                     sparge: found.ingredients?.water?.sparge || 15,
                     waterProfile: found.waterProfile || { Ca: 100, Mg: 10, SO4: 100, Cl: 100, HCO3: 50 },
                     modifications: found.modifications || [],
-                    steps: Array.isArray(found.steps) ? [...found.steps] : [],
-                    tips: Array.isArray(found.tips) ? [...found.tips] : []
+                    steps: (found.steps || []).length > 0 ? found.steps : [{ title: '', desc: '', phase: 'cooking' }],
+                    tips: (found.tips || []).length > 0 ? found.tips : []
                 });
+                setIsInitialized(true);
             }
         }
-    }, [id, recipes, isEditing]);
+    }, [id, recipes, isEditing, isInitialized]);
 
     // Auto-calculo de ABV basado en la fórmula estándar: (OG - FG) * 131.25
     useEffect(() => {
@@ -248,7 +244,8 @@ export default function RecipeForm() {
     };
 
     const updateArray = (arrayName, idx, field, value) => {
-        const newArr = [...formData[arrayName]]; newArr[idx][field] = value;
+        const newArr = [...formData[arrayName]];
+        newArr[idx] = { ...newArr[idx], [field]: value };
         setFormData({ ...formData, [arrayName]: newArr });
     };
 

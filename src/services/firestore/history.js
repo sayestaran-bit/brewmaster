@@ -31,7 +31,7 @@ export function onHistorySnapshot(uid, onData, onError, pageSize = 50) {
     const q = query(historyRef(uid), orderBy('timestamp', 'desc'), limit(pageSize));
     return onSnapshot(
         q,
-        (snap) => onData(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+        (snap) => onData(snap.docs.map(d => ({ ...d.data(), id: d.id }))),
         onError
     );
 }
@@ -80,5 +80,13 @@ export async function updateTasting(uid, historyId, tasting) {
  * Elimina una entrada del historial.
  */
 export async function deleteHistoryEntry(uid, historyId) {
-    await deleteDoc(historyDocRef(uid, historyId));
+    console.log('deleteHistoryEntry called for uid:', uid, 'historyId:', historyId);
+    if (!uid || !historyId) {
+        console.error('Missing uid or historyId');
+        return;
+    }
+    const docRef = historyDocRef(uid, historyId);
+    console.log('Target Path:', docRef.path);
+    await deleteDoc(docRef);
+    console.log('deleteDoc completed');
 }

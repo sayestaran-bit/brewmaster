@@ -29,7 +29,7 @@ export function onInventorySnapshot(uid, onData, onError) {
     const q = query(inventoryRef(uid), orderBy('category'), orderBy('name'));
     return onSnapshot(
         q,
-        (snap) => onData(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+        (snap) => onData(snap.docs.map(d => ({ ...d.data(), id: d.id }))),
         onError
     );
 }

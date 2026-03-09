@@ -54,7 +54,7 @@ export function useDashboardStats(history, searchTerm = '', statusFilter = 'all'
 
         const avgCostPerLiter = totalVolume > 0 ? totalCost / totalVolume : 0;
         const avgABV = totalBatches > 0
-            ? (filteredHistory.reduce((sum, h) => sum + (Number(h.abv) || 0), 0) / totalBatches).toFixed(1)
+            ? Number((filteredHistory.reduce((sum, h) => sum + (Number(h.abv) || 0), 0) / totalBatches).toFixed(1))
             : 0;
 
         const batchesWithFerm = filteredHistory.filter(h => h.metrics && h.metrics.daysInFermentation != null);

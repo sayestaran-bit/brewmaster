@@ -5,12 +5,77 @@ import { Hourglass, ArrowLeft, Beaker, CalendarClock, CalendarPlus, Activity, Tr
 import { useActiveBatches } from '../../hooks/useActiveBatches';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
-import { standardizeDate, getFormattedDate } from '../../utils/formatters';
+import { standardizeDate, getFormattedDate, formatTime } from '../../utils/formatters';
 import { getThemeForCategory } from '../../utils/helpers';
+
+function LiveTimer({ batch }) {
+    const [timeLeft, setTimeLeft] = React.useState(0);
+
+    React.useEffect(() => {
+        const calculateTime = () => {
+            if (!batch.timer?.isRunning || !batch.timer?.targetEndTime) {
+                return batch.timeLeft || 0;
+            }
+            const now = Date.now();
+            return Math.max(0, Math.floor((batch.timer.targetEndTime - now) / 1000));
+        };
+
+        setTimeLeft(calculateTime());
+
+        if (batch.timer?.isRunning) {
+            const interval = setInterval(() => {
+                const remaining = calculateTime();
+                setTimeLeft(remaining);
+                if (remaining <= 0) clearInterval(interval);
+            }, 1000);
+            return () => clearInterval(interval);
+        }
+    }, [batch.timer, batch.timeLeft]);
+
+    return (
+        <p className="text-xl font-black text-amber-500 leading-none tabular-nums">
+            {timeLeft > 86400 ? `${Math.floor(timeLeft / 86400)}d ${formatTime(timeLeft % 86400)}` : formatTime(timeLeft)}
+        </p>
+    );
+}
+
+function ElapsedTimer({ startTime, label, colorClass = "text-muted" }) {
+    const [elapsed, setElapsed] = React.useState(0);
+
+    React.useEffect(() => {
+        const calculate = () => {
+            if (!startTime) return 0;
+            const start = typeof startTime.toMillis === 'function' ? startTime.toMillis() : startTime;
+            return Math.floor((Date.now() - start) / 1000);
+        };
+
+        setElapsed(calculate());
+        const interval = setInterval(() => setElapsed(calculate()), 1000);
+        return () => clearInterval(interval);
+    }, [startTime]);
+
+    const formatElapsed = (s) => {
+        const days = Math.floor(s / 86400);
+        const hours = Math.floor((s % 86400) / 3600);
+        const minutes = Math.floor((s % 3600) / 60);
+        const seconds = s % 60;
+
+        if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+        if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+        return `${minutes}m ${seconds}s`;
+    };
+
+    return (
+        <div className="flex flex-col">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted/60">{label}</span>
+            <span className={`text-sm font-bold tabular-nums ${colorClass}`}>{formatElapsed(elapsed)}</span>
+        </div>
+    );
+}
 
 export default function ActiveBatchesView() {
     const navigate = useNavigate();
-    const { batches: activeBatches, completeBatch, discardBatch, transitionBatchPhase } = useActiveBatches();
+    const { batches: activeBatches, completeBatch, discardBatch, transitionBatchPhase, updateBatchField, updateProgress } = useActiveBatches();
     const { recipes } = useRecipes();
     const { deductBatch } = useInventory();
 
@@ -22,8 +87,9 @@ export default function ActiveBatchesView() {
         return `${base}&text=${encodeURIComponent(title)}&dates=${format(date)}/${format(end)}&details=${encodeURIComponent(details)}`;
     };
 
-    // Separar por fases (Lotes antiguos sin 'phase' asumen 'fermenting')
-    const fermentingBatches = activeBatches.filter(b => !b.phase || b.phase === 'fermenting');
+    // Separar por fases
+    const cookingBatches = activeBatches.filter(b => b.phase === 'cooking');
+    const fermentingBatches = activeBatches.filter(b => b.phase === 'fermenting' || (!b.phase && b.status === 'Fermentando'));
     const bottlingBatches = activeBatches.filter(b => b.phase === 'bottling');
 
     const handleStartBottling = async (batch) => {
@@ -36,7 +102,17 @@ export default function ActiveBatchesView() {
         if (window.confirm(`¿Seguro que deseas empezar a embotellar ${batch.recipeName}? Esto descontará insumos finales (chapas, clarificantes, etc).`)) {
             try {
                 await deductBatch(recipe, batch.volume, ['bottling']);
-                await transitionBatchPhase(batch.id, 'bottling');
+                await updateBatchField(batch.id, {
+                    phase: 'bottling',
+                    currentStep: 0,
+                    timeLeft: 0,
+                    'timer.isRunning': false,
+                    'timer.targetEndTime': null,
+                    'timer.pausedAt': null,
+                    'phaseTimestamps.bottlingStart': Date.now()
+                });
+                // transitionBatchPhase is redundant now but kept for consistency if needed, 
+                // but direct updateBatchField is more precise here.
             } catch (error) {
                 alert("Hubo un error descontando insumos: " + error.message);
             }
@@ -72,69 +148,139 @@ export default function ActiveBatchesView() {
         }
     };
 
-    const renderBatchCard = (batch, isBottling) => {
+    const renderBatchCard = (batch, phaseType) => {
         const getMillis = (val) => val && typeof val.toMillis === 'function' ? val.toMillis() : (val || Date.now());
-        const startDateTimestamp = isBottling && batch.phaseTimestamps?.bottlingStart
-            ? getMillis(batch.phaseTimestamps.bottlingStart)
-            : batch.timestamp;
+
+        let startDateTimestamp = batch.timestamp;
+        if (phaseType === 'bottling' && batch.phaseTimestamps?.bottlingStart) {
+            startDateTimestamp = getMillis(batch.phaseTimestamps.bottlingStart);
+        } else if (phaseType === 'fermenting' && batch.phaseTimestamps?.fermentationStart) {
+            startDateTimestamp = getMillis(batch.phaseTimestamps.fermentationStart);
+        }
 
         const daysElapsed = Math.floor((Date.now() - startDateTimestamp) / (1000 * 60 * 60 * 24));
         const theme = getThemeForCategory(batch.category);
 
         return (
-            <div key={batch.id} className={`bg-panel p-6 md:p-8 rounded-3xl shadow-sm border-l-8 ${isBottling ? 'border-blue-500' : 'border-emerald-500'} border-y border-r border-line relative overflow-hidden group`}>
-                <div className={`absolute -right-10 -top-10 opacity-5 dark:opacity-10 pointer-events-none ${isBottling ? 'text-blue-500' : 'text-emerald-500'}`}>
-                    {isBottling ? <Package size={150} /> : <Hourglass size={150} />}
+            <div key={batch.id} className={`bg-panel p-6 md:p-8 rounded-3xl shadow-sm border-l-8 ${phaseType === 'bottling' ? 'border-blue-500' : phaseType === 'fermenting' ? 'border-emerald-500' : 'border-amber-500'} border-y border-r border-line relative overflow-hidden group`}>
+                <div className={`absolute -right-10 -top-10 opacity-5 dark:opacity-10 pointer-events-none ${phaseType === 'bottling' ? 'text-blue-500' : phaseType === 'fermenting' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                    {phaseType === 'bottling' ? <Package size={150} /> : phaseType === 'fermenting' ? <Hourglass size={150} /> : <Beaker size={150} />}
                 </div>
 
                 <div className="flex flex-col lg:flex-row justify-between gap-8 relative z-10">
                     <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                             <span className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${theme.badge}`}>{batch.category}</span>
-                            <span className={`${isBottling ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'} px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest flex items-center gap-1 animate-pulse`}>
-                                <Activity size={12} /> {isBottling ? 'Acondicionando' : 'Fermentando'}
+                            <span className={`${phaseType === 'bottling' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' : phaseType === 'fermenting' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'} px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest flex items-center gap-1 animate-pulse`}>
+                                <Activity size={12} /> {phaseType === 'bottling' ? 'Envasando' : phaseType === 'fermenting' ? 'Fermentando' : 'Cocinando'}
                             </span>
                         </div>
-                        <h3 className="text-3xl font-black text-content mb-2">{batch.recipeName}</h3>
-                        <p className="text-muted font-bold flex items-center gap-2 mb-6">
-                            <CalendarClock size={16} />
-                            {isBottling ? 'Embotellado el:' : 'Cocinada el:'} {standardizeDate(batch.dateBrewed || batch.date)}
-                            <span className="opacity-50">•</span>
-                            <span className={isBottling ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400"}>Día {daysElapsed} en fase</span>
-                        </p>
+                        <div className="flex flex-1 min-w-0 items-baseline gap-2">
+                            <h3 className="text-3xl font-black text-content truncate transition-colors" title={batch.customName || batch.recipeName}>
+                                {batch.customName || batch.recipeName}
+                            </h3>
+                            {batch.customName && (
+                                <span className="text-sm font-bold text-muted truncate">({batch.recipeName})</span>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap gap-6 mb-6">
+                            <p className="text-muted font-bold flex items-center gap-2">
+                                <CalendarClock size={16} />
+                                {phaseType === 'bottling' ? 'Envasado el:' : 'Iniciado el:'} {standardizeDate(batch.dateBrewed || batch.date)}
+                            </p>
+                            <div className="flex gap-4 border-l border-line pl-4">
+                                <ElapsedTimer
+                                    startTime={batch.timestamp}
+                                    label="Tiempo Total Lote"
+                                    colorClass="text-content"
+                                />
+                                <ElapsedTimer
+                                    startTime={startDateTimestamp}
+                                    label={`En ${phaseType === 'bottling' ? 'Envasado' : phaseType === 'fermenting' ? 'Fermentación' : 'Cocción'}`}
+                                    colorClass={phaseType === 'bottling' ? 'text-blue-500' : phaseType === 'fermenting' ? 'text-emerald-500' : 'text-amber-500'}
+                                />
+                            </div>
+                        </div>
 
-                        {!isBottling && (
+                        {(batch.timeLeft !== undefined || batch.timer) && (
+                            <div className={`p-4 rounded-2xl mb-6 flex items-center justify-between border ${phaseType === 'bottling' ? 'bg-blue-500/10 border-blue-500/20' :
+                                phaseType === 'fermenting' ? 'bg-emerald-500/10 border-emerald-500/20' :
+                                    'bg-amber-500/10 border-amber-500/20'
+                                }`}>
+                                <div>
+                                    <h4 className={`text-[10px] font-black uppercase tracking-widest mb-1 ${phaseType === 'bottling' ? 'text-blue-600 dark:text-blue-400' :
+                                        phaseType === 'fermenting' ? 'text-emerald-600 dark:text-emerald-400' :
+                                            'text-amber-600 dark:text-amber-400'
+                                        }`}>
+                                        {batch.timer?.isRunning ? 'Cronómetro en Marcha' : 'Temporizador Pausado'}
+                                    </h4>
+                                    <p className="text-sm font-bold text-content leading-none">
+                                        Paso {(batch.currentStep || 0) + 1}: {recipes.find(r => r.id === batch.recipeId)?.steps?.filter(s => s.phase === (batch.phase || 'cooking'))?.[batch.currentStep || 0]?.title || (batch.phase === 'bottling' ? 'Envasado' : batch.phase === 'fermenting' ? 'Fermentación' : 'Proceso')}
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <h4 className={`text-[10px] font-black uppercase tracking-widest mb-1 ${phaseType === 'bottling' ? 'text-blue-600 dark:text-blue-400' :
+                                        phaseType === 'fermenting' ? 'text-emerald-600 dark:text-emerald-400' :
+                                            'text-amber-600 dark:text-amber-400'
+                                        }`}>Tiempo Restante</h4>
+                                    <LiveTimer batch={batch} />
+                                </div>
+                            </div>
+                        )}
+
+                        {phaseType === 'fermenting' && (
                             <div className="bg-black/5 dark:bg-white/5 p-4 rounded-2xl border border-line mb-6">
-                                <h4 className="text-xs font-black text-muted uppercase tracking-widest mb-3 flex items-center gap-2"><CalendarPlus size={16} /> Calendario de Fermentación</h4>
+                                <h4 className="text-xs font-black text-muted uppercase tracking-widest mb-3 flex items-center gap-2"><CalendarPlus size={16} /> Calendario Sugerido (Recipe Based)</h4>
                                 <div className="flex flex-wrap gap-2">
-                                    <a href={generateGoogleCalendarLink(`Dry Hop - ${batch.recipeName}`, 3, batch.timestamp, `Revisar actividad de fermentación y agregar lúpulo para ${batch.recipeName}.`)} target="_blank" rel="noreferrer" className="bg-surface border border-line hover:border-blue-400 hover:text-blue-600 text-content px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
-                                        Dry Hop (Día 3)
-                                    </a>
-                                    <a href={generateGoogleCalendarLink(`Medir DF - ${batch.recipeName}`, 7, batch.timestamp, `Medir gravedad específica de ${batch.recipeName}. Si está estable, preparar Cold Crash.`)} target="_blank" rel="noreferrer" className="bg-surface border border-line hover:border-amber-400 hover:text-amber-600 text-content px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
-                                        Medir DF (Día 7)
-                                    </a>
-                                    <a href={generateGoogleCalendarLink(`Embotellar - ${batch.recipeName}`, 14, batch.timestamp, `Lavar botellas, preparar almíbar (priming) y embotellar ${batch.recipeName}.`)} target="_blank" rel="noreferrer" className="bg-surface border border-line hover:border-emerald-400 hover:text-emerald-600 text-content px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
-                                        Alerta Embotellar (Día 14)
-                                    </a>
+                                    {(() => {
+                                        const recipe = recipes.find(r => r.id === batch.recipeId);
+                                        const fermStep = recipe?.steps?.find(s => s.phase === 'fermenting');
+                                        const fermDays = parseFloat(fermStep?.duration) || 14;
+
+                                        // Intentar buscar alertas de Dry Hop en el texto si no hay un paso de DH
+                                        const dhMatch = fermStep?.details?.match(/dry\s*hop(?:\s*al)?\s*d[ií]a\s*(\d+)/i);
+                                        const dhDay = dhMatch ? parseInt(dhMatch[1]) : 3;
+
+                                        return (
+                                            <>
+                                                <a href={generateGoogleCalendarLink(`Dry Hop - ${batch.recipeName}`, dhDay, batch.timestamp, `Revisar actividad de fermentación y agregar lúpulo para ${batch.recipeName}.`)} target="_blank" rel="noreferrer" className="bg-surface border border-line hover:border-blue-400 hover:text-blue-600 text-content px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                                                    Dry Hop (Día {dhDay})
+                                                </a>
+                                                <a href={generateGoogleCalendarLink(`Medir DF - ${batch.recipeName}`, Math.floor(fermDays * 0.7), batch.timestamp, `Medir gravedad específica de ${batch.recipeName}. Si está estable, preparar Cold Crash.`)} target="_blank" rel="noreferrer" className="bg-surface border border-line hover:border-amber-400 hover:text-amber-600 text-content px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                                                    Medir DF (Día {Math.floor(fermDays * 0.7)})
+                                                </a>
+                                                <a href={generateGoogleCalendarLink(`Embotellar - ${batch.recipeName}`, fermDays, batch.timestamp, `Lavar botellas, preparar almíbar (priming) y embotellar ${batch.recipeName}.`)} target="_blank" rel="noreferrer" className="bg-surface border border-line hover:border-emerald-400 hover:text-emerald-600 text-content px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                                                    Alerta Embotellar (Día {fermDays})
+                                                </a>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )}
                     </div>
 
                     <div className="flex flex-col justify-end gap-3 min-w-[200px]">
-                        {isBottling ? (
+                        {phaseType === 'cooking' ? (
                             <button
-                                onClick={() => navigate(`/brew/${batch.id}?phase=bottling`)}
-                                className="bg-blue-500 hover:bg-blue-600 text-white font-black py-4 rounded-xl shadow-md transition-all hover:-translate-y-1 w-full flex items-center justify-center gap-2"
+                                onClick={() => navigate(`/brew/${batch.id}?phase=cooking`)}
+                                className="bg-amber-500 hover:bg-amber-600 text-white font-black py-4 rounded-xl shadow-md transition-all hover:-translate-y-1 w-full flex items-center justify-center gap-2"
                             >
-                                <Package size={20} /> Diario de Envasado
+                                <Beaker size={20} /> Continuar Cocción
                             </button>
-                        ) : (
+                        ) : phaseType === 'fermenting' ? (
                             <button
                                 onClick={() => navigate(`/brew/${batch.id}?phase=fermenting`)}
                                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-xl shadow-md transition-all hover:-translate-y-1 w-full flex items-center justify-center gap-2"
                             >
                                 <Activity size={20} /> Diario de Fermentación
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => navigate(`/brew/${batch.id}?phase=bottling`)}
+                                className="bg-blue-500 hover:bg-blue-600 text-white font-black py-4 rounded-xl shadow-md transition-all hover:-translate-y-1 w-full flex items-center justify-center gap-2"
+                            >
+                                <Package size={20} /> Diario de Envasado
                             </button>
                         )}
                         <button
@@ -180,6 +326,18 @@ export default function ActiveBatchesView() {
                 </div>
             ) : (
                 <>
+                    {/* SECCIÓN COCINANDO */}
+                    {cookingBatches.length > 0 && (
+                        <div className="space-y-6">
+                            <h3 className="text-xl font-black text-content flex items-center gap-2 border-l-4 border-amber-500 pl-3">
+                                <Beaker className="text-amber-500" size={24} /> En Cocción
+                            </h3>
+                            <div className="grid gap-6">
+                                {cookingBatches.map(b => renderBatchCard(b, 'cooking'))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* SECCIÓN FERMENTANDO */}
                     {fermentingBatches.length > 0 && (
                         <div className="space-y-6">
@@ -187,7 +345,7 @@ export default function ActiveBatchesView() {
                                 <Activity className="text-emerald-500" size={24} /> En Fermentación
                             </h3>
                             <div className="grid gap-6">
-                                {fermentingBatches.map(b => renderBatchCard(b, false))}
+                                {fermentingBatches.map(b => renderBatchCard(b, 'fermenting'))}
                             </div>
                         </div>
                     )}
@@ -199,7 +357,7 @@ export default function ActiveBatchesView() {
                                 <Package className="text-blue-500" size={24} /> En Acondicionamiento / Embotellado
                             </h3>
                             <div className="grid gap-6">
-                                {bottlingBatches.map(b => renderBatchCard(b, true))}
+                                {bottlingBatches.map(b => renderBatchCard(b, 'bottling'))}
                             </div>
                         </div>
                     )}

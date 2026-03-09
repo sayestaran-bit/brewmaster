@@ -58,7 +58,8 @@ export function useInventory() {
      */
     const deductBatch = useCallback(async (recipe, targetVolume, phases) => {
         return await _deductBatch(currentUser.uid, recipe, targetVolume, inventory, phases);
-    }, [currentUser, inventory]);
+    }, [currentUser.uid]); // inventory removed from dependencies as per audit
+
 
     return { inventory, loading, error, lowStockItems, addItem, updateItem, deleteItem, deductBatch };
 }

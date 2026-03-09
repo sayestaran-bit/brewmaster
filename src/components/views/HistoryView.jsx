@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { History, ArrowLeft, CalendarClock, Trash2, Beer, Droplets, Star, Search, Filter } from 'lucide-react';
 import { useHistory } from '../../hooks/useHistory';
 import { formatCurrency, standardizeDate } from '../../utils/formatters';
-import { Activity } from 'lucide-react'; // ensure imported
+import { Activity, Download } from 'lucide-react'; // ensure imported
+import * as XLSX from 'xlsx';
 
 export default function HistoryView() {
     const navigate = useNavigate();
@@ -12,16 +13,114 @@ export default function HistoryView() {
 
     const [tastingFormId, setTastingFormId] = useState(null);
     const [tastingData, setTastingData] = useState({ rating: 0, notes: '' });
+    const [expandedBatchId, setExpandedBatchId] = useState(null);
 
     const deleteHistoryItem = async (id) => {
         if (window.confirm("¿Seguro que deseas eliminar el historial de este lote? Esta acción no devolverá insumos al inventario.")) {
-            await deleteEntry(id);
+            try {
+                console.log("HistoryView: Deleting entry", id);
+                await deleteEntry(id);
+                alert("¡Entrada eliminada exitosamente!");
+            } catch (err) {
+                console.error("Error deleting history item:", err);
+                alert("No se pudo eliminar el registro del historial: " + err.message);
+            }
         }
     };
 
     const saveTasting = async () => {
-        await updateTasting(tastingFormId, tastingData);
-        setTastingFormId(null);
+        try {
+            if (!tastingFormId) return;
+            console.log("HistoryView: Saving tasting for ID", tastingFormId, tastingData);
+            await updateTasting(tastingFormId, tastingData);
+            setTastingFormId(null);
+            alert("¡Evaluación guardada exitosamente!");
+        } catch (err) {
+            console.error("Error saving tasting:", err);
+            alert("Error al guardar la evaluación: " + err.message);
+        }
+    };
+
+    const exportToExcel = (batch) => {
+        try {
+            const data = [];
+
+            // 1. Información General
+            data.push(["REPORTE DE LOTE - BREWMASTER"]);
+            data.push(["Generado el", new Date().toLocaleString()]);
+            data.push([]);
+            data.push(["Información General"]);
+            data.push(["Lote / Identidad", batch.customName || "Sin nombre"]);
+            data.push(["Receta", batch.recipeName]);
+            data.push(["Categoría", batch.category]);
+            data.push(["Volumen", `${batch.volume} L`]);
+            data.push(["Fecha Cocción", standardizeDate(batch.dateBrewed || batch.date)]);
+            data.push(["Fecha Envasado", batch.dateBottled ? standardizeDate(batch.dateBottled) : "N/A"]);
+            data.push(["Costo Total", formatCurrency(batch.totalCost)]);
+            data.push(["Costo x Litro", formatCurrency((Number(batch.totalCost) || 0) / (Number(batch.volume) || 1))]);
+            data.push([]);
+
+            // 2. Parámetros Finales
+            data.push(["Parámetros Finales"]);
+            data.push(["DO", batch.og || "-"]);
+            data.push(["DF", batch.fg || "-"]);
+            data.push(["ABV", `${batch.abv || "-"}%`]);
+            data.push([]);
+
+            // 3. Notas
+            data.push(["Notas de Producción"]);
+            data.push([batch.productionNotes || "Sin notas recorded"]);
+            data.push([]);
+            data.push(["Evaluación de Cata"]);
+            data.push(["Puntaje", batch.tasting?.rating ? `${batch.tasting.rating}/5` : "Pendiente"]);
+            data.push(["Comentarios", batch.tasting?.notes || "-"]);
+            data.push([]);
+
+            // 4. Analítica de Tiempos
+            data.push(["ANÁLISIS DE TIEMPOS POR FASE"]);
+            data.push(["Fase", "Paso", "Meta (min/días)", "Real (min/días)", "Desviación %"]);
+
+            ['cooking', 'fermenting', 'bottling'].forEach(phase => {
+                let rawMetrics = batch[`${phase}_metrics`];
+
+                if (phase === 'cooking' && (!rawMetrics || rawMetrics.length === 0)) {
+                    rawMetrics = batch.stepsMetrics || [];
+                } else if (!rawMetrics) {
+                    rawMetrics = [];
+                }
+
+                const metrics = Array.isArray(rawMetrics) ? rawMetrics : Object.values(rawMetrics);
+
+                metrics.sort((a, b) => (a.stepIdx || 0) - (b.stepIdx || 0)).forEach(m => {
+                    const isCooking = phase === 'cooking';
+                    const unit = isCooking ? "min" : "días";
+                    const planned = isCooking ? Math.floor(m.planned / 60) : (m.planned / 86400).toFixed(1);
+                    const actual = m.actual ? (isCooking ? Math.floor(m.actual / 60) : (m.actual / 86400).toFixed(1)) : "N/A";
+                    const deviation = m.actual ? `${Math.round((m.actual / (m.planned || 1)) * 100)}%` : "-";
+
+                    data.push([
+                        phase.toUpperCase(),
+                        m.title,
+                        `${planned} ${unit}`,
+                        `${actual} ${unit}`,
+                        deviation
+                    ]);
+                });
+            });
+
+            // Crear libro y hoja
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Reporte_Lote");
+
+            // Descargar
+            const filename = `Reporte_${batch.customName || batch.recipeName}_${batch.date}.xlsx`.replace(/\s+/g, '_');
+            XLSX.writeFile(wb, filename);
+
+        } catch (err) {
+            console.error("Error exporting to Excel:", err);
+            alert("Error al generar el reporte Excel.");
+        }
     };
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -31,10 +130,12 @@ export default function HistoryView() {
         if (statusFilter === 'completed' && h.status !== 'Completada') return false;
         if (statusFilter === 'abandoned' && h.status !== 'Abandonada') return false;
         if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            const nameMatch = (h.recipeName || '').toLowerCase().includes(term);
-            const styleMatch = (h.category || '').toLowerCase().includes(term);
-            if (!nameMatch && !styleMatch) return false;
+            const searchInput = searchTerm.toLowerCase();
+            const matchesSearch =
+                h.recipeName?.toLowerCase().includes(searchInput) ||
+                h.customName?.toLowerCase().includes(searchInput) ||
+                h.category?.toLowerCase().includes(searchInput);
+            if (!matchesSearch) return false;
         }
         return true;
     });
@@ -110,10 +211,14 @@ export default function HistoryView() {
                                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl text-blue-600 dark:text-blue-400 hidden sm:block mt-1 border border-blue-100 dark:border-blue-800">
                                         <Beer size={32} />
                                     </div>
-                                    <div className="w-full pr-8 md:pr-0">
-                                        <h3 className="text-2xl font-black text-content mb-3">{h.recipeName || 'Lote Sin Nombre'}</h3>
-
-                                        <div className="flex flex-wrap gap-2 mb-4">
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="text-xl font-black text-content truncate group-hover:text-amber-500 transition-colors" title={h.customName || h.recipeName}>
+                                            {h.customName || h.recipeName || 'Lote Sin Nombre'}
+                                        </h3>
+                                        {h.customName && (
+                                            <p className="text-[10px] uppercase font-black tracking-widest text-muted mt-0.5">{h.recipeName}</p>
+                                        )}
+                                        <div className="flex flex-wrap gap-2 mb-4 mt-3">
                                             <span className="bg-gray-100 dark:bg-slate-800 border border-line px-3 py-1.5 rounded-lg text-sm text-slate-600 dark:text-slate-300 font-bold flex items-center gap-1.5"><CalendarClock size={16} /> 🔥 Cocción: {standardizeDate(h.dateBrewed || h.date)}</span>
                                             {h.dateBottled && (
                                                 <span className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-sm text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1.5">🍾 Embotellado: {standardizeDate(h.dateBottled)}</span>
@@ -152,10 +257,27 @@ export default function HistoryView() {
                                                     ))}
                                                 </div>
                                             </div>
-                                            <p className="text-content text-sm font-medium italic leading-relaxed">"{h.tasting.notes || ''}"</p>
+                                            <p className="text-content text-sm font-medium italic leading-relaxed mb-4">"{h.tasting.notes || ''}"</p>
+
+                                            {h.productionNotes && (
+                                                <div className="mt-4 pt-4 border-t border-line">
+                                                    <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest block mb-2">Notas de Producción</span>
+                                                    <p className="text-slate-600 dark:text-slate-400 text-xs font-medium whitespace-pre-line bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                                                        {h.productionNotes}
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="text-center py-5">
+                                            {h.productionNotes && (
+                                                <div className="mb-4 text-left">
+                                                    <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest block mb-1">Notas de Producción</span>
+                                                    <p className="text-slate-600 dark:text-slate-400 text-xs font-medium whitespace-pre-line bg-amber-500/5 p-3 rounded-xl border border-amber-500/10">
+                                                        {h.productionNotes}
+                                                    </p>
+                                                </div>
+                                            )}
                                             <p className="text-slate-400 font-bold mb-4">Aún no evaluada</p>
                                             {!tastingFormId && (
                                                 <button
@@ -169,6 +291,77 @@ export default function HistoryView() {
                                     )}
                                 </div>
                             </div>
+
+                            {/* ANALÍTICA DETALLADA DE PASOS */}
+                            <div className="mt-6 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-line">
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => setExpandedBatchId(expandedBatchId === h.id ? null : h.id)}
+                                        className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 hover:text-blue-500 flex items-center gap-2"
+                                    >
+                                        {expandedBatchId === h.id ? 'Ocultar Detalles' : 'Ver Detalles de Proceso'}
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={() => exportToExcel(h)}
+                                    className="text-[10px] font-black uppercase tracking-widest bg-blue-600 dark:bg-blue-900/40 text-white dark:text-blue-300 hover:bg-blue-500 dark:hover:bg-blue-800 px-4 py-2 rounded-xl transition-all flex items-center gap-2 shadow-sm"
+                                >
+                                    <Download size={14} /> Descargar Reporte Excel
+                                </button>
+                            </div>
+
+                            {expandedBatchId === h.id && (
+                                <div className="mt-4 grid md:grid-cols-3 gap-6 p-6 bg-surface rounded-2xl border border-line animate-slideIn">
+                                    {['cooking', 'fermenting', 'bottling'].map(phase => {
+                                        let rawMetrics = h[`${phase}_metrics`];
+
+                                        // Fallback para lotes antiguos que usaban 'stepsMetrics' para cocción
+                                        if (phase === 'cooking' && (!rawMetrics || rawMetrics.length === 0)) {
+                                            rawMetrics = h.stepsMetrics || [];
+                                        } else if (!rawMetrics) {
+                                            rawMetrics = [];
+                                        }
+
+                                        const metrics = (Array.isArray(rawMetrics) ? rawMetrics : Object.values(rawMetrics))
+                                            .sort((a, b) => (a.stepIdx || 0) - (b.stepIdx || 0));
+
+                                        if (metrics.length === 0) return null;
+
+                                        return (
+                                            <div key={phase} className="space-y-4">
+                                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted flex items-center gap-2">
+                                                    <div className={`w-2 h-2 rounded-full ${phase === 'cooking' ? 'bg-amber-500' : phase === 'fermenting' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                                                    {phase === 'cooking' ? 'Cocción' : phase === 'fermenting' ? 'Fermentación' : 'Embotellado'}
+                                                </h4>
+                                                <div className="space-y-2">
+                                                    {metrics.map((m, idx) => (
+                                                        <div key={idx} className="bg-panel p-3 rounded-xl border border-line text-xs">
+                                                            <div className="flex justify-between items-center mb-1">
+                                                                <span className="font-black text-content truncate max-w-[120px]">{m.title}</span>
+                                                                <span className="text-[10px] text-muted font-mono">
+                                                                    {m.actual ? (m.actual >= 3600 ? `${(m.actual / 3600).toFixed(1)}h` : `${Math.floor(m.actual / 60)}m`) : 'N/A'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="w-full bg-line h-1 rounded-full overflow-hidden flex">
+                                                                <div
+                                                                    className={`h-full ${m.actual > m.planned * 1.1 ? 'bg-red-500' : 'bg-blue-500'}`}
+                                                                    style={{ width: `${Math.min(100, (m.actual / (m.planned || 1)) * 100)}%` }}
+                                                                />
+                                                            </div>
+                                                            <div className="flex justify-between mt-1 text-[9px] font-bold text-muted uppercase">
+                                                                <span>Meta: {m.planned >= 3600 ? `${(m.planned / 3600).toFixed(1)}h` : `${Math.floor(m.planned / 60)}m`}</span>
+                                                                <span className={m.actual > m.planned * 1.1 ? 'text-red-500' : 'text-emerald-500'}>
+                                                                    {m.actual ? `${Math.round((m.actual / (m.planned || 1)) * 100)}%` : '-'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
 
                             {tastingFormId === h.id && (
                                 <div className="mt-8 pt-6 border-t border-dashed border-line animate-fadeIn">

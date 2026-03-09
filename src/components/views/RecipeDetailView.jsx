@@ -1,14 +1,15 @@
 // /src/components/views/RecipeDetailView.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, getFormattedDate } from '../../utils/formatters';
 import { calculateRecipeCost } from '../../utils/costCalculator';
 import { getRecipeAdvice } from '../../services/gemini';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
 import { useAuth } from '../../context/AuthContext';
+import { useActiveBatches } from '../../hooks/useActiveBatches';
 
 export default function RecipeDetailView() {
     const { id } = useParams();
@@ -26,6 +27,49 @@ export default function RecipeDetailView() {
     const [expandedStep, setExpandedStep] = useState(null);
     const [aiAdvice, setAiAdvice] = useState(null);
     const [isAdvising, setIsAdvising] = useState(false);
+    const [showBrewModal, setShowBrewModal] = useState(false);
+    const [batchIdentity, setBatchIdentity] = useState('');
+    const [isStartingBrew, setIsStartingBrew] = useState(false);
+
+    const { startBatch } = useActiveBatches();
+
+    const handleStartBrew = async () => {
+        if (!targetVol || targetVol <= 0 || !selectedRecipe) return;
+        setIsStartingBrew(true);
+
+        const newBatchItem = {
+            recipeId: selectedRecipe.id,
+            recipeName: selectedRecipe.name || 'Sin Nombre',
+            customName: batchIdentity.trim() || null,
+            dateBrewed: getFormattedDate(),
+            date: getFormattedDate(),
+            timestamp: Date.now(),
+            volume: targetVol || 0,
+            og: Number(selectedRecipe.og) || 1.050,
+            fg: Number(selectedRecipe.fg) || 1.010,
+            abv: Number(selectedRecipe.abv) || 5.0,
+            category: selectedRecipe.category || 'Otros',
+            totalCost: 0,
+            status: 'Cocinando',
+            phase: 'cooking',
+            phaseTimestamps: {
+                cookingStart: Date.now(),
+                fermentationStart: null,
+                bottlingStart: null
+            },
+            deductedHops: false
+        };
+        try {
+            const batchId = await startBatch(newBatchItem);
+            setShowBrewModal(false);
+            navigate(`/brew/${batchId}?phase=cooking`);
+        } catch (error) {
+            console.error("Error starting batch:", error);
+            alert("Error al iniciar el lote: " + error.message);
+        } finally {
+            setIsStartingBrew(false);
+        }
+    };
 
     useEffect(() => {
         if (recipes.length > 0) {
@@ -188,10 +232,10 @@ export default function RecipeDetailView() {
                     </div>
 
                     <button
-                        onClick={() => navigate(`/brew/${id}?vol=${targetVol}`)}
+                        onClick={() => setShowBrewModal(true)}
                         className="bg-white text-slate-900 px-6 py-4 rounded-[1.5rem] font-black text-lg transition-all duration-300 shadow-2xl hover:scale-105 active:scale-95 flex items-center justify-center gap-3 w-full border-4 border-white/10 hover:border-white/30"
                     >
-                        <Play size={20} className="text-amber-500 fill-amber-500" /> ¡COCI​NAR!
+                        <Play size={20} className="text-amber-500 fill-amber-500" /> ¡COCINAR!
                     </button>
                 </div>
             </div>
@@ -662,6 +706,57 @@ export default function RecipeDetailView() {
                 )}
 
             </div>
+
+            {/* MODAL DE COCINAR LOTE */}
+            {showBrewModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-panel w-full max-w-md rounded-3xl shadow-2xl border border-line overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="px-6 py-5 border-b border-line flex justify-between items-center bg-black/5 dark:bg-white/5">
+                            <h3 className="font-black text-content text-xl flex items-center gap-2">
+                                <Play size={24} className="text-amber-500 fill-amber-500" /> Nuevo Lote
+                            </h3>
+                            <button onClick={() => setShowBrewModal(false)} className="p-2 text-muted hover:text-content hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            <div>
+                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre de la Receta</label>
+                                <div className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold">{selectedRecipe.name}</div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Volumen a Cocinar (L)</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={targetVol}
+                                    onChange={(e) => setTargetVol(Number(e.target.value))}
+                                    className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors text-center font-bold text-lg"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Lote / ID (Opcional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Lote #42 / IPA Especial"
+                                    value={batchIdentity}
+                                    onChange={(e) => setBatchIdentity(e.target.value)}
+                                    className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors font-medium"
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleStartBrew}
+                                disabled={targetVol <= 0 || isStartingBrew}
+                                className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-xl shadow-lg transition-transform hover:-translate-y-1 flex items-center justify-center gap-2 mt-2"
+                            >
+                                {isStartingBrew ? <Loader2 className="animate-spin" size={20} /> : <Thermometer size={20} />}
+                                {isStartingBrew ? 'Preparando equipo...' : 'Iniciar Producción'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

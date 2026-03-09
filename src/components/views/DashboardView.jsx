@@ -3,11 +3,11 @@ import React from 'react';
 import {
     Plus, Droplets, Banknote, CalendarClock, Thermometer,
     BarChart3, PieChart, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown,
-    Beer, BookOpen, Activity, Search, Filter, Play, X, Package
+    Beer, BookOpen, Activity, Search, Filter, Play, X, Package, Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { formatCurrency, standardizeDate } from '../../utils/formatters';
+import { formatCurrency, standardizeDate, getFormattedDate } from '../../utils/formatters';
 import { getThemeForCategory } from '../../utils/helpers';
 import { useHistory } from '../../hooks/useHistory';
 import { useActiveBatches } from '../../hooks/useActiveBatches';
@@ -23,7 +23,7 @@ import Button from '../ui/Button';
 export default function DashboardView() {
     const navigate = useNavigate();
     const { history } = useHistory();
-    const { batches: activeBatches } = useActiveBatches();
+    const { batches: activeBatches, startBatch } = useActiveBatches();
     const { inventory } = useInventory();
     const { recipes } = useRecipes();
 
@@ -34,10 +34,44 @@ export default function DashboardView() {
     const [showBrewModal, setShowBrewModal] = useState(false);
     const [brewRecipeId, setBrewRecipeId] = useState('');
     const [brewVol, setBrewVol] = useState(20);
+    const [batchIdentity, setBatchIdentity] = useState('');
+    const [isStartingBrew, setIsStartingBrew] = useState(false);
 
-    const handleStartBrew = () => {
-        if (!brewRecipeId || !brewVol || isNaN(brewVol) || brewVol <= 0) return;
-        navigate(`/brew/${brewRecipeId}?vol=${brewVol}`);
+    const handleStartBrew = async () => {
+        if (!brewRecipeId || !brewVol || isNaN(brewVol) || brewVol <= 0 || isStartingBrew) return;
+        const recipe = recipes.find(r => r.id === brewRecipeId);
+        if (!recipe) return;
+
+        setIsStartingBrew(true);
+        const newBatchItem = {
+            recipeId: recipe.id,
+            recipeName: recipe.name || 'Sin Nombre',
+            dateBrewed: getFormattedDate(),
+            date: getFormattedDate(),
+            timestamp: Date.now(),
+            volume: brewVol || 0,
+            customName: batchIdentity.trim() || null,
+            og: Number(recipe.og) || 1.050,
+            fg: Number(recipe.fg) || 1.010,
+            abv: Number(recipe.abv) || 5.0,
+            category: recipe.category || 'Otros',
+            totalCost: 0,
+            status: 'Cocinando',
+            phase: 'cooking',
+            phaseTimestamps: {
+                cookingStart: Date.now(),
+                fermentationStart: null,
+                bottlingStart: null
+            },
+            deductedHops: false
+        };
+        try {
+            const batchId = await startBatch(newBatchItem);
+            navigate(`/brew/${batchId}?phase=cooking`);
+        } catch (error) {
+            alert("Error al iniciar el lote: " + error.message);
+            setIsStartingBrew(false);
+        }
     };
 
     const {
@@ -423,13 +457,24 @@ export default function DashboardView() {
                                     className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors text-center font-bold text-lg"
                                 />
                             </div>
+                            <div>
+                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Lote / ID (Opcional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Lote #42 / IPA Especial"
+                                    value={batchIdentity}
+                                    onChange={(e) => setBatchIdentity(e.target.value)}
+                                    className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors font-medium"
+                                />
+                            </div>
 
                             <button
                                 onClick={handleStartBrew}
-                                disabled={!brewRecipeId || brewVol <= 0}
+                                disabled={!brewRecipeId || brewVol <= 0 || isStartingBrew}
                                 className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-xl shadow-lg transition-transform hover:-translate-y-1 flex items-center justify-center gap-2 mt-2"
                             >
-                                <Thermometer size={20} /> Iniciar Producción
+                                {isStartingBrew ? <Loader2 className="animate-spin" size={20} /> : <Thermometer size={20} />}
+                                {isStartingBrew ? 'Preparando equipo...' : 'Iniciar Producción'}
                             </button>
                         </div>
                     </div>

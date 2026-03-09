@@ -12,6 +12,7 @@ export default function DataMigrator({ children }) {
     const [error, setError] = useState(null);
 
     useEffect(() => {
+        let isMounted = true;
         if (!currentUser || hasMigratedLocal) return;
 
         const checkAndMigrate = async () => {
@@ -20,11 +21,11 @@ export default function DataMigrator({ children }) {
                 const snap = await getDoc(mainDataRef);
 
                 if (!snap.exists() || snap.data().migrated) {
-                    setHasMigratedLocal(true);
+                    if (isMounted) setHasMigratedLocal(true);
                     return;
                 }
 
-                setIsMigrating(true);
+                if (isMounted) setIsMigrating(true);
                 const data = snap.data();
 
                 // Procesar migración
@@ -58,19 +59,22 @@ export default function DataMigrator({ children }) {
                     await batch.commit();
                 }
 
+                if (!isMounted) return;
+
                 // Marcar como migrado
                 await setDoc(mainDataRef, { migrated: true }, { merge: true });
                 console.log('Migración completada exitosamente.');
-                setHasMigratedLocal(true);
+                if (isMounted) setHasMigratedLocal(true);
             } catch (err) {
                 console.error('Error durante la migración:', err);
-                setError(err.message);
+                if (isMounted) setError(err.message);
             } finally {
-                setIsMigrating(false);
+                if (isMounted) setIsMigrating(false);
             }
         };
 
         checkAndMigrate();
+        return () => { isMounted = false; };
     }, [currentUser, hasMigratedLocal]);
 
     if (error) {
