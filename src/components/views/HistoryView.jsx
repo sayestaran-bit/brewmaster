@@ -1,5 +1,5 @@
 // /src/components/views/HistoryView.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { History, ArrowLeft, CalendarClock, Trash2, Beer, Droplets, Star, Search, Filter } from 'lucide-react';
 import { useHistory } from '../../hooks/useHistory';
