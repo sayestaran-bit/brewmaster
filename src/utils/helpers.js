@@ -64,6 +64,10 @@ export const initialRecipes = [
         { name: "Mosaic", amount: 60, unit: "g", time: "Día 7", stage: "Dry Hop 2", phase: "fermenting", stepId: 8 }
       ],
       yeast: { name: "Lallemand Verdant IPA", amount: 1, unit: "sobre" },
+      others: [
+        { name: "Cloruro de Calcio (CaCl2)", amount: 5, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
+        { name: "Sulfato de Calcio (CaSO4)", amount: 2, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" }
+      ],
       water: { strike: 22, sparge: 12 }
     },
     steps: [
@@ -254,7 +258,13 @@ export const initialInventory = [
   { id: 'inv-y1', category: 'Levadura', name: 'Lallemand Verdant IPA', stock: 8, unit: 'sobre', price: 6500 },
   { id: 'inv-y3', category: 'Levadura', name: 'S-04', stock: 4, unit: 'sobre', price: 4500 },
   { id: 'inv-y4', category: 'Levadura', name: 'W-34/70', stock: 4, unit: 'sobre', price: 5500 },
-  { id: 'inv-y5', category: 'Levadura', name: 'US-05', stock: 4, unit: 'sobre', price: 4500 }
+  { id: 'inv-y5', category: 'Levadura', name: 'US-05', stock: 4, unit: 'sobre', price: 4500 },
+
+  // SALES MINERALES
+  { id: 'inv-s1', category: 'Sales Minerales', name: 'Cloruro de Calcio (CaCl2)', stock: 500, unit: 'g', price: 10 },
+  { id: 'inv-s2', category: 'Sales Minerales', name: 'Sulfato de Calcio (CaSO4)', stock: 500, unit: 'g', price: 10 },
+  { id: 'inv-s3', category: 'Sales Minerales', name: 'Ácido Láctico', stock: 250, unit: 'ml', price: 20 },
+  { id: 'inv-s4', category: 'Sales Minerales', name: 'Nutriente de Levadura', stock: 100, unit: 'g', price: 50 }
 ];
 
 export const defaultPrices = { malta: 2000, lupulo: 60, levadura: 5000 };

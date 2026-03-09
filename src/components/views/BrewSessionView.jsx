@@ -725,6 +725,8 @@ export default function BrewSessionView() {
                                                     ? Math.round(ing.amount * scaleFactor)
                                                     : (ing.amount * scaleFactor).toFixed(2);
 
+                                                const isMineral = ing.category === 'Sales Minerales';
+
                                                 return (
                                                     <div
                                                         key={idx}
@@ -732,23 +734,23 @@ export default function BrewSessionView() {
                                                         className={`flex flex-col p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden ${isConsumed
                                                             ? 'bg-emerald-500/20 border-emerald-500/50 shadow-inner scale-[0.98]'
                                                             : ing.matchesCurrentStep
-                                                                ? 'bg-slate-700/50 border-emerald-500/30 hover:border-emerald-400 shadow-md translate-y-[-2px]'
+                                                                ? `${isMineral ? 'bg-blue-500/10 border-blue-500/50 hover:border-blue-400' : 'bg-slate-700/50 border-emerald-500/30 hover:border-emerald-400'} shadow-md translate-y-[-2px]`
                                                                 : 'bg-slate-700/20 border-slate-700 hover:border-slate-500 opacity-80 hover:opacity-100'
                                                             }`}
                                                     >
                                                         {ing.matchesCurrentStep && !isConsumed && (
-                                                            <div className="absolute top-0 right-0 bg-emerald-500 w-2 h-full"></div>
+                                                            <div className={`absolute top-0 right-0 ${isMineral ? 'bg-blue-500' : 'bg-emerald-500'} w-2 h-full`}></div>
                                                         )}
 
                                                         <div className="flex items-center justify-between mb-2">
                                                             <div className="flex items-center gap-3">
                                                                 <div className={`w-6 h-6 rounded border flex items-center justify-center transition-all ${isConsumed ? 'bg-emerald-500 border-emerald-500' : 'bg-slate-900 border-slate-600 group-hover:border-slate-400'
                                                                     }`}>
-                                                                    {isConsumed && <CheckCircle2 size={16} className="text-slate-900" />}
+                                                                    {isConsumed ? <CheckCircle2 size={16} className="text-slate-900" /> : isMineral ? <Sparkles size={12} className="text-blue-400" /> : null}
                                                                 </div>
-                                                                <p className={`text-sm font-bold ${isConsumed ? 'text-emerald-400 line-through opacity-70' : 'text-white'}`}>{ing.name}</p>
+                                                                <p className={`text-sm font-bold ${isConsumed ? 'text-emerald-400 line-through opacity-70' : isMineral ? 'text-blue-100' : 'text-white'}`}>{ing.name}</p>
                                                             </div>
-                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase ${isConsumed ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-500' : 'bg-slate-800 border-slate-700 text-slate-400'
+                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase ${isConsumed ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-500' : isMineral ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800 border-slate-700 text-slate-400'
                                                                 }`}>
                                                                 {ing.time || ing.stage || 'General'}
                                                             </span>
