@@ -54,8 +54,10 @@ export const getIngredientKey = (ing) => {
     // Normalize: some ingredients might have .time instead of .stage
     const stage = String(ing.stage || ing.time || '').toLowerCase().trim();
     const phase = getEffectivePhase(ing);
+    const stepId = ing.stepId || '';
 
     // Final key string that matches the sanitization logic in Firestore/Inventory
-    const rawKey = `${phase}_${category}_${name}_${stage}`;
+    // Including stepId ensures that the same ingredient used in different steps has a unique tracking key
+    const rawKey = `${phase}_${category}_${name}_${stage}_${stepId}`;
     return rawKey.replace(/[~*/\[\].#$]/g, '_');
 };

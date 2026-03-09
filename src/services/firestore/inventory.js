@@ -89,10 +89,10 @@ export async function deleteInventoryItem(uid, itemId) {
  */
 export async function deductBatchFromInventory(uid, recipe, targetVolume, currentInventory, phases = ['cooking', 'fermenting', 'bottling'], ignoredIngredients = {}) {
     const scaleFactor = (targetVolume || 1) / (recipe.targetVolume || 1);
-    const searchItem = (name, category, stageOrTime = '') => {
+    const searchItem = (name, category, stageOrTime = '', stepId = '') => {
         const searchName = (name || '').toLowerCase().trim();
         const normalizedStage = (stageOrTime || '').toLowerCase().trim();
-        const key = getIngredientKey({ category, name: searchName, stage: normalizedStage });
+        const key = getIngredientKey({ category, name: searchName, stage: normalizedStage, stepId });
 
         if (ignoredIngredients[key]) return null; // Skip if already consumed
 
@@ -108,7 +108,7 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
     // FASE 1: Cocción (Maltas, Lúpulos de Hervido, Aditivos pre-fermentación)
     if (phases.includes('cooking')) {
         (recipe.ingredients?.malts || []).forEach(m => {
-            const item = searchItem(m.name, 'Malta');
+            const item = searchItem(m.name, 'Malta', '', m.stepId);
             if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(m.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
         });
 
@@ -118,7 +118,7 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
             const use = stage.toString().toLowerCase();
             const isCooking = hPhase === 'cooking' || (!hPhase && !use.includes('dry') && !use.includes('ferment'));
             if (isCooking) {
-                const item = searchItem(h.name, 'Lúpulo', stage);
+                const item = searchItem(h.name, 'Lúpulo', stage, h.stepId);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: Math.round((Number(h.amount) || 0) * scaleFactor), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
@@ -129,7 +129,7 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
             const use = stage.toString().toLowerCase();
             const isCooking = oPhase === 'cooking' || (!oPhase && !use.includes('bottle') && !use.includes('embotella') && !use.includes('priming'));
             if (isCooking) {
-                const item = searchItem(o.name, o.category || 'Aditivos', stage);
+                const item = searchItem(o.name, o.category || 'Aditivos', stage, o.stepId);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
@@ -142,7 +142,8 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
             const name = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
             const amount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
             const stage = typeof yeastObj === 'object' ? (yeastObj.stage || yeastObj.time || '') : '';
-            const item = searchItem(name, 'Levadura', stage);
+            const stepId = typeof yeastObj === 'object' ? (yeastObj.stepId || '') : '';
+            const item = searchItem(name, 'Levadura', stage, stepId);
             if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount, current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
         }
     }
@@ -155,7 +156,7 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
             const use = stage.toString().toLowerCase();
             const isFermenting = hPhase === 'fermenting' || (!hPhase && (use.includes('dry') || use.includes('ferment')));
             if (isFermenting) {
-                const item = searchItem(h.name, 'Lúpulo', stage);
+                const item = searchItem(h.name, 'Lúpulo', stage, h.stepId);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: Math.round((Number(h.amount) || 0) * scaleFactor), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
@@ -165,7 +166,7 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
             const stage = o.stage || o.time || '';
             const isFermenting = oPhase === 'fermenting';
             if (isFermenting) {
-                const item = searchItem(o.name, o.category || 'Aditivos', stage);
+                const item = searchItem(o.name, o.category || 'Aditivos', stage, o.stepId);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
@@ -179,7 +180,7 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
             const use = stage.toString().toLowerCase();
             const isBottling = oPhase === 'bottling' || (!oPhase && (use.includes('bottle') || use.includes('embotella') || use.includes('priming')));
             if (isBottling) {
-                const item = searchItem(o.name, o.category || 'Aditivos', stage);
+                const item = searchItem(o.name, o.category || 'Aditivos', stage, o.stepId);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });

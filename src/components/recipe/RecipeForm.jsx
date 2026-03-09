@@ -1,7 +1,7 @@
 // /src/components/recipe/RecipeForm.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Sparkles, Loader2, Wand2, Wheat, Leaf, Droplets, ListOrdered, Trash2, Plus, Info, Save, BookOpen, Thermometer, Activity, CheckCircle2, Beaker } from 'lucide-react';
+import { Sparkles, Loader2, Wand2, Wheat, Leaf, Droplets, ListOrdered, Trash2, Plus, Info, Save, BookOpen, Thermometer, Activity, CheckCircle2, Beaker, Link, Check, Package, AlertTriangle } from 'lucide-react';
 
 import AutocompleteInput from '../common/AutocompleteInput';
 import { useRecipes } from '../../hooks/useRecipes';
@@ -73,7 +73,9 @@ export default function RecipeForm() {
                     sparge: found.ingredients?.water?.sparge || 15,
                     waterProfile: found.waterProfile || { Ca: 100, Mg: 10, SO4: 100, Cl: 100, HCO3: 50 },
                     modifications: found.modifications || [],
-                    steps: (found.steps || []).length > 0 ? found.steps : [{ title: '', desc: '', phase: 'cooking' }],
+                    steps: (found.steps || []).length > 0
+                        ? found.steps.map(s => ({ ...s, id: s.id || (Date.now() + Math.random()) }))
+                        : [{ id: Date.now(), title: '', desc: '', phase: 'cooking' }],
                     tips: (found.tips || []).length > 0 ? found.tips : []
                 });
                 setIsInitialized(true);
@@ -217,13 +219,32 @@ export default function RecipeForm() {
                 HCO3: Number(formData.waterProfile?.HCO3 || 0)
             },
             ingredients: {
-                malts: formData.malts.filter(m => m.name !== '').map(m => ({ ...m, unit: 'kg', amount: Number(m.amount) })),
-                hops: formData.hops.filter(h => h.name !== '').map(h => ({ ...h, unit: 'g', amount: Number(h.amount), phase: h.phase || getEffectivePhase(h) })),
-                others: (formData.others || []).filter(o => o.name !== '').map(o => ({ ...o, amount: Number(o.amount), phase: o.phase || getEffectivePhase(o) })),
+                malts: formData.malts.filter(m => m.name !== '').map(m => ({
+                    ...m,
+                    unit: 'kg',
+                    amount: Number(m.amount),
+                    phase: 'cooking' // Malts are always cooking phase
+                })),
+                hops: formData.hops.filter(h => h.name !== '').map(h => ({
+                    ...h,
+                    unit: 'g',
+                    amount: Number(h.amount),
+                    phase: h.phase || getEffectivePhase(h)
+                })),
+                others: (formData.others || []).filter(o => o.name !== '').map(o => ({
+                    ...o,
+                    amount: Number(o.amount),
+                    unit: o.unit || 'g',
+                    phase: o.phase || getEffectivePhase(o)
+                })),
                 yeast: { name: formData.yeast || "Levadura Genérica", amount: 1, unit: "sobre" },
                 water: { strike: Number(formData.strike), sparge: Number(formData.sparge) }
             },
-            steps: formData.steps.filter(s => s.title !== '').map(s => ({ ...s, phase: s.phase || getEffectivePhase(s) })),
+            steps: formData.steps.filter(s => s.title !== '').map(s => ({
+                ...s,
+                id: s.id || Date.now() + Math.random(),
+                phase: s.phase || getEffectivePhase(s)
+            })),
             tips: formData.tips.filter(t => t.title !== ''),
             fermentationDays: formData.fermentationDays || '14D',
             modifications: newModifications
@@ -368,69 +389,58 @@ export default function RecipeForm() {
                             <div><label className="block text-xs font-bold text-muted uppercase mb-1">Agua Lavado (L)</label><input type="number" className="w-full p-4 border border-line rounded-xl bg-panel text-content focus:ring-2 focus:ring-blue-500 outline-none" value={formData.sparge} onChange={e => setFormData({ ...formData, sparge: e.target.value })} /></div>
                         </div>
 
-                        <div>
-                            <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><Wheat size={20} className="text-amber-500" /> Granos (kg)</h3>
-                            <div className="flex px-3 mb-1 uppercase text-[10px] font-black text-muted tracking-widest">
-                                <span className="flex-1">Nombre de la Malta</span>
-                                <span className="w-24 text-center">Cantidad (kg)</span>
-                                <span className="w-10"></span>
-                            </div>
-                            <div className="space-y-2">
-                                {formData.malts.map((m, i) => (
-                                    <div key={i} className="flex gap-2">
-                                        <AutocompleteInput value={m.name} onChange={val => updateArray('malts', i, 'name', val)} placeholder="Nombre malta..." category="Malta" inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                                        <input type="number" step="0.1" placeholder="Kg" className="w-24 p-3 border border-line rounded-xl bg-surface text-content" value={m.amount} onChange={e => updateArray('malts', i, 'amount', e.target.value)} />
-                                        <button onClick={() => removeArrayItem('malts', i)} className="text-muted hover:text-red-500 px-2"><Trash2 size={18} /></button>
+                        {/* Detector de Insumos Huérfanos (Legacy) - Cocción */}
+                        {(() => {
+                            const orphans = [
+                                ...formData.malts.filter(m => !m.stepId),
+                                ...formData.hops.filter(h => h.phase === 'cooking' && !h.stepId),
+                                ...formData.others.filter(o => o.phase === 'cooking' && !o.stepId)
+                            ];
+                            if (orphans.length === 0) return null;
+                            return (
+                                <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 p-4 rounded-2xl border-dashed">
+                                    <h4 className="text-amber-800 dark:text-amber-400 text-[10px] font-black uppercase mb-3 flex items-center gap-2 tracking-widest">
+                                        <AlertTriangle size={14} /> Insumos sin paso asignado (Migración)
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {formData.malts.filter(m => !m.stepId).map((m, i) => (
+                                            <div key={`om-${i}`} className="bg-white dark:bg-slate-800 p-2 rounded-xl text-[10px] border border-amber-200 flex items-center gap-2">
+                                                <Wheat size={10} className="text-amber-500" /> {m.name || 'Malta s/n'}
+                                                <button onClick={() => removeArrayItem('malts', formData.malts.indexOf(m))} className="text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+                                            </div>
+                                        ))}
+                                        {formData.hops.filter(h => h.phase === 'cooking' && !h.stepId).map((h, i) => (
+                                            <div key={`oh-${i}`} className="bg-white dark:bg-slate-800 p-2 rounded-xl text-[10px] border border-amber-200 flex items-center gap-2">
+                                                <Leaf size={10} className="text-green-500" /> {h.name || 'Lúpulo s/n'}
+                                                <button onClick={() => removeArrayItem('hops', formData.hops.indexOf(h))} className="text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+                                            </div>
+                                        ))}
+                                        {formData.others.filter(o => o.phase === 'cooking' && !o.stepId).map((o, i) => (
+                                            <div key={`oo-${i}`} className="bg-white dark:bg-slate-800 p-2 rounded-xl text-[10px] border border-amber-200 flex items-center gap-2">
+                                                <Sparkles size={10} className="text-purple-500" /> {o.name || 'Aditivo s/n'}
+                                                <button onClick={() => removeArrayItem('others', formData.others.indexOf(o))} className="text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
-                            <button onClick={() => setFormData({ ...formData, malts: [...formData.malts, { name: '', amount: 0 }] })} className="text-sm text-amber-600 font-bold bg-amber-50 dark:bg-amber-900/30 px-4 py-2 rounded-xl mt-3">+ Añadir Malta</button>
-                        </div>
+                                    <p className="text-[10px] text-amber-700/70 mt-3 italic">Estos insumos provienen de una versión anterior. Por favor, agrégalos de nuevo dentro de los pasos correspondientes y elimina estos.</p>
+                                </div>
+                            );
+                        })()}
+
 
                         <div>
-                            <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><Leaf size={20} className="text-green-500" /> Lúpulos y Aditivos de Cocción</h3>
-                            <div className="hidden md:flex px-6 mb-1 uppercase text-[10px] font-black text-muted tracking-widest gap-2">
-                                <span className="flex-1">Ingrediente</span>
-                                <span className="w-20 text-center">Cantidad</span>
-                                <span className="w-24 text-center">Tiempo</span>
-                                <span className="w-24 text-center">Etapa/Uso</span>
-                                <span className="w-10"></span>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-black text-lg text-content flex items-center gap-2">
+                                    <ListOrdered size={20} className="text-amber-500" /> Pasos de Cocción
+                                </h3>
+                                <span className="bg-amber-500/10 text-amber-500 text-[10px] font-black px-2 py-1 rounded-full border border-amber-500/20 uppercase">
+                                    {formData.steps.filter(s => s.phase === 'cooking').length} Pasos
+                                </span>
                             </div>
-                            <div className="space-y-2">
-                                {formData.hops.filter(h => h.phase === 'cooking').map((h, i) => {
-                                    const actualIdx = formData.hops.indexOf(h);
-                                    return (
-                                        <div key={i} className="flex gap-2 flex-wrap md:flex-nowrap bg-surface p-3 rounded-2xl border border-line">
-                                            <AutocompleteInput className="flex-1" value={h.name} onChange={val => updateArray('hops', actualIdx, 'name', val)} placeholder="Nombre..." category="Lúpulo" inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                                            <input type="number" placeholder="Gramos" className="w-20 p-3 border border-line rounded-xl bg-panel text-content" value={h.amount} onChange={e => updateArray('hops', actualIdx, 'amount', e.target.value)} />
-                                            <input type="text" placeholder="Min/60" className="w-24 p-3 border border-line rounded-xl bg-panel text-content" value={h.time} onChange={e => updateArray('hops', actualIdx, 'time', e.target.value)} />
-                                            <input type="text" placeholder="Uso" className="w-24 p-3 border border-line rounded-xl bg-panel text-content" value={h.use || h.stage || ''} onChange={e => updateArray('hops', actualIdx, 'use', e.target.value)} />
-                                            <button onClick={() => removeArrayItem('hops', actualIdx)} className="text-muted hover:text-red-500 px-2"><Trash2 size={18} /></button>
-                                        </div>
-                                    );
-                                })}
-                                {(formData.others || []).filter(o => o.phase === 'cooking').map((o, i) => {
-                                    const actualIdx = formData.others.indexOf(o);
-                                    return (
-                                        <div key={`o-${i}`} className="flex gap-2 flex-wrap md:flex-nowrap bg-surface p-3 rounded-2xl border border-line">
-                                            <AutocompleteInput className="flex-1" value={o.name} onChange={val => updateArray('others', actualIdx, 'name', val)} placeholder="Aditivo..." category="Aditivos" inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                                            <input type="number" placeholder="Cant" className="w-20 p-3 border border-line rounded-xl bg-panel text-content" value={o.amount} onChange={e => updateArray('others', actualIdx, 'amount', e.target.value)} />
-                                            <select className="w-24 p-3 border border-line rounded-xl bg-panel text-content" value={o.unit || 'g'} onChange={e => updateArray('others', actualIdx, 'unit', e.target.value)}>
-                                                <option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="u">u</option>
-                                            </select>
-                                            <button onClick={() => removeArrayItem('others', actualIdx)} className="text-muted hover:text-red-500 px-2"><Trash2 size={18} /></button>
-                                        </div>
-                                    );
-                                })}
+                            <div className="hidden md:grid grid-cols-2 gap-4 px-5 mb-1 uppercase text-[10px] font-black text-muted tracking-widest">
+                                <span>Título del Paso</span>
+                                <span className="flex justify-between">Duración (Ej: 60M) <span className="w-10"></span></span>
                             </div>
-                            <div className="flex gap-2 mt-3">
-                                <button onClick={() => setFormData({ ...formData, hops: [...formData.hops, { name: '', amount: 0, time: '', use: 'Hervor', phase: 'cooking' }] })} className="text-sm text-green-600 font-bold bg-green-50 dark:bg-green-900/30 px-4 py-2 rounded-xl">+ Lúpulo Cocción</button>
-                                <button onClick={() => setFormData({ ...formData, others: [...(formData.others || []), { name: '', amount: 0, unit: 'g', phase: 'cooking', category: 'Aditivos' }] })} className="text-sm text-purple-600 font-bold bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-xl">+ Aditivo Cocción</button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><ListOrdered size={20} className="text-amber-500" /> Pasos de Cocción</h3>
                             <div className="space-y-4">
                                 {formData.steps.filter(s => s.phase === 'cooking').map((step, i) => {
                                     const actualIdx = formData.steps.indexOf(step);
@@ -441,18 +451,167 @@ export default function RecipeForm() {
                                                 <input type="text" placeholder="Título (Ej: Mash)" className="p-3 border border-line rounded-xl bg-panel text-content font-bold" value={step.title} onChange={e => updateArray('steps', actualIdx, 'title', e.target.value)} />
                                                 <input type="text" placeholder="Duración (Ej: 60M)" className="p-3 border border-line rounded-xl bg-panel text-content font-bold" value={step.duration || ''} onChange={e => updateArray('steps', actualIdx, 'duration', e.target.value)} />
                                             </div>
-                                            <textarea placeholder="Descripción técnica..." rows="2" className="w-full p-3 border border-line rounded-xl bg-panel text-content resize-none text-sm" value={step.details || ''} onChange={e => updateArray('steps', actualIdx, 'details', e.target.value)} />
+                                            <textarea placeholder="Descripción técnica..." rows="2" className="w-full p-3 border border-line rounded-xl bg-panel text-content resize-none text-sm mb-4" value={step.details || ''} onChange={e => updateArray('steps', actualIdx, 'details', e.target.value)} />
+
+                                            {/* Insumos del Paso (Maltas, Lúpulos, Aditivos) */}
+                                            <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-line/50 space-y-4">
+                                                <div className="flex justify-between items-center">
+                                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-muted flex items-center gap-2">
+                                                        <Package size={14} className="text-blue-500" /> Insumos en este paso
+                                                    </h4>
+                                                    <span className="text-[10px] font-bold text-blue-500/50 bg-blue-500/5 px-2 py-0.5 rounded-full border border-blue-500/10 uppercase">
+                                                        {(formData.malts.filter(m => m.stepId === step.id).length + formData.hops.filter(h => h.stepId === step.id).length + formData.others.filter(o => o.stepId === step.id).length)} Items
+                                                    </span>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    {/* Mostrar Maltas vinculadas a este paso */}
+                                                    {formData.malts.filter(m => m.stepId === step.id).map((m, mIdx) => {
+                                                        const globalIdx = formData.malts.indexOf(m);
+                                                        return (
+                                                            <div key={`m-${mIdx}`} className="flex gap-2 items-center bg-white dark:bg-slate-800 p-2 rounded-xl border border-line shadow-sm animate-fadeIn">
+                                                                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg text-amber-600"><Wheat size={16} /></div>
+                                                                <AutocompleteInput className="flex-1" value={m.name} onChange={val => updateArray('malts', globalIdx, 'name', val)} placeholder="Malta..." category="Malta" inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                                                                <div className="flex items-center gap-2 w-28">
+                                                                    <input type="number" step="0.1" className="w-full p-2 border border-line rounded-lg bg-panel text-content text-sm text-center font-bold" value={m.amount} onChange={e => updateArray('malts', globalIdx, 'amount', e.target.value)} />
+                                                                    <span className="text-[10px] font-bold text-muted uppercase">kg</span>
+                                                                </div>
+                                                                <button onClick={() => removeArrayItem('malts', globalIdx)} className="text-muted hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {/* Mostrar Lúpulos vinculados */}
+                                                    {formData.hops.filter(h => h.stepId === step.id).map((h, hIdx) => {
+                                                        const globalIdx = formData.hops.indexOf(h);
+                                                        return (
+                                                            <div key={`h-${hIdx}`} className="flex gap-2 items-center bg-white dark:bg-slate-800 p-2 rounded-xl border border-line shadow-sm animate-fadeIn">
+                                                                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600"><Leaf size={16} /></div>
+                                                                <AutocompleteInput className="flex-1" value={h.name} onChange={val => updateArray('hops', globalIdx, 'name', val)} placeholder="Lúpulo..." category="Lúpulo" inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                                                                <div className="flex items-center gap-2 w-28">
+                                                                    <input type="number" className="w-full p-2 border border-line rounded-lg bg-panel text-content text-sm text-center font-bold" value={h.amount} onChange={e => updateArray('hops', globalIdx, 'amount', e.target.value)} />
+                                                                    <span className="text-[10px] font-bold text-muted uppercase">g</span>
+                                                                </div>
+                                                                <button onClick={() => removeArrayItem('hops', globalIdx)} className="text-muted hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {/* Mostrar Otros vinculados */}
+                                                    {formData.others.filter(o => o.stepId === step.id).map((o, oIdx) => {
+                                                        const globalIdx = formData.others.indexOf(o);
+                                                        return (
+                                                            <div key={`o-${oIdx}`} className="flex gap-2 items-center bg-white dark:bg-slate-800 p-2 rounded-xl border border-line shadow-sm animate-fadeIn">
+                                                                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600"><Sparkles size={16} /></div>
+                                                                <AutocompleteInput className="flex-1" value={o.name} onChange={val => updateArray('others', globalIdx, 'name', val)} placeholder="Aditivo..." category="Aditivos" inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                                                                <div className="flex items-center gap-1 w-32">
+                                                                    <input type="number" className="w-full p-2 border border-line rounded-lg bg-panel text-content text-sm text-center font-bold" value={o.amount} onChange={e => updateArray('others', globalIdx, 'amount', e.target.value)} />
+                                                                    <select className="p-1.5 border border-line rounded-lg bg-panel text-content text-[10px] font-bold" value={o.unit || 'g'} onChange={e => updateArray('others', globalIdx, 'unit', e.target.value)}>
+                                                                        <option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="u">u</option>
+                                                                    </select>
+                                                                </div>
+                                                                <button onClick={() => removeArrayItem('others', globalIdx)} className="text-muted hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {/* Botón para vincular huérfanos si existen */}
+                                                    {(formData.malts.filter(m => m.stepId === step.id).length + formData.hops.filter(h => h.stepId === step.id).length + formData.others.filter(o => o.stepId === step.id).length) === 0 && (
+                                                        <div className="py-4 text-center border-2 border-dashed border-line/50 rounded-xl">
+                                                            <p className="text-[10px] text-muted italic mb-3">No hay insumos específicos para este paso.</p>
+                                                            {(() => {
+                                                                const orphanCount = [
+                                                                    ...formData.malts.filter(m => !m.stepId),
+                                                                    ...formData.hops.filter(h => h.phase === 'cooking' && !h.stepId),
+                                                                    ...formData.others.filter(o => o.phase === 'cooking' && !o.stepId)
+                                                                ].length;
+
+                                                                if (orphanCount > 0 && step.id) {
+                                                                    return (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const newMalts = formData.malts.map(m => (!m.stepId ? { ...m, stepId: step.id } : m));
+                                                                                const newHops = formData.hops.map(h => (h.phase === 'cooking' && !h.stepId ? { ...h, stepId: step.id } : h));
+                                                                                const newOthers = formData.others.map(o => (o.phase === 'cooking' && !o.stepId ? { ...o, stepId: step.id } : o));
+                                                                                setFormData({ ...formData, malts: newMalts, hops: newHops, others: newOthers });
+                                                                            }}
+                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-[10px] font-black rounded-lg shadow-sm hover:bg-amber-600 transition-all uppercase"
+                                                                        >
+                                                                            <Link size={12} /> Vincular {orphanCount} huérfanos a este paso
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, malts: [...formData.malts, { name: '', amount: 0, phase: 'cooking', stepId: step.id }] })}
+                                                        className="flex items-center justify-center gap-1 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 text-[10px] font-black border border-amber-200 dark:border-amber-800/40 hover:bg-amber-100 transition-colors uppercase"
+                                                    >
+                                                        <Plus size={10} /> Malta
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, hops: [...formData.hops, { name: '', amount: 0, time: '', phase: 'cooking', stepId: step.id }] })}
+                                                        className="flex items-center justify-center gap-1 py-2 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 text-[10px] font-black border border-green-200 dark:border-green-800/40 hover:bg-green-100 transition-colors uppercase"
+                                                    >
+                                                        <Plus size={10} /> Lúpulo
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, others: [...formData.others, { name: '', amount: 0, unit: 'g', phase: 'cooking', stepId: step.id }] })}
+                                                        className="flex items-center justify-center gap-1 py-2 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 text-[10px] font-black border border-purple-200 dark:border-purple-800/40 hover:bg-purple-100 transition-colors uppercase"
+                                                    >
+                                                        <Plus size={10} /> Aditivo
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     );
                                 })}
                             </div>
-                            <button onClick={() => setFormData({ ...formData, steps: [...formData.steps, { id: Date.now(), title: '', desc: '', details: '', duration: 0, phase: 'cooking' }] })} className="text-sm text-amber-600 font-bold bg-amber-50 dark:bg-amber-900/30 px-4 py-2 rounded-xl mt-3">Añadir Paso Cocción</button>
+                            <button onClick={() => setFormData({ ...formData, steps: [...formData.steps, { id: Date.now() + Math.random(), title: '', desc: '', details: '', duration: 0, phase: 'cooking' }] })} className="text-sm text-amber-600 font-bold bg-amber-50 dark:bg-amber-900/30 px-4 py-2 rounded-xl mt-3">Añadir Paso Cocción</button>
                         </div>
                     </div>
                 )}
 
                 {activeStep === 3 && (
                     <div className="space-y-8 animate-fadeIn">
+                        {/* Detector de Insumos Huérfanos (Legacy) - Fermentación */}
+                        {(() => {
+                            const orphans = [
+                                ...formData.hops.filter(h => h.phase === 'fermenting' && !h.stepId),
+                                ...formData.others.filter(o => o.phase === 'fermenting' && !o.stepId)
+                            ];
+                            if (orphans.length === 0) return null;
+                            return (
+                                <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 p-4 rounded-2xl border-dashed">
+                                    <h4 className="text-amber-800 dark:text-amber-400 text-[10px] font-black uppercase mb-3 flex items-center gap-2 tracking-widest">
+                                        <AlertTriangle size={14} /> Insumos sin paso asignado (Migración)
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {formData.hops.filter(h => h.phase === 'fermenting' && !h.stepId).map((h, i) => (
+                                            <div key={`ohf-${i}`} className="bg-white dark:bg-slate-800 p-2 rounded-xl text-[10px] border border-amber-200 flex items-center gap-2">
+                                                <Leaf size={10} className="text-green-500" /> {h.name || 'Dry Hop s/n'}
+                                                <button onClick={() => removeArrayItem('hops', formData.hops.indexOf(h))} className="text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+                                            </div>
+                                        ))}
+                                        {formData.others.filter(o => o.phase === 'fermenting' && !o.stepId).map((o, i) => (
+                                            <div key={`oof-${i}`} className="bg-white dark:bg-slate-800 p-2 rounded-xl text-[10px] border border-amber-200 flex items-center gap-2">
+                                                <Sparkles size={10} className="text-purple-500" /> {o.name || 'Aditivo s/n'}
+                                                <button onClick={() => removeArrayItem('others', formData.others.indexOf(o))} className="text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
                         <div className="bg-surface p-6 rounded-2xl border border-line shadow-sm relative">
                             <h3 className="font-black text-lg mb-4 text-content flex items-center gap-3"><Beaker size={24} className="text-amber-500" /> Levadura</h3>
                             <div className="flex flex-col md:flex-row gap-4 items-end">
@@ -473,48 +632,20 @@ export default function RecipeForm() {
                             </div>
                         </div>
 
-                        <div>
-                            <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><Leaf size={20} className="text-purple-500" /> Lúpulos (Dry Hop) y Aditivos Fermentación</h3>
-                            <div className="hidden md:flex px-6 mb-1 uppercase text-[10px] font-black text-muted tracking-widest gap-2">
-                                <span className="flex-1">Ingrediente</span>
-                                <span className="w-20 text-center">Gramos</span>
-                                <span className="w-24 text-center">Momento (Ej: Día 3)</span>
-                                <span className="w-10"></span>
-                            </div>
-                            <div className="space-y-2">
-                                {formData.hops.filter(h => h.phase === 'fermenting').map((h, i) => {
-                                    const actualIdx = formData.hops.indexOf(h);
-                                    return (
-                                        <div key={i} className="flex gap-2 flex-wrap md:flex-nowrap bg-surface p-3 rounded-2xl border border-line animate-fadeIn">
-                                            <AutocompleteInput className="flex-1" value={h.name} onChange={val => updateArray('hops', actualIdx, 'name', val)} placeholder="Nombre Lúpulo..." category="Lúpulo" inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                                            <input type="number" placeholder="Gramos" className="w-20 p-3 border border-line rounded-xl bg-panel text-content" value={h.amount} onChange={e => updateArray('hops', actualIdx, 'amount', e.target.value)} />
-                                            <input type="text" placeholder="Ej: Día 3" className="w-24 p-3 border border-line rounded-xl bg-panel text-content" value={h.time} onChange={e => updateArray('hops', actualIdx, 'time', e.target.value)} />
-                                            <button onClick={() => removeArrayItem('hops', actualIdx)} className="text-muted hover:text-red-500 px-2"><Trash2 size={18} /></button>
-                                        </div>
-                                    );
-                                })}
-                                {(formData.others || []).filter(o => o.phase === 'fermenting').map((o, i) => {
-                                    const actualIdx = formData.others.indexOf(o);
-                                    return (
-                                        <div key={`o-${i}`} className="flex gap-2 flex-wrap md:flex-nowrap bg-surface p-3 rounded-2xl border border-line animate-fadeIn">
-                                            <AutocompleteInput className="flex-1" value={o.name} onChange={val => updateArray('others', actualIdx, 'name', val)} placeholder="Aditivo..." category="Aditivos" inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                                            <input type="number" placeholder="Cant" className="w-20 p-3 border border-line rounded-xl bg-panel text-content" value={o.amount} onChange={e => updateArray('others', actualIdx, 'amount', e.target.value)} />
-                                            <select className="w-24 p-3 border border-line rounded-xl bg-panel text-content" value={o.unit || 'g'} onChange={e => updateArray('others', actualIdx, 'unit', e.target.value)}>
-                                                <option value="g">g</option><option value="ml">ml</option><option value="u">u</option>
-                                            </select>
-                                            <button onClick={() => removeArrayItem('others', actualIdx)} className="text-muted hover:text-red-500 px-2"><Trash2 size={18} /></button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            <div className="flex gap-2 mt-3">
-                                <button onClick={() => setFormData({ ...formData, hops: [...formData.hops, { name: '', amount: 0, time: '', use: 'Dry Hop', phase: 'fermenting' }] })} className="text-sm text-purple-600 font-bold bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-xl">+ Dry Hop</button>
-                                <button onClick={() => setFormData({ ...formData, others: [...(formData.others || []), { name: '', amount: 0, unit: 'g', phase: 'fermenting', category: 'Aditivos' }] })} className="text-sm text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 rounded-xl">+ Aditivo Fermentación</button>
-                            </div>
-                        </div>
 
                         <div>
-                            <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><ListOrdered size={20} className="text-purple-500" /> Pasos de Fermentación</h3>
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-black text-lg text-content flex items-center gap-2">
+                                    <ListOrdered size={20} className="text-purple-500" /> Pasos de Fermentación
+                                </h3>
+                                <span className="bg-purple-500/10 text-purple-500 text-[10px] font-black px-2 py-1 rounded-full border border-purple-500/20 uppercase">
+                                    {formData.steps.filter(s => s.phase === 'fermenting').length} Pasos
+                                </span>
+                            </div>
+                            <div className="hidden md:grid grid-cols-2 gap-4 px-5 mb-1 uppercase text-[10px] font-black text-muted tracking-widest">
+                                <span>Título del Paso</span>
+                                <span className="flex justify-between">Duración (Ej: 14D) <span className="w-10"></span></span>
+                            </div>
                             <div className="space-y-4">
                                 {formData.steps.filter(s => s.phase === 'fermenting').map((step, i) => {
                                     const actualIdx = formData.steps.indexOf(step);
@@ -525,46 +656,127 @@ export default function RecipeForm() {
                                                 <input type="text" placeholder="Título (Ej: Maduración)" className="p-3 border border-line rounded-xl bg-panel text-content font-bold" value={step.title} onChange={e => updateArray('steps', actualIdx, 'title', e.target.value)} />
                                                 <input type="text" placeholder="Duración (Ej: 14D)" className="p-3 border border-line rounded-xl bg-panel text-content font-bold" value={step.duration || ''} onChange={e => updateArray('steps', actualIdx, 'duration', e.target.value)} />
                                             </div>
-                                            <textarea placeholder="Detalles técnicos..." rows="2" className="w-full p-3 border border-line rounded-xl bg-panel text-content resize-none text-sm" value={step.details || ''} onChange={e => updateArray('steps', actualIdx, 'details', e.target.value)} />
+                                            <textarea placeholder="Detalles técnicos..." rows="2" className="w-full p-3 border border-line rounded-xl bg-panel text-content resize-none text-sm mb-4" value={step.details || ''} onChange={e => updateArray('steps', actualIdx, 'details', e.target.value)} />
+
+                                            {/* Insumos del Paso (Lúpulos, Aditivos) - Fermentación */}
+                                            <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-line/50 space-y-4">
+                                                <div className="flex justify-between items-center">
+                                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-muted flex items-center gap-2">
+                                                        <Package size={14} className="text-purple-500" /> Insumos en este paso
+                                                    </h4>
+                                                    <span className="text-[10px] font-bold text-purple-500/50 bg-purple-500/5 px-2 py-0.5 rounded-full border border-purple-500/10 uppercase">
+                                                        {(formData.hops.filter(h => h.stepId === step.id).length + formData.others.filter(o => o.stepId === step.id).length)} Items
+                                                    </span>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    {/* Mostrar Lúpulos (Dry Hop) vinculados */}
+                                                    {formData.hops.filter(h => h.stepId === step.id).map((h, hIdx) => {
+                                                        const globalIdx = formData.hops.indexOf(h);
+                                                        return (
+                                                            <div key={`h-f-${hIdx}`} className="flex gap-2 items-center bg-white dark:bg-slate-800 p-2 rounded-xl border border-line shadow-sm animate-fadeIn">
+                                                                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600"><Leaf size={16} /></div>
+                                                                <AutocompleteInput className="flex-1" value={h.name} onChange={val => updateArray('hops', globalIdx, 'name', val)} placeholder="Lúpulo..." category="Lúpulo" inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                                                                <div className="flex items-center gap-2 w-28">
+                                                                    <input type="number" className="w-full p-2 border border-line rounded-lg bg-panel text-content text-sm text-center font-bold" value={h.amount} onChange={e => updateArray('hops', globalIdx, 'amount', e.target.value)} />
+                                                                    <span className="text-[10px] font-bold text-muted uppercase">g</span>
+                                                                </div>
+                                                                <button onClick={() => removeArrayItem('hops', globalIdx)} className="text-muted hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {/* Mostrar Otros vinculados */}
+                                                    {formData.others.filter(o => o.stepId === step.id).map((o, oIdx) => {
+                                                        const globalIdx = formData.others.indexOf(o);
+                                                        return (
+                                                            <div key={`o-f-${oIdx}`} className="flex gap-2 items-center bg-white dark:bg-slate-800 p-2 rounded-xl border border-line shadow-sm animate-fadeIn">
+                                                                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600"><Sparkles size={16} /></div>
+                                                                <AutocompleteInput className="flex-1" value={o.name} onChange={val => updateArray('others', globalIdx, 'name', val)} placeholder="Aditivo..." category="Aditivos" inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                                                                <div className="flex items-center gap-1 w-32">
+                                                                    <input type="number" className="w-full p-2 border border-line rounded-lg bg-panel text-content text-sm text-center font-bold" value={o.amount} onChange={e => updateArray('others', globalIdx, 'amount', e.target.value)} />
+                                                                    <select className="p-1.5 border border-line rounded-lg bg-panel text-content text-[10px] font-bold" value={o.unit || 'g'} onChange={e => updateArray('others', globalIdx, 'unit', e.target.value)}>
+                                                                        <option value="g">g</option><option value="ml">ml</option><option value="u">u</option>
+                                                                    </select>
+                                                                </div>
+                                                                <button onClick={() => removeArrayItem('others', globalIdx)} className="text-muted hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {/* Botón para vincular huérfanos si existen */}
+                                                    {(formData.hops.filter(h => h.stepId === step.id).length + formData.others.filter(o => o.stepId === step.id).length) === 0 && (
+                                                        <div className="py-4 text-center border-2 border-dashed border-line/50 rounded-xl">
+                                                            <p className="text-[10px] text-muted italic mb-3">No hay insumos específicos para este paso.</p>
+                                                            {(() => {
+                                                                const orphanCount = [
+                                                                    ...formData.hops.filter(h => h.phase === 'fermenting' && !h.stepId),
+                                                                    ...formData.others.filter(o => o.phase === 'fermenting' && !o.stepId)
+                                                                ].length;
+
+                                                                if (orphanCount > 0 && step.id) {
+                                                                    return (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const newHops = formData.hops.map(h => (h.phase === 'fermenting' && !h.stepId ? { ...h, stepId: step.id } : h));
+                                                                                const newOthers = formData.others.map(o => (o.phase === 'fermenting' && !o.stepId ? { ...o, stepId: step.id } : o));
+                                                                                setFormData({ ...formData, hops: newHops, others: newOthers });
+                                                                            }}
+                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white text-[10px] font-black rounded-lg shadow-sm hover:bg-purple-600 transition-all uppercase"
+                                                                        >
+                                                                            <Link size={12} /> Vincular {orphanCount} huérfanos a este paso
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, hops: [...formData.hops, { name: '', amount: 0, time: '', use: 'Dry Hop', phase: 'fermenting', stepId: step.id }] })}
+                                                        className="flex items-center justify-center gap-1 py-2 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 text-[10px] font-black border border-green-200 dark:border-green-800/40 hover:bg-green-100 transition-colors uppercase"
+                                                    >
+                                                        <Plus size={10} /> Dry Hop
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, others: [...formData.others, { name: '', amount: 0, unit: 'g', phase: 'fermenting', category: 'Aditivos', stepId: step.id }] })}
+                                                        className="flex items-center justify-center gap-1 py-2 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 text-[10px] font-black border border-purple-200 dark:border-purple-800/40 hover:bg-purple-100 transition-colors uppercase"
+                                                    >
+                                                        <Plus size={10} /> Aditivo
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     );
                                 })}
                             </div>
-                            <button onClick={() => setFormData({ ...formData, steps: [...formData.steps, { id: Date.now(), title: '', desc: '', details: '', duration: 0, phase: 'fermenting' }] })} className="text-sm text-purple-600 font-bold bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-xl mt-3">+ Añadir Paso Fermentación</button>
+                            <button onClick={() => setFormData({ ...formData, steps: [...formData.steps, { id: Date.now() + Math.random(), title: '', desc: '', details: '', duration: 0, phase: 'fermenting' }] })} className="text-sm text-purple-600 font-bold bg-purple-50 dark:bg-purple-900/30 px-4 py-2 rounded-xl mt-3">+ Añadir Paso Fermentación</button>
                         </div>
                     </div>
                 )}
 
                 {activeStep === 4 && (
                     <div className="space-y-8 animate-fadeIn">
-                        <div>
-                            <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><Sparkles size={20} className="text-blue-500" /> Aditivos de Envasado (Priming / Clarificantes)</h3>
-                            <div className="hidden md:flex px-6 mb-1 uppercase text-[10px] font-black text-muted tracking-widest gap-2">
-                                <span className="flex-1">Aditivo / Azúcar</span>
-                                <span className="w-24 text-center">Cantidad</span>
-                                <span className="w-24 text-center">Unidad</span>
-                                <span className="w-10"></span>
-                            </div>
-                            <div className="space-y-2">
-                                {(formData.others || []).filter(o => o.phase === 'bottling').map((o, i) => {
-                                    const actualIdx = formData.others.indexOf(o);
-                                    return (
-                                        <div key={i} className="flex gap-2 bg-surface p-3 rounded-2xl border border-line animate-fadeIn">
-                                            <AutocompleteInput className="flex-1" value={o.name} onChange={val => updateArray('others', actualIdx, 'name', val)} placeholder="Ej: Azúcar de maíz..." category="Aditivos" inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                                            <input type="number" placeholder="Cant" className="w-24 p-3 border border-line rounded-xl bg-panel text-content" value={o.amount} onChange={e => updateArray('others', actualIdx, 'amount', e.target.value)} />
-                                            <select className="w-24 p-3 border border-line rounded-xl bg-panel text-content" value={o.unit || 'g'} onChange={e => updateArray('others', actualIdx, 'unit', e.target.value)}>
-                                                <option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option>
-                                            </select>
-                                            <button onClick={() => removeArrayItem('others', actualIdx)} className="text-muted hover:text-red-500 px-2"><Trash2 size={18} /></button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            <button onClick={() => setFormData({ ...formData, others: [...(formData.others || []), { name: '', amount: 0, unit: 'g', phase: 'bottling', category: 'Aditivos' }] })} className="text-sm text-blue-600 font-bold bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-xl mt-3">+ Aditivo Envasado</button>
-                        </div>
 
                         <div>
-                            <h3 className="font-black text-lg mb-3 text-content flex items-center gap-2"><ListOrdered size={20} className="text-blue-500" /> Pasos de Envasado</h3>
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-black text-lg text-content flex items-center gap-2">
+                                    <ListOrdered size={20} className="text-blue-500" /> Pasos de Envasado
+                                </h3>
+                                <span className="bg-blue-500/10 text-blue-500 text-[10px] font-black px-2 py-1 rounded-full border border-blue-500/20 uppercase">
+                                    {formData.steps.filter(s => s.phase === 'bottling').length} Pasos
+                                </span>
+                            </div>
+                            <div className="hidden md:grid grid-cols-2 gap-4 px-5 mb-1 uppercase text-[10px] font-black text-muted tracking-widest">
+                                <span>Título del Paso</span>
+                                <span className="flex justify-between">Duración (Ej: 21D) <span className="w-10"></span></span>
+                            </div>
                             <div className="space-y-4">
                                 {formData.steps.filter(s => s.phase === 'bottling').map((step, i) => {
                                     const actualIdx = formData.steps.indexOf(step);
@@ -575,12 +787,79 @@ export default function RecipeForm() {
                                                 <input type="text" placeholder="Título" className="p-3 border border-line rounded-xl bg-panel text-content font-bold" value={step.title} onChange={e => updateArray('steps', actualIdx, 'title', e.target.value)} />
                                                 <input type="text" placeholder="Duración (Ej: 21D)" className="p-3 border border-line rounded-xl bg-panel text-content font-bold" value={step.duration || ''} onChange={e => updateArray('steps', actualIdx, 'duration', e.target.value)} />
                                             </div>
-                                            <textarea placeholder="Observaciones..." rows="2" className="w-full p-3 border border-line rounded-xl bg-panel text-content resize-none text-sm" value={step.details || ''} onChange={e => updateArray('steps', actualIdx, 'details', e.target.value)} />
+                                            <textarea placeholder="Observaciones..." rows="2" className="w-full p-3 border border-line rounded-xl bg-panel text-content resize-none text-sm mb-4" value={step.details || ''} onChange={e => updateArray('steps', actualIdx, 'details', e.target.value)} />
+
+                                            {/* Insumos del Paso (Aditivos Envasado) */}
+                                            <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-line/50 space-y-4">
+                                                <div className="flex justify-between items-center">
+                                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-muted flex items-center gap-2">
+                                                        <Package size={14} className="text-blue-500" /> Insumos en este paso
+                                                    </h4>
+                                                    <span className="text-[10px] font-bold text-blue-500/50 bg-blue-500/5 px-2 py-0.5 rounded-full border border-blue-500/10 uppercase">
+                                                        {(formData.others.filter(o => o.stepId === step.id).length)} Items
+                                                    </span>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    {formData.others.filter(o => o.stepId === step.id).map((o, oIdx) => {
+                                                        const globalIdx = formData.others.indexOf(o);
+                                                        return (
+                                                            <div key={`o-b-${oIdx}`} className="flex gap-2 items-center bg-white dark:bg-slate-800 p-2 rounded-xl border border-line shadow-sm animate-fadeIn">
+                                                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600"><Sparkles size={16} /></div>
+                                                                <AutocompleteInput className="flex-1" value={o.name} onChange={val => updateArray('others', globalIdx, 'name', val)} placeholder="Priming/Clarificante..." category="Aditivos" inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                                                                <div className="flex items-center gap-1 w-36">
+                                                                    <input type="number" className="w-full p-2 border border-line rounded-lg bg-panel text-content text-sm text-center font-bold" value={o.amount} onChange={e => updateArray('others', globalIdx, 'amount', e.target.value)} />
+                                                                    <select className="p-1.5 border border-line rounded-lg bg-panel text-content text-[10px] font-bold" value={o.unit || 'g'} onChange={e => updateArray('others', globalIdx, 'unit', e.target.value)}>
+                                                                        <option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="u">u</option>
+                                                                    </select>
+                                                                </div>
+                                                                <button onClick={() => removeArrayItem('others', globalIdx)} className="text-muted hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {/* Botón para vincular huérfanos si existen */}
+                                                    {(formData.others.filter(o => o.stepId === step.id).length) === 0 && (
+                                                        <div className="py-4 text-center border-2 border-dashed border-line/50 rounded-xl">
+                                                            <p className="text-[10px] text-muted italic mb-3">No hay insumos específicos para este paso.</p>
+                                                            {(() => {
+                                                                const orphanCount = [
+                                                                    ...formData.others.filter(o => o.phase === 'bottling' && !o.stepId)
+                                                                ].length;
+
+                                                                if (orphanCount > 0 && step.id) {
+                                                                    return (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const newOthers = formData.others.map(o => (o.phase === 'bottling' && !o.stepId ? { ...o, stepId: step.id } : o));
+                                                                                setFormData({ ...formData, others: newOthers });
+                                                                            }}
+                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white text-[10px] font-black rounded-lg shadow-sm hover:bg-blue-600 transition-all uppercase"
+                                                                        >
+                                                                            <Link size={12} /> Vincular {orphanCount} huérfanos a este paso
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, others: [...formData.others, { name: '', amount: 0, unit: 'g', phase: 'bottling', category: 'Aditivos', stepId: step.id }] })}
+                                                    className="w-full flex items-center justify-center gap-1 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 text-[10px] font-black border border-blue-200 dark:border-blue-800/40 hover:bg-blue-100 transition-colors uppercase"
+                                                >
+                                                    <Plus size={10} /> Añadir Insumo Envasado
+                                                </button>
+                                            </div>
                                         </div>
                                     );
                                 })}
                             </div>
-                            <button onClick={() => setFormData({ ...formData, steps: [...formData.steps, { id: Date.now(), title: '', desc: '', details: '', duration: 0, phase: 'bottling' }] })} className="text-sm text-blue-600 font-bold bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-xl mt-3">+ Añadir Paso Envasado</button>
+                            <button onClick={() => setFormData({ ...formData, steps: [...formData.steps, { id: Date.now() + Math.random(), title: '', desc: '', details: '', duration: 0, phase: 'bottling' }] })} className="text-sm text-blue-600 font-bold bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-xl mt-3">+ Añadir Paso Envasado</button>
                         </div>
                     </div>
                 )}

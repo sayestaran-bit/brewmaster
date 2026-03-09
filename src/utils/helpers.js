@@ -52,16 +52,16 @@ export const initialRecipes = [
     waterProfile: { Ca: 120, Mg: 15, SO4: 75, Cl: 200, HCO3: 50 },
     ingredients: {
       malts: [
-        { name: "Malta Pilsen", amount: 4.5, unit: "kg", phase: "cooking" },
-        { name: "Avena en hojuelas", amount: 1.0, unit: "kg", phase: "cooking" },
-        { name: "Trigo en hojuelas", amount: 0.8, unit: "kg", phase: "cooking" }
+        { name: "Malta Pilsen", amount: 4.5, unit: "kg", phase: "cooking", stepId: 2 },
+        { name: "Avena en hojuelas", amount: 1.0, unit: "kg", phase: "cooking", stepId: 2 },
+        { name: "Trigo en hojuelas", amount: 0.8, unit: "kg", phase: "cooking", stepId: 2 }
       ],
       hops: [
-        { name: "Magnum", amount: 10, unit: "g", time: "60 min", stage: "Hervor", phase: "cooking" },
-        { name: "Citra", amount: 50, unit: "g", time: "20 min", stage: "Whirlpool (80°C)", phase: "cooking" },
-        { name: "Mosaic", amount: 50, unit: "g", time: "20 min", stage: "Whirlpool (80°C)", phase: "cooking" },
-        { name: "Citra", amount: 60, unit: "g", time: "Día 2", stage: "Dry Hop 1", phase: "fermenting" },
-        { name: "Mosaic", amount: 60, unit: "g", time: "Día 7", stage: "Dry Hop 2", phase: "fermenting" }
+        { name: "Magnum", amount: 10, unit: "g", time: "60 min", stage: "Hervor", phase: "cooking", stepId: 4 },
+        { name: "Citra", amount: 50, unit: "g", time: "20 min", stage: "Whirlpool (80°C)", phase: "cooking", stepId: 5 },
+        { name: "Mosaic", amount: 50, unit: "g", time: "20 min", stage: "Whirlpool (80°C)", phase: "cooking", stepId: 5 },
+        { name: "Citra", amount: 60, unit: "g", time: "Día 2", stage: "Dry Hop 1", phase: "fermenting", stepId: 7 },
+        { name: "Mosaic", amount: 60, unit: "g", time: "Día 7", stage: "Dry Hop 2", phase: "fermenting", stepId: 8 }
       ],
       yeast: { name: "Lallemand Verdant IPA", amount: 1, unit: "sobre" },
       water: { strike: 22, sparge: 12 }
@@ -89,18 +89,18 @@ export const initialRecipes = [
     waterProfile: { Ca: 130, Mg: 15, SO4: 80, Cl: 220, HCO3: 50 },
     ingredients: {
       malts: [
-        { name: "Malta Pilsen", amount: 6.0, unit: 'kg', phase: "cooking" },
-        { name: "Trigo en hojuelas", amount: 1.5, unit: 'kg', phase: "cooking" },
-        { name: "Avena en hojuelas", amount: 1.0, unit: 'kg', phase: "cooking" }
+        { name: "Malta Pilsen", amount: 6.0, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: "Trigo en hojuelas", amount: 1.5, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: "Avena en hojuelas", amount: 1.0, unit: 'kg', phase: "cooking", stepId: 1 }
       ],
       hops: [
-        { name: "Magnum", amount: 15, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking" },
-        { name: "Galaxy", amount: 80, unit: 'g', time: "30 min", stage: "Whirlpool (78°C)", phase: "cooking" },
-        { name: "Citra", amount: 40, unit: 'g', time: "30 min", stage: "Whirlpool (78°C)", phase: "cooking" },
-        { name: "Galaxy", amount: 100, unit: 'g', time: "Día 4", stage: "Dry Hop 1", phase: "fermenting" },
-        { name: "Citra", amount: 50, unit: 'g', time: "Día 8", stage: "Dry Hop 2", phase: "fermenting" }
+        { name: "Magnum", amount: 15, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking", stepId: 2 },
+        { name: "Galaxy", amount: 80, unit: 'g', time: "30 min", stage: "Whirlpool (78°C)", phase: "cooking", stepId: 3 },
+        { name: "Citra", amount: 40, unit: 'g', time: "30 min", stage: "Whirlpool (78°C)", phase: "cooking", stepId: 3 },
+        { name: "Galaxy", amount: 100, unit: 'g', time: "Día 4", stage: "Dry Hop 1", phase: "fermenting", stepId: 5 },
+        { name: "Citra", amount: 50, unit: 'g', time: "Día 8", stage: "Dry Hop 2", phase: "fermenting", stepId: 6 }
       ],
-      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos' }],
+      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2 }],
       yeast: { name: 'Lallemand Verdant IPA', amount: 2, unit: 'sobres' },
       water: { strike: 25, sparge: 12 }
     },
@@ -122,20 +122,20 @@ export const initialRecipes = [
     waterProfile: { Ca: 140, Mg: 15, SO4: 100, Cl: 250, HCO3: 50 },
     ingredients: {
       malts: [
-        { name: "Malta Pale Ale", amount: 8.0, unit: 'kg', phase: "cooking" },
-        { name: "Avena en hojuelas", amount: 1.5, unit: 'kg', phase: "cooking" },
-        { name: "Trigo en hojuelas", amount: 1.0, unit: 'kg', phase: "cooking" }
+        { name: "Malta Pale Ale", amount: 8.0, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: "Avena en hojuelas", amount: 1.5, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: "Trigo en hojuelas", amount: 1.0, unit: 'kg', phase: "cooking", stepId: 1 }
       ],
       hops: [
-        { name: "Columbus", amount: 20, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking" },
-        { name: "Citra", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool", phase: "cooking" },
-        { name: "Mosaic", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool", phase: "cooking" },
-        { name: "Galaxy", amount: 150, unit: 'g', time: "Día 5", stage: "Dry Hop 1", phase: "fermenting" },
-        { name: "Citra", amount: 100, unit: 'g', time: "Día 10", stage: "Dry Hop 2", phase: "fermenting" }
+        { name: "Columbus", amount: 20, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking", stepId: 2 },
+        { name: "Citra", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool", phase: "cooking", stepId: 3 },
+        { name: "Mosaic", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool", phase: "cooking", stepId: 3 },
+        { name: "Galaxy", amount: 150, unit: 'g', time: "Día 5", stage: "Dry Hop 1", phase: "fermenting", stepId: 5 },
+        { name: "Citra", amount: 100, unit: 'g', time: "Día 10", stage: "Dry Hop 2", phase: "fermenting", stepId: 5 }
       ],
       others: [
-        { name: "Maltodextrina", amount: 0.5, unit: "kg", phase: "cooking", category: "Aditivos" },
-        { name: "Nutriente", amount: 5, unit: "g", phase: "cooking", category: "Aditivos" }
+        { name: "Maltodextrina", amount: 0.5, unit: "kg", phase: "cooking", category: "Aditivos", stepId: 2 },
+        { name: "Nutriente", amount: 5, unit: "g", phase: "cooking", category: "Aditivos", stepId: 2 }
       ],
       yeast: { name: 'Lallemand Verdant IPA', amount: 3, unit: 'sobres' },
       water: { strike: 28, sparge: 10 }
@@ -155,13 +155,13 @@ export const initialRecipes = [
     targetVolume: 20, og: 1.058, fg: 1.016, abv: 5.5, ibu: 32, colorSRM: 38,
     ingredients: {
       malts: [
-        { name: "Malta Pale Ale", amount: 4.0, unit: 'kg', phase: "cooking" },
-        { name: "Avena en hojuelas", amount: 0.8, unit: 'kg', phase: "cooking" },
-        { name: "Cebada Tostada", amount: 0.3, unit: 'kg', phase: "cooking" },
-        { name: "Malta Chocolate", amount: 0.2, unit: 'kg', phase: "cooking" }
+        { name: "Malta Pale Ale", amount: 4.0, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: "Avena en hojuelas", amount: 0.8, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: "Cebada Tostada", amount: 0.3, unit: 'kg', phase: "cooking", stepId: 2 },
+        { name: "Malta Chocolate", amount: 0.2, unit: 'kg', phase: "cooking", stepId: 2 }
       ],
-      hops: [{ name: "Fuggles", amount: 40, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking" }],
-      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos' }],
+      hops: [{ name: "Fuggles", amount: 40, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking", stepId: 3 }],
+      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 3 }],
       yeast: { name: 'S-04', amount: 1, unit: 'sobre' },
       water: { strike: 18, sparge: 14 }
     },
@@ -179,14 +179,14 @@ export const initialRecipes = [
     targetVolume: 20, og: 1.048, fg: 1.010, abv: 5.0, ibu: 28, colorSRM: 4,
     ingredients: {
       malts: [
-        { name: 'Malta Pilsen', amount: 4.5, unit: 'kg', phase: "cooking" },
-        { name: 'Carapils', amount: 0.2, unit: 'kg', phase: "cooking" }
+        { name: 'Malta Pilsen', amount: 4.5, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: 'Carapils', amount: 0.2, unit: 'kg', phase: "cooking", stepId: 1 }
       ],
       hops: [
-        { name: 'Magnum', amount: 15, unit: 'g', time: '60 min', stage: 'Hervor', phase: "cooking" },
-        { name: 'Saaz', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking" }
+        { name: 'Magnum', amount: 15, unit: 'g', time: '60 min', stage: 'Hervor', phase: "cooking", stepId: 2 },
+        { name: 'Saaz', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking", stepId: 2 }
       ],
-      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos' }],
+      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2 }],
       yeast: { name: 'W-34/70', amount: 2, unit: 'sobres' },
       water: { strike: 18, sparge: 14 }
     },
@@ -204,16 +204,16 @@ export const initialRecipes = [
     targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, ibu: 32, colorSRM: 14,
     ingredients: {
       malts: [
-        { name: 'Malta Pale Ale', amount: 4.0, unit: 'kg', phase: "cooking" },
-        { name: 'Caramelo 60L', amount: 0.5, unit: 'kg', phase: "cooking" },
-        { name: 'Melanoidina', amount: 0.3, unit: 'kg', phase: "cooking" },
-        { name: 'Cebada Tostada', amount: 0.05, unit: 'kg', phase: "cooking" }
+        { name: 'Malta Pale Ale', amount: 4.0, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: 'Caramelo 60L', amount: 0.5, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: 'Melanoidina', amount: 0.3, unit: 'kg', phase: "cooking", stepId: 1 },
+        { name: 'Cebada Tostada', amount: 0.05, unit: 'kg', phase: "cooking", stepId: 1 }
       ],
       hops: [
-        { name: 'Cascade', amount: 20, unit: 'g', time: '60 min', stage: 'Hervor', phase: "cooking" },
-        { name: 'Cascade', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking" }
+        { name: 'Cascade', amount: 20, unit: 'g', time: '60 min', stage: 'Hervor', phase: "cooking", stepId: 2 },
+        { name: 'Cascade', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking", stepId: 2 }
       ],
-      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos' }],
+      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2 }],
       yeast: { name: 'US-05', amount: 1, unit: 'sobre' },
       water: { strike: 18, sparge: 14 }
     },

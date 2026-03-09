@@ -493,6 +493,10 @@ export default function BrewSessionView() {
 
     const matchIngredientToStep = (ing, step, phase) => {
         if (!step) return false;
+
+        // 0. Explicit Step ID matching (Highest Priority)
+        if (ing.stepId && step.id && ing.stepId === step.id) return true;
+
         const ingName = (ing.name || '').toLowerCase();
         const ingStage = (ing.stage || ing.time || '').toLowerCase();
         const stepTitle = (step.title || '').toLowerCase();
@@ -727,7 +731,7 @@ export default function BrewSessionView() {
                                                         onClick={() => handleToggleIngredient(ing, !isConsumed)}
                                                         className={`flex flex-col p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden ${isConsumed
                                                             ? 'bg-emerald-500/20 border-emerald-500/50 shadow-inner scale-[0.98]'
-                                                            : hasMatches
+                                                            : ing.matchesCurrentStep
                                                                 ? 'bg-slate-700/50 border-emerald-500/30 hover:border-emerald-400 shadow-md translate-y-[-2px]'
                                                                 : 'bg-slate-700/20 border-slate-700 hover:border-slate-500 opacity-80 hover:opacity-100'
                                                             }`}
