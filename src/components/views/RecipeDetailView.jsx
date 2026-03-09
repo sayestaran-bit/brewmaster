@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X, Trash2 } from 'lucide-react';
 import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
 import { formatCurrency, getFormattedDate } from '../../utils/formatters';
+import { getEffectivePhase } from '../../utils/recipeUtils';
 import { calculateRecipeCost } from '../../utils/costCalculator';
 import { getRecipeAdvice } from '../../services/gemini';
 import { useRecipes } from '../../hooks/useRecipes';
@@ -179,7 +180,7 @@ export default function RecipeDetailView() {
             const response = await getRecipeAdvice(scaledRecipe);
             setAiAdvice(response);
         } catch (err) {
-            setAiAdvice("El Maestro Cervecero de la IA está descansando. Intenta de nuevo más tarde.");
+            setAiAdvice(`⚠️ Maestro IA: ${err.message}`);
         } finally {
             setIsAdvising(false);
         }
@@ -233,6 +234,7 @@ export default function RecipeDetailView() {
                         <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Alcohol por Volumen"><Thermometer size={18} /> ABV: {scaledRecipe.abv}%</span>
                         <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Gravedad Original"><Clock size={18} /> DO: {scaledRecipe.og}</span>
                         <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Gravedad Final"><CheckCircle2 size={18} /> DF: {scaledRecipe.fg}</span>
+                        {scaledRecipe.fermentationDays && <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Días de Fermentación"><Clock size={18} /> {scaledRecipe.fermentationDays}</span>}
                         {(scaledRecipe.ibu > 0) && <span className="flex items-center gap-1.5 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Amargor (IBU)"><Activity size={18} /> IBU: {scaledRecipe.ibu}</span>}
                         {(scaledRecipe.colorSRM > 0) && (
                             <span className="flex items-center gap-2 bg-black/20 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-sm" title="Color Estimado (SRM)">
@@ -525,15 +527,45 @@ export default function RecipeDetailView() {
                         </div>
 
                         {[
-                            { id: 'cooking', title: 'Fases de Cocción', steps: (scaledRecipe.steps || []).filter(s => !s.phase || s.phase === 'cooking'), icon: <Thermometer size={24} />, colorClass: 'text-amber-600 dark:text-amber-500', bgClass: 'bg-amber-50/50 dark:bg-amber-900/10' },
-                            { id: 'fermenting', title: 'Fases de Fermentación', steps: (scaledRecipe.steps || []).filter(s => s.phase === 'fermenting'), icon: <Activity size={24} />, colorClass: 'text-purple-600 dark:text-purple-500', bgClass: 'bg-purple-50/50 dark:bg-purple-900/10' },
-                            { id: 'bottling', title: 'Fase de Embotellamiento', steps: (scaledRecipe.steps || []).filter(s => s.phase === 'bottling'), icon: <Clock size={24} />, colorClass: 'text-blue-600 dark:text-blue-500', bgClass: 'bg-blue-50/50 dark:bg-blue-900/10' }
+                            { id: 'cooking', title: 'Fases de Cocción', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'cooking'), icon: <Thermometer size={24} />, colorClass: 'text-amber-600 dark:text-amber-500', bgClass: 'bg-amber-50/50 dark:bg-amber-900/10' },
+                            { id: 'fermenting', title: 'Fases de Fermentación', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'fermenting'), icon: <Activity size={24} />, colorClass: 'text-purple-600 dark:text-purple-500', bgClass: 'bg-purple-50/50 dark:bg-purple-900/10' },
+                            { id: 'bottling', title: 'Fase de Envasado', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'bottling'), icon: <Clock size={24} />, colorClass: 'text-blue-600 dark:text-blue-500', bgClass: 'bg-blue-50/50 dark:bg-blue-900/10' }
                         ].map(phaseGrp => phaseGrp.steps.length > 0 && (
                             <div key={phaseGrp.id} className={`p-8 rounded-3xl border border-line shadow-sm mb-8 ${phaseGrp.bgClass}`}>
                                 <h4 className={`text-2xl font-black flex items-center gap-3 mb-6 ${phaseGrp.colorClass} border-b border-gray-200/50 dark:border-slate-700/50 pb-4`}>
                                     {phaseGrp.icon} {phaseGrp.title}
                                 </h4>
+
+                                {/* Mostrar Insumos de esta fase */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    {scaledRecipe.ingredients.hops.filter(h => getEffectivePhase(h) === phaseGrp.id).map((h, i) => (
+                                        <div key={`h-${i}`} className="bg-surface p-4 rounded-2xl border border-line flex justify-between items-center shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg ${phaseGrp.id === 'cooking' ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'}`}><Leaf size={16} /></div>
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-content text-sm">{h.name}</span>
+                                                    <span className="text-[10px] text-muted uppercase font-black">{h.time} | {h.use || 'Adición'}</span>
+                                                </div>
+                                            </div>
+                                            <span className="font-black text-content">{h.amount} g</span>
+                                        </div>
+                                    ))}
+                                    {scaledRecipe.ingredients.others.filter(o => getEffectivePhase(o) === phaseGrp.id).map((o, i) => (
+                                        <div key={`o-${i}`} className="bg-surface p-4 rounded-2xl border border-line flex justify-between items-center shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-blue-100 text-blue-600 p-2 rounded-lg"><Sparkles size={16} /></div>
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-content text-sm">{o.name}</span>
+                                                    <span className="text-[10px] text-muted uppercase font-black">{o.category || 'Otros'}</span>
+                                                </div>
+                                            </div>
+                                            <span className="font-black text-content">{o.amount} {o.unit || 'g'}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
                                 <div className="space-y-4">
+                                    ...
                                     {phaseGrp.steps.map((step, localIdx) => {
                                         const globalId = step.id || `${phaseGrp.id}-${localIdx}`;
                                         return (

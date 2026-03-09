@@ -9,6 +9,7 @@ import {
     onSnapshot, query, orderBy, runTransaction, serverTimestamp, getDoc, getDocs
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { getIngredientKey } from '../../utils/recipeUtils';
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
 export const batchDocRef = (uid, batchId) =>
@@ -88,9 +89,11 @@ export async function deleteInventoryItem(uid, itemId) {
  */
 export async function deductBatchFromInventory(uid, recipe, targetVolume, currentInventory, phases = ['cooking', 'fermenting', 'bottling'], ignoredIngredients = {}) {
     const scaleFactor = (targetVolume || 1) / (recipe.targetVolume || 1);
-    const searchItem = (name, category) => {
+    const searchItem = (name, category, stageOrTime = '') => {
         const searchName = (name || '').toLowerCase().trim();
-        const key = `${category}_${name}`.replace(/[\.#$\[\]]/g, '_');
+        const normalizedStage = (stageOrTime || '').toLowerCase().trim();
+        const key = getIngredientKey({ category, name: searchName, stage: normalizedStage });
+
         if (ignoredIngredients[key]) return null; // Skip if already consumed
 
         return currentInventory.find(i =>
@@ -111,20 +114,22 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
 
         (recipe.ingredients?.hops || []).forEach(h => {
             const hPhase = h.phase || '';
-            const use = (h.use || h.time || '').toString().toLowerCase();
+            const stage = h.stage || h.time || '';
+            const use = stage.toString().toLowerCase();
             const isCooking = hPhase === 'cooking' || (!hPhase && !use.includes('dry') && !use.includes('ferment'));
             if (isCooking) {
-                const item = searchItem(h.name, 'Lúpulo');
+                const item = searchItem(h.name, 'Lúpulo', stage);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: Math.round((Number(h.amount) || 0) * scaleFactor), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
 
         (recipe.ingredients?.others || []).forEach(o => {
             const oPhase = o.phase || '';
-            const use = (o.use || o.time || '').toString().toLowerCase();
+            const stage = o.stage || o.time || '';
+            const use = stage.toString().toLowerCase();
             const isCooking = oPhase === 'cooking' || (!oPhase && !use.includes('bottle') && !use.includes('embotella') && !use.includes('priming'));
             if (isCooking) {
-                const item = searchItem(o.name, o.category || 'Aditivos');
+                const item = searchItem(o.name, o.category || 'Aditivos', stage);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
@@ -136,7 +141,8 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
         if (yeastObj) {
             const name = typeof yeastObj === 'string' ? yeastObj : (yeastObj.name || '');
             const amount = typeof yeastObj === 'string' ? 1 : (Number(yeastObj.amount) || 1);
-            const item = searchItem(name, 'Levadura');
+            const stage = typeof yeastObj === 'object' ? (yeastObj.stage || yeastObj.time || '') : '';
+            const item = searchItem(name, 'Levadura', stage);
             if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount, current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
         }
     }
@@ -145,19 +151,21 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
     if (phases.includes('fermenting_hops')) {
         (recipe.ingredients?.hops || []).forEach(h => {
             const hPhase = h.phase || '';
-            const use = (h.use || h.time || '').toString().toLowerCase();
+            const stage = h.stage || h.time || '';
+            const use = stage.toString().toLowerCase();
             const isFermenting = hPhase === 'fermenting' || (!hPhase && (use.includes('dry') || use.includes('ferment')));
             if (isFermenting) {
-                const item = searchItem(h.name, 'Lúpulo');
+                const item = searchItem(h.name, 'Lúpulo', stage);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: Math.round((Number(h.amount) || 0) * scaleFactor), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
 
         (recipe.ingredients?.others || []).forEach(o => {
             const oPhase = o.phase || '';
+            const stage = o.stage || o.time || '';
             const isFermenting = oPhase === 'fermenting';
             if (isFermenting) {
-                const item = searchItem(o.name, o.category || 'Aditivos');
+                const item = searchItem(o.name, o.category || 'Aditivos', stage);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
@@ -167,10 +175,11 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
     if (phases.includes('bottling')) {
         (recipe.ingredients?.others || []).forEach(o => {
             const oPhase = o.phase || '';
-            const use = (o.use || o.time || '').toString().toLowerCase();
+            const stage = o.stage || o.time || '';
+            const use = stage.toString().toLowerCase();
             const isBottling = oPhase === 'bottling' || (!oPhase && (use.includes('bottle') || use.includes('embotella') || use.includes('priming')));
             if (isBottling) {
-                const item = searchItem(o.name, o.category || 'Aditivos');
+                const item = searchItem(o.name, o.category || 'Aditivos', stage);
                 if (item) deductions.push({ ref: inventoryDocRef(uid, item.id), amount: parseFloat(((Number(o.amount) || 0) * scaleFactor).toFixed(4)), current: Number(item.stock), name: item.name, category: item.category, price: Number(item.price) || 0 });
             }
         });
@@ -242,8 +251,8 @@ export async function toggleIngredientConsumption(uid, batchId, ingredient, isCo
     const searchName = (ingredient.name || '').toLowerCase().trim();
     const batchRef = batchDocRef(uid, batchId);
 
-    // Sanitize key (unified)
-    const ingredientKey = `${ingredient.category}_${ingredient.name}`.replace(/[~*/\[\].#$]/g, '_');
+    // Sanitize key (unified: Includes stage/time for uniqueness) using central utility
+    const ingredientKey = getIngredientKey(ingredient);
 
     return await runTransaction(db, async (transaction) => {
         // 1. Get Batch

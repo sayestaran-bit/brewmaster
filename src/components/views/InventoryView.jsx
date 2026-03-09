@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp, Info, ListChecks, AlertTriangle } from 'lucide-react';
 import { useInventory } from '../../hooks/useInventory';
 import { useRecipes } from '../../hooks/useRecipes';
+import { useInventoryAlerts } from '../../hooks/useInventoryAlerts';
 import { formatCurrency } from '../../utils/formatters';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
@@ -17,6 +18,7 @@ export default function InventoryView() {
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
     const { recipes } = useRecipes();
     const { inventory, addItem, updateItem, deleteItem } = useInventory();
+    const { isLowStock } = useInventoryAlerts(inventory);
     const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
     const [showInvForm, setShowInvForm] = useState(false);
     const [isShoppingListOpen, setIsShoppingListOpen] = useState(false);
@@ -138,13 +140,6 @@ export default function InventoryView() {
                                 </thead>
                                 <tbody className="divide-y divide-line">
                                     {categoryItems.map((item) => {
-                                        const isLowStock = (item) => {
-                                            const stock = Number(item.stock);
-                                            if (item.category === 'Malta') return stock < 2;
-                                            if (item.category === 'Lúpulo' || item.category === 'Sales Minerales' || item.category === 'Aditivos') return stock < 100;
-                                            if (item.category === 'Levadura') return stock < 2;
-                                            return stock < 1;
-                                        };
                                         const low = isLowStock(item);
 
                                         return (

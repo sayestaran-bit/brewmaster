@@ -116,19 +116,26 @@ export async function callGemini(prompt, systemInstruction = "", isJson = false)
         });
 
         const contentType = response.headers.get("content-type");
+
+        // Si el servidor devuelve HTML en lugar de JSON, algo está muy mal (ej. 404 de Vercel o Vite)
         if (contentType && contentType.includes("text/html")) {
-            throw new Error("⚠️ El servidor de Inteligencia Artificial no está activo. Si estás en tu PC, debes correr la aplicación con 'vercel dev' en lugar de 'npm run dev'.");
+            const htmlText = await response.text();
+            console.error("❌ Gemini Proxy returned HTML instead of JSON:", htmlText.substring(0, 200));
+            throw new Error("El servidor de IA no respondió correctamente (404/HTML). Si estás en local, usa 'vercel dev'. Si es producción, verifica las rutas.");
         }
 
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error?.message || data.error || "Error al conectar con la API Proxy de Gemini");
+            // Extraer el mensaje de error de Google si viene en el proxy
+            const googleError = data.error?.message || data.error || null;
+            throw new Error(googleError || `Error ${response.status}: Fallo en la conexión con la IA`);
         }
 
         let textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!textResponse) {
-            throw new Error("Respuesta vacía de la Inteligencia Artificial");
+            console.error("❌ Gemini Response Missing Content:", data);
+            throw new Error("La IA no generó una respuesta válida para esta receta.");
         }
 
         if (isJson) {
@@ -139,18 +146,53 @@ export async function callGemini(prompt, systemInstruction = "", isJson = false)
         return textResponse;
 
     } catch (err) {
-        console.error("❌ Gemini Error:", err.message);
+        console.error("❌ Gemini Service Error:", err.message);
         throw err;
     }
 }
 
+import { getEffectivePhase } from '../utils/recipeUtils';
+
+// ... (fetchWithRetry and callGemini remain same)
+
 /**
  * Obtiene recomendaciones profesionales para una receta de cerveza.
+ * Envía la receta estructurada por fases para que la IA entienda mejor el proceso.
  *
  * @param {object} recipe - Objeto con los datos de la receta
  * @returns {Promise<string>} - Texto con las recomendaciones del IA
  */
 export async function getRecipeAdvice(recipe) {
-    const prompt = `Analiza detalladamente esta receta de cerveza y dame recomendaciones profesionales de mejora, posibles riesgos y consejos de fermentación. Sé muy conciso y directo.\nReceta: ${JSON.stringify(recipe)}`;
-    return await callGemini(prompt, "Eres un Maestro Cervecero experto.");
+    const structured = {
+        name: recipe.name,
+        category: recipe.category,
+        specs: { og: recipe.og, fg: recipe.fg, abv: recipe.abv, ibu: recipe.ibu },
+        phases: {
+            cooking: {
+                malts: recipe.ingredients?.malts || [],
+                hops: (recipe.ingredients?.hops || []).filter(h => getEffectivePhase(h) === 'cooking'),
+                others: (recipe.ingredients?.others || []).filter(o => getEffectivePhase(o) === 'cooking'),
+                steps: (recipe.steps || []).filter(s => getEffectivePhase(s) === 'cooking')
+            },
+            fermenting: {
+                yeast: recipe.ingredients?.yeast || '',
+                hops: (recipe.ingredients?.hops || []).filter(h => getEffectivePhase(h) === 'fermenting'),
+                others: (recipe.ingredients?.others || []).filter(o => getEffectivePhase(o) === 'fermenting'),
+                steps: (recipe.steps || []).filter(s => getEffectivePhase(s) === 'fermenting')
+            },
+            bottling: {
+                hops: (recipe.ingredients?.hops || []).filter(h => getEffectivePhase(h) === 'bottling'),
+                others: (recipe.ingredients?.others || []).filter(o => getEffectivePhase(o) === 'bottling'),
+                steps: (recipe.steps || []).filter(s => getEffectivePhase(s) === 'bottling')
+            }
+        }
+    };
+
+    const prompt = `Analiza detalladamente esta receta de cerveza estructurada por fases de producción.
+Dame recomendaciones profesionales de mejora, detecta posibles desequilibrios químicos (SRM, IBU, ABV) y da consejos críticos para la fermentación y envasado.
+Sé muy conciso, directo y usa un tono de Maestro Cervecero experimentado.
+
+Receta: ${JSON.stringify(structured)}`;
+
+    return await callGemini(prompt, "Eres un Maestro Cervecero experto que analiza recetas técnicas.");
 }

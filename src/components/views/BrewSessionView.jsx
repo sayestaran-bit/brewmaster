@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft, AlertTriangle, Activity, Package, Trash2, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, standardizeDate, formatTime, getFormattedDate } from '../../utils/formatters';
 import { calculateRecipeCost, calculateActualDeductedCost } from '../../utils/costCalculator';
+import { getEffectivePhase, getIngredientKey } from '../../utils/recipeUtils';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
 import { useActiveBatches } from '../../hooks/useActiveBatches';
@@ -227,7 +228,7 @@ export default function BrewSessionView() {
                         targetEndTime: newRunning ? now + (brewState.timeLeft * 1000) : null,
                         pausedAt: !newRunning ? now : null
                     },
-                    cooking_metrics: {} // FIX: Correct schema for metrics
+                    [`${currentPhase}_metrics`]: {} // FIX: Correct schema for metrics
                 };
                 const newId = await startBatch(initialBatch);
                 navigate(`/brew/${newId}?phase=cooking`, { replace: true });
@@ -534,22 +535,25 @@ export default function BrewSessionView() {
 
         if (currentPhase === 'cooking') {
             malts.forEach(m => allPhase.push({ ...m, category: 'Malta', logicalStage: 'Maceración' }));
-            hops.filter(h => h.phase === 'cooking' || !h.phase).forEach(h => {
+
+            hops.filter(h => getEffectivePhase(h) === 'cooking').forEach(h => {
                 const stage = (h.stage || h.time || '').toLowerCase();
                 const logicalStage = stage.includes('whirlpool') ? 'Whirlpool' : 'Hervor';
                 allPhase.push({ ...h, category: 'Lúpulo', logicalStage });
             });
-            others.filter(o => o.phase === 'cooking' || !o.phase).forEach(o => {
+
+            others.filter(o => getEffectivePhase(o) === 'cooking').forEach(o => {
                 const stage = (o.stage || o.time || '').toLowerCase();
                 const logicalStage = stage.includes('whirlpool') ? 'Whirlpool' : (stage.includes('maceraci') ? 'Maceración' : 'Hervor');
                 allPhase.push({ ...o, category: o.category || 'Aditivos', logicalStage });
             });
+
             if (yeast) allPhase.push({ ...(typeof yeast === 'object' ? yeast : { name: yeast, amount: 1 }), category: 'Levadura', logicalStage: 'Final de Cocción/Inoculación' });
         } else if (currentPhase === 'fermenting') {
-            hops.filter(h => h.phase === 'fermenting').forEach(h => allPhase.push({ ...h, category: 'Lúpulo', logicalStage: 'Dry Hop / Adiciones' }));
-            others.filter(o => o.phase === 'fermenting').forEach(o => allPhase.push({ ...o, category: o.category || 'Aditivos', logicalStage: 'Dry Hop / Adiciones' }));
+            hops.filter(h => getEffectivePhase(h) === 'fermenting').forEach(h => allPhase.push({ ...h, category: 'Lúpulo', logicalStage: 'Dry Hop / Adiciones' }));
+            others.filter(o => getEffectivePhase(o) === 'fermenting').forEach(o => allPhase.push({ ...o, category: o.category || 'Aditivos', logicalStage: 'Dry Hop / Adiciones' }));
         } else if (currentPhase === 'bottling') {
-            others.filter(o => o.phase === 'bottling').forEach(o => allPhase.push({ ...o, category: o.category || 'Aditivos', logicalStage: 'Envasado' }));
+            others.filter(o => getEffectivePhase(o) === 'bottling').forEach(o => allPhase.push({ ...o, category: o.category || 'Aditivos', logicalStage: 'Envasado' }));
         }
 
         // Sorting ingredients within phase
@@ -710,7 +714,7 @@ export default function BrewSessionView() {
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             {ings.map((ing, idx) => {
-                                                const key = `${ing.category}_${ing.name}`.replace(/[~*/\[\].#$]/g, '_');
+                                                const key = getIngredientKey(ing);
                                                 const isConsumed = !!batch.consumedIngredients?.[key];
                                                 const scaleFactor = targetVolume / (recipe.targetVolume || 20);
                                                 const scaledAmount = ing.category === 'Lúpulo' || ing.category === 'Levadura'

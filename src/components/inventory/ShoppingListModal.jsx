@@ -75,6 +75,17 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
                     needed[key].amount += (Number(y.amount) || 1) * scaleFactor;
                 }
             }
+            // Otros (Aditivos / Sales)
+            if (recipe.ingredients?.others) {
+                recipe.ingredients.others.forEach(o => {
+                    const key = (o.name || '').trim().toLowerCase();
+                    if (!key) return;
+                    // Use getEffectivePhase for consistency if needed, but here we just need category
+                    const category = o.category || 'Aditivos';
+                    if (!needed[key]) needed[key] = { name: o.name, amount: 0, unit: o.unit || 'un', category };
+                    needed[key].amount += (Number(o.amount) || 0) * scaleFactor;
+                });
+            }
         });
 
         // Comparar con inventario

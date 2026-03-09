@@ -19,21 +19,24 @@ const LOW_STOCK_THRESHOLDS = {
  * @returns {{ lowStockItems: Array, hasAlerts: boolean, alertCount: number }}
  */
 export function useInventoryAlerts(inventory) {
+    const isLowStock = (item) => {
+        const threshold = LOW_STOCK_THRESHOLDS[item.category];
+        if (!threshold) return false;
+        return Number(item.stock) < threshold.value;
+    };
+
     return useMemo(() => {
         const safeInventory = Array.isArray(inventory) ? inventory : [];
 
         const lowStockItems = safeInventory
-            .filter((item) => {
-                const threshold = LOW_STOCK_THRESHOLDS[item.category];
-                if (!threshold) return false;
-                return Number(item.stock) < threshold.value;
-            })
+            .filter(isLowStock)
             .sort((a, b) => Number(a.stock) - Number(b.stock));
 
         return {
             lowStockItems,
             hasAlerts: lowStockItems.length > 0,
             alertCount: lowStockItems.length,
+            isLowStock
         };
     }, [inventory]);
 }

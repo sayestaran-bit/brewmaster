@@ -140,6 +140,39 @@ export default function HistoryView() {
         return true;
     });
 
+    // Analíticas Rápidas
+    const analytics = useMemo(() => {
+        if (history.length === 0) return null;
+        const completed = history.filter(h => h.status === 'Completada');
+        const abandoned = history.filter(h => h.status === 'Abandonada');
+
+        let totalDeviation = 0;
+        let deviationCount = 0;
+
+        history.forEach(h => {
+            ['cooking', 'fermenting', 'bottling'].forEach(p => {
+                const metrics = h[`${p}_metrics`] || (p === 'cooking' ? h.stepsMetrics : null);
+                if (metrics) {
+                    Object.values(metrics).forEach(m => {
+                        if (m.actual && m.planned) {
+                            totalDeviation += (m.actual / m.planned);
+                            deviationCount++;
+                        }
+                    });
+                }
+            });
+        });
+
+        const avgEfficiency = deviationCount > 0 ? (totalDeviation / deviationCount) * 100 : 100;
+
+        return {
+            completedCount: completed.length,
+            abandonedCount: abandoned.length,
+            avgEfficiency: Math.round(avgEfficiency),
+            successRate: Math.round((completed.length / history.length) * 100)
+        };
+    }, [history]);
+
     return (
         <div className="space-y-8 animate-fadeIn">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-line pb-4 gap-4">
@@ -180,6 +213,32 @@ export default function HistoryView() {
                     </button>
                 </div>
             </div>
+
+            {analytics && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-slideDown">
+                    <div className="bg-panel p-5 rounded-2xl border border-line shadow-sm">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Efectividad</span>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{analytics.successRate}%</span>
+                        </div>
+                    </div>
+                    <div className="bg-panel p-5 rounded-2xl border border-line shadow-sm">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Eficiencia de Tiempos</span>
+                        <div className="flex items-baseline gap-1">
+                            <span className={`text-2xl font-black ${analytics.avgEfficiency > 110 ? 'text-amber-500' : 'text-blue-500'}`}>{analytics.avgEfficiency}%</span>
+                            <span className="text-[10px] text-muted font-bold">vs meta</span>
+                        </div>
+                    </div>
+                    <div className="bg-panel p-5 rounded-2xl border border-line shadow-sm">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Lotes Completados</span>
+                        <span className="text-2xl font-black text-content">{analytics.completedCount}</span>
+                    </div>
+                    <div className="bg-panel p-5 rounded-2xl border border-line shadow-sm">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Lotes Abandonados</span>
+                        <span className="text-2xl font-black text-red-500">{analytics.abandonedCount}</span>
+                    </div>
+                </div>
+            )}
 
             {filteredHistory.length === 0 ? (
                 <div className="bg-panel p-12 rounded-3xl text-center shadow-sm border border-line">
@@ -344,13 +403,13 @@ export default function HistoryView() {
                                                             </div>
                                                             <div className="w-full bg-line h-1 rounded-full overflow-hidden flex">
                                                                 <div
-                                                                    className={`h-full ${m.actual > m.planned * 1.1 ? 'bg-red-500' : 'bg-blue-500'}`}
+                                                                    className={`h-full ${m.actual > m.planned * 1.2 ? 'bg-red-500' : m.actual > m.planned * 1.05 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                                                                     style={{ width: `${Math.min(100, (m.actual / (m.planned || 1)) * 100)}%` }}
                                                                 />
                                                             </div>
                                                             <div className="flex justify-between mt-1 text-[9px] font-bold text-muted uppercase">
                                                                 <span>Meta: {m.planned >= 3600 ? `${(m.planned / 3600).toFixed(1)}h` : `${Math.floor(m.planned / 60)}m`}</span>
-                                                                <span className={m.actual > m.planned * 1.1 ? 'text-red-500' : 'text-emerald-500'}>
+                                                                <span className={m.actual > m.planned * 1.2 ? 'text-red-500' : m.actual > m.planned * 1.05 ? 'text-amber-500' : 'text-emerald-500'}>
                                                                     {m.actual ? `${Math.round((m.actual / (m.planned || 1)) * 100)}%` : '-'}
                                                                 </span>
                                                             </div>
