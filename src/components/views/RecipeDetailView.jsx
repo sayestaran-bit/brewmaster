@@ -1,7 +1,7 @@
 // /src/components/views/RecipeDetailView.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X, Trash2 } from 'lucide-react';
 import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
 import { formatCurrency, getFormattedDate } from '../../utils/formatters';
 import { calculateRecipeCost } from '../../utils/costCalculator';
@@ -17,7 +17,7 @@ export default function RecipeDetailView() {
     const { currentUser } = useAuth();
     const isGuest = currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
-    const { recipes } = useRecipes();
+    const { recipes, deleteRecipe } = useRecipes();
     const { inventory } = useInventory();
 
     const [selectedRecipe, setSelectedRecipe] = useState(null);
@@ -68,6 +68,22 @@ export default function RecipeDetailView() {
             alert("Error al iniciar el lote: " + error.message);
         } finally {
             setIsStartingBrew(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (isGuest) {
+            alert(guestTooltip);
+            return;
+        }
+        if (window.confirm(`¿Seguro que deseas eliminar la receta: ${selectedRecipe.name}? Esta acción no se puede deshacer.`)) {
+            try {
+                await deleteRecipe(selectedRecipe.id);
+                navigate('/recipes');
+            } catch (error) {
+                console.error("Error deleting recipe:", error);
+                alert("Error al eliminar la receta: " + error.message);
+            }
         }
     };
 
@@ -179,14 +195,24 @@ export default function RecipeDetailView() {
                 <button onClick={() => navigate('/recipes')} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 font-bold bg-panel px-4 py-2 rounded-xl transition-all shadow-sm border border-line hover:-translate-x-1">
                     <ArrowLeft size={20} /> Mis Recetas
                 </button>
-                <button
-                    onClick={() => { if (!isGuest) navigate(`/recipes/${id}/edit`); else alert(guestTooltip); }}
-                    disabled={isGuest}
-                    title={isGuest ? guestTooltip : undefined}
-                    className="flex items-center gap-2 text-white font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                    <Edit3 size={18} /> Editar Receta
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => { if (!isGuest) navigate(`/recipes/${id}/edit`); else alert(guestTooltip); }}
+                        disabled={isGuest}
+                        title={isGuest ? guestTooltip : undefined}
+                        className="flex items-center gap-2 text-white font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Edit3 size={18} /> Editar
+                    </button>
+                    <button
+                        onClick={handleDelete}
+                        disabled={isGuest}
+                        title={isGuest ? guestTooltip : undefined}
+                        className="flex items-center gap-2 text-red-500 font-bold bg-red-500/10 hover:bg-red-500/20 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Trash2 size={18} /> Eliminar
+                    </button>
+                </div>
             </div>
 
             {/* HEADER DINÁMICO */}

@@ -89,8 +89,10 @@ export const initialRecipes = [
       hops: [
         { name: "Magnum", amount: 15, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking" },
         { name: "Galaxy", amount: 80, unit: 'g', time: "30 min", stage: "Whirlpool a 78°C", phase: "cooking" },
-        { name: "Citra", amount: 40, unit: 'g', time: "30 min", stage: "Whirlpool a 78°C", phase: "cooking" },
-        { name: "Galaxy", amount: 100, unit: 'g', time: "Día 4", stage: "Dry Hop", phase: "fermenting" }
+        { name: "Citra", amount: 40, unit: 'g', time: "30 min", stage: "Whirlpool a 78°C", phase: "cooking" }
+      ],
+      others: [
+        { name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos' }
       ],
       yeast: { name: 'Lallemand Verdant IPA', amount: 2, unit: 'sobres' }, water: { strike: 25, sparge: 12 }
     },
@@ -115,13 +117,17 @@ export const initialRecipes = [
     targetVolume: 20, og: 1.100, fg: 1.022, abv: 10.5, ibu: 65, colorSRM: 7,
     waterProfile: { Ca: 140, Mg: 15, SO4: 100, Cl: 250, HCO3: 50 },
     ingredients: {
-      malts: [{ name: "Malta Pale Ale", amount: 8.0, unit: 'kg' }, { name: "Avena en hojuelas", amount: 1.5, unit: 'kg' }, { name: "Trigo en hojuelas", amount: 1.0, unit: 'kg' }, { name: "Maltodextrina", amount: 0.5, unit: 'kg' }],
+      malts: [{ name: "Malta Pale Ale", amount: 8.0, unit: 'kg' }, { name: "Avena en hojuelas", amount: 1.5, unit: 'kg' }, { name: "Trigo en hojuelas", amount: 1.0, unit: 'kg' }],
       hops: [
         { name: "Columbus", amount: 20, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking" },
         { name: "Citra", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool", phase: "cooking" },
         { name: "Mosaic", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool", phase: "cooking" },
         { name: "Galaxy", amount: 150, unit: 'g', time: "Día 5", stage: "Dry Hop 1", phase: "fermenting" },
         { name: "Citra", amount: 100, unit: 'g', time: "Día 10", stage: "Dry Hop 2", phase: "fermenting" }
+      ],
+      others: [
+        { name: "Maltodextrina", amount: 0.5, unit: "kg", phase: "cooking", category: "Aditivos" },
+        { name: "Nutriente Levadura", amount: 5, unit: "g", phase: "cooking", category: "Aditivos" }
       ],
       yeast: { name: 'Lallemand Verdant IPA', amount: 3, unit: 'sobres' }, water: { strike: 28, sparge: 10 }
     },
@@ -146,6 +152,9 @@ export const initialRecipes = [
     waterProfile: { Ca: 50, Mg: 10, SO4: 50, Cl: 50, HCO3: 150 },
     ingredients: {
       malts: [{ name: "Malta Pale Ale", amount: 4.0, unit: 'kg' }, { name: "Avena en hojuelas", amount: 0.8, unit: 'kg' }, { name: "Cebada Tostada", amount: 0.3, unit: 'kg' }, { name: "Malta Chocolate", amount: 0.2, unit: 'kg' }],
+      others: [
+        { name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos' }
+      ],
       hops: [{ name: "Fuggles", amount: 40, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking" }],
       yeast: { name: 'S-04', amount: 1, unit: 'sobre' }, water: { strike: 18, sparge: 14 }
     },
@@ -169,6 +178,9 @@ export const initialRecipes = [
       hops: [
         { name: 'Magnum', amount: 15, unit: 'g', time: '60 min', stage: 'Hervor', phase: "cooking" },
         { name: 'Saaz', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking" }
+      ],
+      others: [
+        { name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos' }
       ],
       yeast: { name: 'W-34/70', amount: 2, unit: 'sobres' }, water: { strike: 18, sparge: 14 }
     },
@@ -194,13 +206,16 @@ export const initialRecipes = [
         { name: 'Cascade', amount: 20, unit: 'g', time: '60 min', stage: 'Hervor', phase: "cooking" },
         { name: 'Cascade', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking" }
       ],
+      others: [
+        { name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos' }
+      ],
       yeast: { name: 'US-05', amount: 1, unit: 'sobre' }, water: { strike: 18, sparge: 14 }
     },
     steps: [
       { id: 1, phase: 'cooking', title: "Maceración Balanceada", desc: "66°C por 60 min. Equilibrio maltas.", details: "1. Integra granos a 66°C.\n2. Buscamos soporte de malta para el lúpulo.", duration: 60 },
       { id: 2, phase: 'cooking', title: "Hervor Citrico", desc: "60 min. Adiciones de Cascade.", details: "1. Cascade al inicio para amargor.\n2. Cascade a falta de 15 min para sabor a pomelo.", duration: 60 },
       { id: 3, phase: 'fermenting', title: "Fermentación Neutra", desc: "18°C con US-05.", details: "1. Mantén fría la fermentación para no generar frutado que compita con el caramelo.", duration: 120 },
-      { id: 4, phase: 'bottling', title: "Envasado Brillante", desc: "Envasar a 2.3 volúmenes.", duration: 40 }
+      { id: 4, phase: 'bottling', title: "Envasado Brillante", desc: "Envasar a 2.3 volúmenes con purga.", details: "1. Enfría a 2°C para clarificar.\n2. Envasa con 6-7g/L de azúcar o carbonatación forzada.\n3. Esta cerveza es mejor después de 2 semanas de acondicionamiento.", duration: 40 }
     ], tips: [
       { title: "El Truco del Color", desc: "50g de cebada tostada solo dan color rojizo sin sabor a café. No los omitas." }
     ], modifications: []
@@ -219,7 +234,7 @@ export const initialInventory = [
   { id: 'inv-m7', category: 'Malta', name: 'Carapils', stock: 2, unit: 'kg', price: 2200 },
   { id: 'inv-m8', category: 'Malta', name: 'Caramelo 60L', stock: 3, unit: 'kg', price: 2200 },
   { id: 'inv-m9', category: 'Malta', name: 'Melanoidina', stock: 1, unit: 'kg', price: 3000 },
-  { id: 'inv-m10', category: 'Malta', name: 'Maltodextrina', stock: 1, unit: 'kg', price: 4000 },
+  { id: 'inv-m10', category: 'Aditivos', name: 'Maltodextrina', stock: 1, unit: 'kg', price: 4000 },
 
   // LÚPULOS
   { id: 'inv-h1', category: 'Lúpulo', name: 'Citra', stock: 500, unit: 'g', price: 80 },

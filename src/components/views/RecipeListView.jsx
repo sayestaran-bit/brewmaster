@@ -254,7 +254,12 @@ export default function RecipeListView() {
             return;
         }
         if (window.confirm(`¿Seguro que deseas eliminar la receta: ${recipe.name}?`)) {
-            await deleteRecipe(recipe.id);
+            try {
+                await deleteRecipe(recipe.id);
+            } catch (error) {
+                console.error("Error deleting recipe:", error);
+                alert("No se pudo eliminar la receta: " + error.message);
+            }
         }
     };
 

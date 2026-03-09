@@ -41,7 +41,7 @@ export default function RecipeCard({ recipe, history = [], feasibility = null, o
             {onDelete && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onDelete(recipe); }}
-                    className="absolute top-4 right-4 text-gray-300 dark:text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1 bg-panel rounded-md shadow-sm"
+                    className="absolute top-4 right-4 text-slate-300 dark:text-slate-700 hover:text-red-500 transition-colors z-10 p-2 bg-panel/50 backdrop-blur-sm rounded-xl shadow-sm border border-line"
                     title="Eliminar receta"
                 >
                     <Trash2 size={18} />

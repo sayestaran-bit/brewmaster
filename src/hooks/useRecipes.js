@@ -44,7 +44,7 @@ export function useRecipes() {
     }, [currentUser]);
 
     const updateRecipe = useCallback(async (recipeId, data) => {
-        const { valid, errors } = validateRecipe(data);
+        const { valid, errors } = validateRecipe(data, true);
         if (!valid) throw new Error(errors.join(' '));
         await _updateRecipe(currentUser.uid, recipeId, data);
     }, [currentUser]);

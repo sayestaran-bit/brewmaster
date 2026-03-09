@@ -98,23 +98,21 @@ export function checkFeasibility(recipe, inventory, targetVolume) {
 // VALIDACIÓN DE RECETA (antes de guardar)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Valida los campos obligatorios de una receta antes de guardarla.
- * @param {object} recipeData
- * @returns {{ valid: boolean, errors: string[] }}
- */
-export function validateRecipe(recipeData) {
+export function validateRecipe(recipeData, isPartial = false) {
     const errors = [];
 
-    if (!recipeData?.name?.trim())
+    // Si es parcial, solo validamos lo que viene. Si es completo, todo es obligatorio.
+    const check = (field) => !isPartial || (field in recipeData);
+
+    if (check('name') && !recipeData?.name?.trim())
         errors.push('El nombre de la receta es obligatorio.');
-    if (!recipeData?.category?.trim())
+    if (check('category') && !recipeData?.category?.trim())
         errors.push('La categoría es obligatoria.');
-    if (!recipeData?.targetVolume || Number(recipeData.targetVolume) <= 0)
+    if (check('targetVolume') && (!recipeData?.targetVolume || Number(recipeData.targetVolume) <= 0))
         errors.push('El volumen objetivo debe ser mayor a 0.');
-    if (!Array.isArray(recipeData?.ingredients?.malts) || recipeData.ingredients.malts.length === 0)
+    if (check('ingredients') && (!Array.isArray(recipeData?.ingredients?.malts) || recipeData.ingredients.malts.length === 0))
         errors.push('La receta debe tener al menos una malta.');
-    if (!Array.isArray(recipeData?.steps) || recipeData.steps.length === 0)
+    if (check('steps') && (!Array.isArray(recipeData?.steps) || recipeData.steps.length === 0))
         errors.push('La receta debe tener al menos un paso.');
 
     return { valid: errors.length === 0, errors };
