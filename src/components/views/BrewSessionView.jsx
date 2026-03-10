@@ -42,6 +42,8 @@ function ElapsedTimer({ startTime, label, colorClass = "text-slate-400" }) {
     );
 }
 
+const getMillis = (val) => val && typeof val.toMillis === 'function' ? val.toMillis() : (val || Date.now());
+
 export default function BrewSessionView() {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
@@ -65,6 +67,7 @@ export default function BrewSessionView() {
         isRunning: false
     });
     const [productionNotes, setProductionNotes] = useState('');
+    const [modalConfig, setModalConfig] = useState(null); // { title, message, onConfirm, danger }
 
     const lockRunningRef = useRef(null);
 
@@ -123,7 +126,8 @@ export default function BrewSessionView() {
                     dbIsRunning = foundBatch.timer.isRunning;
                     if (dbIsRunning && foundBatch.timer.targetEndTime) {
                         const now = Date.now();
-                        initialTime = Math.max(0, Math.floor((foundBatch.timer.targetEndTime - now) / 1000));
+                        const targetMs = getMillis(foundBatch.timer.targetEndTime);
+                        initialTime = Math.max(0, Math.floor((targetMs - now) / 1000));
                     } else if (foundBatch.timeLeft !== undefined) {
                         const isSameStep = brewState.stepIdx === safeIdx;
                         if (Number(foundBatch.timeLeft) > 0 || isSameStep) {
@@ -177,7 +181,8 @@ export default function BrewSessionView() {
             const now = Date.now();
 
             if (batch?.timer?.targetEndTime) {
-                const remaining = Math.max(0, Math.floor((batch.timer.targetEndTime - now) / 1000));
+                const targetMs = getMillis(batch.timer.targetEndTime);
+                const remaining = Math.max(0, Math.floor((targetMs - now) / 1000));
                 setBrewState(prev => {
                     if (remaining <= 0 && prev.isRunning) return { ...prev, timeLeft: 0, isRunning: false };
                     if (remaining !== prev.timeLeft) return { ...prev, timeLeft: remaining };
@@ -305,6 +310,8 @@ export default function BrewSessionView() {
     };
 
     const handleNextStep = async () => {
+        console.log("⏭️ Intentando avanzar paso. Actual:", safeStepIdx, "Total:", stepsArray.length);
+        const isLastStep = safeStepIdx === stepsArray.length - 1;
         const now = Date.now();
         if (batch) {
             const rawMetrics = batch[`${currentPhase}_metrics`] || {};
@@ -322,76 +329,99 @@ export default function BrewSessionView() {
 
         if (isLastStep) {
             if (currentPhase === 'cooking') {
-                if (window.confirm(`¿Terminaste el día de cocción para ${recipe.name}? Esto descontará insumos restantes y pasará a Fermentación.`)) {
-                    try {
-                        const actualDeductions = await deductBatch(
-                            recipe,
-                            targetVolume,
-                            ['cooking', 'fermenting_yeast'],
-                            batch?.consumedIngredients || {}
-                        );
-                        const { addedCost, warnings } = calculateActualDeductedCost(actualDeductions);
-                        const updateData = {
-                            status: 'Fermentando',
-                            phase: 'fermenting',
-                            currentStep: 0,
-                            'phaseTimestamps.fermentationStart': now,
-                            totalCost: addedCost || 0,
-                            historyNotes: warnings,
-                            'timer.isRunning': false,
-                            'timer.targetEndTime': null,
-                            'timer.pausedAt': null,
-                            timeLeft: 0
-                        };
-                        if (batch) await updateBatchField(batch.id, updateData);
-                        navigate('/active');
-                    } catch (error) {
-                        alert("Error: " + error.message);
+                setModalConfig({
+                    title: "Terminar Día de Cocción",
+                    message: `¿Terminaste el día de cocción para ${recipe.name}? Esto descontará insumos del inventario y el lote pasará a fase de Fermentación.`,
+                    onConfirm: async () => {
+                        try {
+                            const actualDeductions = await deductBatch(
+                                recipe,
+                                targetVolume,
+                                ['cooking', 'fermenting_yeast'],
+                                batch?.consumedIngredients || {}
+                            );
+                            const { addedCost, warnings } = calculateActualDeductedCost(actualDeductions);
+                            const updateData = {
+                                status: 'Fermentando',
+                                phase: 'fermenting',
+                                currentStep: 0,
+                                'phaseTimestamps.fermentationStart': now,
+                                totalCost: (batch?.totalCost || 0) + (addedCost || 0),
+                                historyNotes: warnings,
+                                'timer.isRunning': false,
+                                'timer.targetEndTime': null,
+                                'timer.pausedAt': null,
+                                timeLeft: 0
+                            };
+                            if (batch) await updateBatchField(batch.id, updateData);
+                            setModalConfig({
+                                title: "¡Cocción Exitosa!",
+                                message: "El lote ha pasado a fermentación correctamente.",
+                                onConfirm: () => navigate('/active')
+                            });
+                        } catch (error) {
+                            console.error("Error al terminar cocción:", error);
+                            alert("Error: " + error.message);
+                        }
                     }
-                }
+                });
             } else if (currentPhase === 'fermenting') {
                 if (!batch) return;
-                if (window.confirm(`¿Empezar embotellado de ${recipe.name}?`)) {
-                    try {
-                        const phasesToDeduct = ['bottling'];
-                        if (!batch.deductedHops) phasesToDeduct.push('fermenting_hops');
-                        const actualDeductions = await deductBatch(
-                            recipe,
-                            batch.volume,
-                            phasesToDeduct,
-                            batch?.consumedIngredients || {}
-                        );
-                        const { addedCost, warnings } = calculateActualDeductedCost(actualDeductions);
-                        await updateBatchField(batch.id, {
-                            totalCost: (batch.totalCost || 0) + addedCost,
-                            historyNotes: [...(batch.historyNotes || []), ...warnings],
-                            currentStep: 0, // FIX: Reset step for the next phase
-                            timeLeft: 0 // FIX: Reset timer for the next phase
-                        });
-                        await transitionBatchPhase(batch.id, 'bottling');
-                        navigate('/active');
-                    } catch (error) {
-                        alert("Error: " + error.message);
+                setModalConfig({
+                    title: "Pasar a Envasado",
+                    message: `¿Deseas iniciar la fase de acondicionamiento/embotellado de ${recipe.name}?`,
+                    onConfirm: async () => {
+                        try {
+                            const phasesToDeduct = ['bottling'];
+                            if (!batch.deductedHops) phasesToDeduct.push('fermenting_hops');
+                            const actualDeductions = await deductBatch(
+                                recipe,
+                                batch.volume,
+                                phasesToDeduct,
+                                batch?.consumedIngredients || {}
+                            );
+                            const { addedCost, warnings } = calculateActualDeductedCost(actualDeductions);
+                            await updateBatchField(batch.id, {
+                                totalCost: (batch.totalCost || 0) + addedCost,
+                                historyNotes: [...(batch.historyNotes || []), ...warnings],
+                                currentStep: 0,
+                                timeLeft: 0
+                            });
+                            await transitionBatchPhase(batch.id, 'bottling');
+                            navigate('/active');
+                        } catch (error) {
+                            alert("Error: " + error.message);
+                        }
                     }
-                }
+                });
             } else if (currentPhase === 'bottling') {
                 if (!batch) return;
-                if (window.confirm(`¿Lote acondicionado definitivo?`)) {
-                    try {
-                        const daysElapsedTotal = Math.floor((now - batch.timestamp) / 86400000);
-                        const newHistoryItem = {
-                            ...batch,
-                            dateBottled: getFormattedDate(),
-                            notes: `Completada en ${daysElapsedTotal} días.\n` + (batch.historyNotes?.join('\n') || ''),
-                            productionNotes: productionNotes,
-                            status: 'Completada'
-                        };
-                        await completeBatch(batch.id, newHistoryItem);
-                        navigate('/history');
-                    } catch (error) {
-                        alert("Error: " + error);
+                setModalConfig({
+                    title: "Finalizar Lote",
+                    message: `¿El lote está acondicionado y listo para consumo? Se moverá al historial definitivo.`,
+                    onConfirm: async () => {
+                        try {
+                            const startTs = getMillis(batch.timestamp || batch.startDate || batch.date);
+                            const daysElapsedTotal = Math.floor((now - startTs) / 86400000);
+                            const newHistoryItem = {
+                                ...batch,
+                                dateBottled: getFormattedDate(),
+                                notes: `Completada en ${daysElapsedTotal} días.\n` + (batch.historyNotes?.join('\n') || ''),
+                                productionNotes: productionNotes,
+                                status: 'Completada'
+                            };
+                            await completeBatch(batch.id, newHistoryItem);
+                            setModalConfig({
+                                title: "¡Felicidades!",
+                                message: "Lote completado con éxito. ¡A brindar!",
+                                onConfirm: () => navigate('/history')
+                            });
+                        } catch (error) {
+                            console.error("Error al completar lote:", error);
+                            alert("Error: " + error);
+                        }
                     }
-                }
+                });
             }
         } else {
             const nextIdx = safeStepIdx + 1;
@@ -429,22 +459,33 @@ export default function BrewSessionView() {
         navigate(labels.backUrl);
     };
 
-    const handleAbandon = async () => {
+    const handleAbandon = async (e) => {
+        if (e) e.stopPropagation();
+        console.log("🗑️ Solicitud de ABANDONAR lote detectada...");
         if (!batch) { navigate(labels.backUrl); return; }
-        if (window.confirm("¿Seguro que deseas ABANDONAR este lote en proceso?")) {
-            try {
-                const newHistoryItem = {
-                    ...batch,
-                    notes: `Lote abandonado en fase de ${currentPhase}.`,
-                    productionNotes: productionNotes,
-                    status: 'Abandonada'
-                };
-                await completeBatch(batch.id, newHistoryItem);
-                navigate('/history');
-            } catch (error) {
-                alert("Error al abandonar lote: " + error);
+
+        setModalConfig({
+            title: "Abandonar Lote",
+            message: "¿Estás seguro de que deseas abandonar este lote en proceso? Se guardará en el historial como 'Abandonada'.",
+            danger: true,
+            onConfirm: async () => {
+                try {
+                    const startTs = getMillis(batch.timestamp || batch.startDate || batch.date);
+                    const newHistoryItem = {
+                        ...batch,
+                        notes: `Lote abandonado en fase de ${currentPhase}.`,
+                        productionNotes: productionNotes,
+                        status: 'Abandonada',
+                        abandonedAt: Date.now()
+                    };
+                    await completeBatch(batch.id, newHistoryItem);
+                    navigate('/history');
+                } catch (error) {
+                    console.error("Error al abandonar lote:", error);
+                    alert("Error al abandonar lote: " + error);
+                }
             }
-        }
+        });
     };
 
     const getPhaseLabels = () => {
@@ -800,6 +841,40 @@ export default function BrewSessionView() {
                     {isLastStep ? <>{labels.btnIcon} {labels.btnText}</> : <>Siguiente Paso <SkipForward size={28} /></>}
                 </button>
             </div>
-        </div >
+
+            {/* ── MODAL DE CONFIRMACIÓN CUSTOM ───────────────── */}
+            {modalConfig && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 min-w-full min-h-full">
+                    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setModalConfig(null)} />
+                    <div className="bg-panel border border-line rounded-3xl p-8 max-w-md w-full relative z-10 shadow-2xl animate-scaleIn">
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 ${modalConfig.danger ? 'bg-red-500/20 text-red-500' : 'bg-amber-500/20 text-amber-500'}`}>
+                            {modalConfig.danger ? <Trash2 size={32} /> : <AlertTriangle size={32} />}
+                        </div>
+                        <h3 className="text-2xl font-black text-content mb-3">{modalConfig.title}</h3>
+                        <p className="text-muted font-medium mb-8 leading-relaxed">
+                            {modalConfig.message}
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setModalConfig(null)}
+                                className="flex-1 bg-surface hover:bg-black/5 dark:hover:bg-white/5 text-content font-bold py-4 rounded-xl border border-line transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const callback = modalConfig.onConfirm;
+                                    setModalConfig(null);
+                                    if (callback) callback();
+                                }}
+                                className={`flex-1 text-white font-black py-4 rounded-xl shadow-lg transition-all hover:-translate-y-1 ${modalConfig.danger ? 'bg-red-500 hover:bg-red-600' : 'bg-amber-500 hover:bg-amber-600'}`}
+                            >
+                                Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

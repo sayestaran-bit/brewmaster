@@ -16,7 +16,7 @@ export default function RecipeDetailView() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { currentUser } = useAuth();
-    const isGuest = currentUser?.isAnonymous;
+    const isGuest = false; // Deshabilitado temporalmente para pruebas locales: currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
     const { recipes, deleteRecipe } = useRecipes();
     const { inventory } = useInventory();

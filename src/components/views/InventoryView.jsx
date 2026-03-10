@@ -14,7 +14,7 @@ import ShoppingListModal from '../inventory/ShoppingListModal';
 export default function InventoryView() {
     const navigate = useNavigate();
     const { currentUser } = useAuth();
-    const isGuest = currentUser?.isAnonymous;
+    const isGuest = false; // Deshabilitado temporalmente para pruebas locales: currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
     const { recipes } = useRecipes();
     const { inventory, addItem, updateItem, deleteItem } = useInventory();

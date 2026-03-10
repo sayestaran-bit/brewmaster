@@ -13,11 +13,13 @@ function LiveTimer({ batch }) {
 
     React.useEffect(() => {
         const calculateTime = () => {
-            if (!batch.timer?.isRunning || !batch.timer?.targetEndTime) {
+            const target = batch.timer?.targetEndTime;
+            if (!batch.timer?.isRunning || !target) {
                 return batch.timeLeft || 0;
             }
+            const targetMs = typeof target.toMillis === 'function' ? target.toMillis() : target;
             const now = Date.now();
-            return Math.max(0, Math.floor((batch.timer.targetEndTime - now) / 1000));
+            return Math.max(0, Math.floor((targetMs - now) / 1000));
         };
 
         setTimeLeft(calculateTime());
@@ -124,7 +126,8 @@ export default function ActiveBatchesView() {
     const handleCompleteBatch = async (batch) => {
         if (window.confirm(`¿Lote acondicionado? Mover ${batch.recipeName} al Historial definitivo.`)) {
             try {
-                const daysElapsedTotal = Math.floor((Date.now() - batch.timestamp) / (1000 * 60 * 60 * 24));
+                const startT = getMillis(batch.timestamp || batch.startDate || batch.date);
+                const daysElapsedTotal = Math.floor((Date.now() - startT) / (1000 * 60 * 60 * 24));
                 const newHistoryItem = {
                     ...batch,
                     dateBrewed: batch.dateBrewed || batch.date,
@@ -143,7 +146,8 @@ export default function ActiveBatchesView() {
                 alert("¡Lote enviado al historial!");
                 navigate('/history');
             } catch (error) {
-                alert("Error al completar lote: " + error);
+                console.error("❌ Error al completar lote:", error);
+                alert("Error al completar lote: " + (error.message || error));
             }
         }
     };
@@ -284,17 +288,26 @@ export default function ActiveBatchesView() {
                             </button>
                         )}
                         <button
-                            onClick={async () => {
+                            onClick={async (e) => {
+                                e.stopPropagation();
+                                console.log("🗑️ Iniciando proceso de abandono para lote:", batch.id);
                                 if (window.confirm("¿Seguro que deseas ABANDONAR este lote? Se guardará en el historial como 'Abandonada' conservando tu registro de costos.")) {
-                                    const daysElapsedTotal = Math.floor((Date.now() - batch.timestamp) / (1000 * 60 * 60 * 24));
-                                    const historyEntry = {
-                                        ...batch,
-                                        dateBrewed: batch.dateBrewed || batch.date,
-                                        date: batch.dateBrewed || batch.date,
-                                        notes: `Lote abandonado en el Día ${daysElapsedTotal} de proceso.`,
-                                        status: 'Abandonada'
-                                    };
-                                    await discardBatch(batch.id, historyEntry);
+                                    try {
+                                        const startTs = getMillis(batch.timestamp || batch.startDate || batch.date);
+                                        const daysElapsedTotal = Math.floor((Date.now() - startTs) / (1000 * 60 * 60 * 24));
+                                        const historyEntry = {
+                                            ...batch,
+                                            dateBrewed: batch.dateBrewed || batch.date,
+                                            date: batch.dateBrewed || batch.date,
+                                            notes: `Lote abandonado en el Día ${daysElapsedTotal} de proceso.`,
+                                            status: 'Abandonada'
+                                        };
+                                        await discardBatch(batch.id, historyEntry);
+                                        alert("Lote abandonado.");
+                                    } catch (err) {
+                                        console.error("Error al abandonar lote:", err);
+                                        alert("No se pudo abandonar el lote: " + err.message);
+                                    }
                                 }
                             }}
                             className="bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-500 font-bold py-3 rounded-xl transition-colors w-full flex items-center justify-center gap-2"

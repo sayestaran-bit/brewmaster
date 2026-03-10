@@ -49,7 +49,7 @@ import EmptyState from '../ui/EmptyState';
 export default function RecipeListView() {
     const navigate = useNavigate();
     const { currentUser } = useAuth();
-    const isGuest = currentUser ? currentUser.isAnonymous : true;
+    const isGuest = false; // Deshabilitado temporalmente para pruebas locales: currentUser ? currentUser.isAnonymous : true;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
 
     const { recipes, addRecipe, deleteRecipe, updateRecipe } = useRecipes();

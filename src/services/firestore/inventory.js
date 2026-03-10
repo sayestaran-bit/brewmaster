@@ -5,7 +5,7 @@
 // y las nuevas: Sales Minerales, Aditivos
 
 import {
-    collection, doc, addDoc, updateDoc, deleteDoc,
+    collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
     onSnapshot, query, orderBy, runTransaction, serverTimestamp, getDoc, getDocs
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -103,12 +103,20 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
         const normalizedStage = (stageOrTime || '').toLowerCase().trim();
         const key = getIngredientKey({ category, name: searchName, stage: normalizedStage, stepId });
 
-        if (ignoredIngredients[key]) return null; // Skip if already consumed
+        if (ignoredIngredients[key]) {
+            console.log(`[Inventario] Omitiendo ${searchName} (${category}) - Ya consumido.`);
+            return null;
+        }
 
-        return currentInventory.find(i =>
+        const found = currentInventory.find(i =>
             i.category === category &&
             (i.name || '').toLowerCase().trim().includes(searchName)
         );
+
+        if (!found) {
+            console.warn(`[Inventario] Insumo NO encontrado: ${searchName} (${category})`);
+        }
+        return found;
     };
 
     // Preparar lista de (docRef, amount) a descontar
@@ -265,6 +273,7 @@ export async function toggleIngredientConsumption(uid, batchId, ingredient, isCo
     const ingredientKey = getIngredientKey(ingredient);
 
     return await runTransaction(db, async (transaction) => {
+        console.log(`[Inventario] Iniciando transacción para ${ingredient.name}...`);
         // 1. Get Batch
         const batchSnap = await transaction.get(batchRef);
         if (!batchSnap.exists()) throw new Error("Batch not found");
@@ -276,10 +285,16 @@ export async function toggleIngredientConsumption(uid, batchId, ingredient, isCo
             (i.name || '').toLowerCase().trim().includes(searchName)
         );
 
-        if (!invItem) throw new Error(`Stock item not found: ${ingredient.name}`);
+        if (!invItem) {
+            console.error(`[Inventario] Insumo no encontrado en catálogo: ${ingredient.name}`);
+            throw new Error(`Stock item not found: ${ingredient.name}`);
+        }
+        
         const invDocRef = doc(db, 'users', uid, 'inventory', invItem.id);
+        console.log(`[Inventario] Leyendo stock actual de: ${invItem.id}...`);
         const currentInvSnap = await transaction.get(invDocRef);
         const currentStock = Number(currentInvSnap.data().stock) || 0;
+        console.log(`[Inventario] Stock actual: ${currentStock}. A ${isConsumed ? 'descontar' : 'restaurar'}: ${amountToToggle}`);
 
         const consumed = batchData.consumedIngredients || {};
         const currentCost = Number(batchData.totalCost) || 0;

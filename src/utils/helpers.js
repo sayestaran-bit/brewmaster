@@ -38,7 +38,8 @@ export const getThemeForCategory = (category = '') => {
     'Neipa': { bg: 'bg-gradient-to-br from-yellow-400 to-amber-500', border: 'border-amber-500', text: 'text-amber-600 dark:text-amber-400', ring: 'ring-amber-500' },
     'Pastry Stout': { bg: 'bg-gradient-to-br from-stone-800 to-neutral-900', border: 'border-neutral-900', text: 'text-neutral-900 dark:text-neutral-300', ring: 'ring-neutral-900' },
     'Sour': { bg: 'bg-gradient-to-br from-fuchsia-500 to-pink-600', border: 'border-pink-500', text: 'text-pink-600 dark:text-pink-400', ring: 'ring-pink-500' },
-    'Pilsner': { bg: 'bg-gradient-to-br from-yellow-200 to-yellow-400', border: 'border-yellow-400', text: 'text-yellow-600 dark:text-yellow-400', ring: 'ring-yellow-400' }
+    'Pilsner': { bg: 'bg-gradient-to-br from-yellow-200 to-yellow-400', border: 'border-yellow-400', text: 'text-yellow-600 dark:text-yellow-400', ring: 'ring-yellow-400' },
+    'Amber Ale': { bg: 'bg-gradient-to-br from-red-500 to-amber-700', border: 'border-amber-700', text: 'text-amber-800 dark:text-amber-400', ring: 'ring-amber-700' }
   };
   return themes[category] || { bg: 'bg-gradient-to-br from-amber-500 to-orange-600', border: 'border-amber-500', text: 'text-amber-600 dark:text-amber-400', ring: 'ring-amber-500' };
 };
@@ -222,7 +223,7 @@ export const initialRecipes = [
     ], modifications: []
   },
   {
-    id: 'amber-ale-pro', category: 'Otros', name: "Red Marzen Americana",
+    id: 'amber-ale-pro', category: 'Amber Ale', name: "Red Marzen Americana",
     description: "Equilibrio entre malta caramelo y pomelo citrico (Cascade). Color rubí.",
     targetVolume: 20, og: 1.055, fg: 1.012, abv: 5.6, ibu: 32, colorSRM: 14,
     ingredients: {
@@ -286,8 +287,11 @@ export const initialInventory = [
   // SALES MINERALES
   { id: 'inv-s1', category: 'Sales Minerales', name: 'Cloruro de Calcio (CaCl2)', stock: 500, unit: 'g', price: 10 },
   { id: 'inv-s2', category: 'Sales Minerales', name: 'Sulfato de Calcio (CaSO4)', stock: 500, unit: 'g', price: 10 },
-  { id: 'inv-s3', category: 'Sales Minerales', name: 'Ácido Láctico', stock: 250, unit: 'ml', price: 20 },
-  { id: 'inv-s4', category: 'Sales Minerales', name: 'Nutriente de Levadura', stock: 100, unit: 'g', price: 50 }
+  { id: 'inv-s3', category: 'Sales Minerales', name: 'Ácido Láctico (80%)', stock: 250, unit: 'ml', price: 20 },
+  { id: 'inv-s4', category: 'Sales Minerales', name: 'Nutriente de Levadura', stock: 100, unit: 'g', price: 50 },
+
+  // ADITIVOS
+  { id: 'inv-a1', category: 'Aditivos', name: 'Irish Moss', stock: 100, unit: 'g', price: 50 }
 ];
 
 export const defaultPrices = { malta: 2000, lupulo: 60, levadura: 5000 };
