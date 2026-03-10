@@ -550,22 +550,21 @@ export default function RecipeDetailView() {
                                             <span className="font-black text-content">{h.amount} g</span>
                                         </div>
                                     ))}
-                                    {scaledRecipe.ingredients.others.filter(o => getEffectivePhase(o) === phaseGrp.id).map((o, i) => (
-                                        <div key={`o-${i}`} className="bg-surface p-4 rounded-2xl border border-line flex justify-between items-center shadow-sm">
+                                    {scaledRecipe.ingredients.others.filter(o => getEffectivePhase(o) === phaseGrp.id && o.category === 'Sales Minerales').map((o, i) => (
+                                        <div key={`s-${i}`} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/20 flex justify-between items-center shadow-sm">
                                             <div className="flex items-center gap-3">
-                                                <div className="bg-blue-100 text-blue-600 p-2 rounded-lg"><Sparkles size={16} /></div>
+                                                <div className="bg-blue-500 text-white p-2 rounded-lg shadow-sm"><Sparkles size={16} /></div>
                                                 <div className="flex flex-col">
-                                                    <span className="font-bold text-content text-sm">{o.name}</span>
-                                                    <span className="text-[10px] text-muted uppercase font-black">{o.category || 'Otros'}</span>
+                                                    <span className="font-bold text-blue-900 dark:text-blue-100 text-sm">{o.name}</span>
+                                                    <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase font-black">{o.time || 'Start'} | Sal Mineral</span>
                                                 </div>
                                             </div>
-                                            <span className="font-black text-content">{o.amount} {o.unit || 'g'}</span>
+                                            <span className="font-black text-blue-900 dark:text-blue-100">{o.amount} {o.unit || 'g'}</span>
                                         </div>
                                     ))}
                                 </div>
 
                                 <div className="space-y-4">
-                                    ...
                                     {phaseGrp.steps.map((step, localIdx) => {
                                         const globalId = step.id || `${phaseGrp.id}-${localIdx}`;
                                         return (
@@ -583,7 +582,7 @@ export default function RecipeDetailView() {
                                                             <h3 className={`font-black text-xl md:text-2xl ${completedSteps.includes(globalId) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-content'}`}>
                                                                 {step.title || 'Paso'}
                                                             </h3>
-                                                            {step.duration && <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-2 py-1 rounded-lg border border-line whitespace-nowrap"><Clock size={12} className="inline mr-1" />{step.duration}</span>}
+                                                            {step.duration && <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-2 py-1 rounded-lg border border-line whitespace-nowrap"><Clock size={12} className="inline mr-1" />{step.duration} {['fermenting', 'bottling'].includes(getEffectivePhase(step)) ? 'd' : 'min'}</span>}
                                                         </div>
                                                         <p className={`text-base md:text-lg leading-relaxed font-medium ${completedSteps.includes(globalId) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
                                                             {step.desc || ''}
@@ -621,200 +620,209 @@ export default function RecipeDetailView() {
                             </div>
                         )}
                     </div>
-                )}
+                )
+                }
 
                 {/* TAB: AGUA */}
-                {activeTab === 'water' && (
-                    <div className="space-y-8 animate-fadeIn">
-                        <div className="bg-blue-50/50 dark:bg-blue-900/10 p-8 md:p-10 rounded-3xl border border-blue-100 dark:border-blue-800 shadow-sm relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 text-blue-500 pointer-events-none">
-                                <Droplets size={200} />
-                            </div>
-                            <h3 className="text-3xl font-black text-blue-900 dark:text-blue-400 mb-2 flex items-center gap-3 relative z-10">
-                                <Droplets size={32} className="text-blue-500" /> Perfil Mineral Objetivo
-                            </h3>
-                            <p className="text-blue-800 dark:text-blue-300 text-lg mb-8 font-medium relative z-10 max-w-2xl">
-                                Ajustar el agua es el secreto para transformar una buena cerveza en una cerveza de campeonato mundial.
-                            </p>
+                {
+                    activeTab === 'water' && (
+                        <div className="space-y-8 animate-fadeIn">
+                            <div className="bg-blue-50/50 dark:bg-blue-900/10 p-8 md:p-10 rounded-3xl border border-blue-100 dark:border-blue-800 shadow-sm relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 text-blue-500 pointer-events-none">
+                                    <Droplets size={200} />
+                                </div>
+                                <h3 className="text-3xl font-black text-blue-900 dark:text-blue-400 mb-2 flex items-center gap-3 relative z-10">
+                                    <Droplets size={32} className="text-blue-500" /> Perfil Mineral Objetivo
+                                </h3>
+                                <p className="text-blue-800 dark:text-blue-300 text-lg mb-8 font-medium relative z-10 max-w-2xl">
+                                    Ajustar el agua es el secreto para transformar una buena cerveza en una cerveza de campeonato mundial.
+                                </p>
 
-                            {scaledRecipe.waterProfile ? (
-                                <div className="grid grid-cols-5 gap-3 md:gap-5 text-center relative z-10">
+                                {scaledRecipe.waterProfile ? (
+                                    <div className="grid grid-cols-5 gap-3 md:gap-5 text-center relative z-10">
+                                        {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
+                                            <div key={ion} className="bg-panel p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col transition-transform hover:-translate-y-1">
+                                                <span className="block font-black text-slate-400 text-xs md:text-sm uppercase tracking-widest mb-2">{ion}</span>
+                                                <span className="text-blue-600 dark:text-blue-400 font-black text-3xl md:text-4xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="bg-panel p-8 rounded-2xl text-center text-muted font-bold border border-blue-100 dark:border-slate-700 relative z-10 text-lg">
+                                        No hay un perfil estricto para esta receta.
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="bg-panel p-8 md:p-10 rounded-3xl border border-line shadow-sm">
+                                <h4 className="font-black text-content mb-8 text-2xl flex items-center gap-3">Tu Agua de la Llave (Base)</h4>
+                                <div className="grid grid-cols-5 gap-3 md:gap-6">
                                     {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
-                                        <div key={ion} className="bg-panel p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col transition-transform hover:-translate-y-1">
-                                            <span className="block font-black text-slate-400 text-xs md:text-sm uppercase tracking-widest mb-2">{ion}</span>
-                                            <span className="text-blue-600 dark:text-blue-400 font-black text-3xl md:text-4xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
+                                        <div key={ion}>
+                                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">{ion}</label>
+                                            <input
+                                                type="number"
+                                                value={baseWater[ion] || 0}
+                                                readOnly // Simplificación en esta versión final, se puede hacer que sea de config de app.
+                                                className="w-full p-4 md:p-5 border border-line rounded-2xl text-center font-black text-xl md:text-2xl outline-none bg-surface text-content transition-all shadow-inner"
+                                            />
                                         </div>
                                     ))}
                                 </div>
-                            ) : (
-                                <div className="bg-panel p-8 rounded-2xl text-center text-muted font-bold border border-blue-100 dark:border-slate-700 relative z-10 text-lg">
-                                    No hay un perfil estricto para esta receta.
+                            </div>
+
+                            {saltAdditions && scaledRecipe.waterProfile && (
+                                <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-8 md:p-12 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-xl relative overflow-hidden">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+                                        <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl md:text-4xl flex items-center gap-3">
+                                            <Scale size={40} className="text-amber-600" /> Adición de Sales
+                                        </h4>
+                                        <span className="bg-amber-600 text-white px-6 py-3 rounded-2xl text-lg font-black shadow-md">
+                                            Para {saltAdditions.totalWater} L (Total)
+                                        </span>
+                                    </div>
+
+                                    <p className="text-xl text-amber-800 dark:text-slate-300 font-medium mb-10">
+                                        Mezcla estas cantidades exactas en el agua <span className="font-black underline">antes</span> de agregar la malta.
+                                    </p>
+
+                                    <div className="grid md:grid-cols-4 gap-5 mb-10">
+                                        <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-full h-2 bg-blue-400"></div>
+                                            <span className="block font-black text-content text-5xl mb-3">{saltAdditions.cacl2}g</span>
+                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Cloruro de Calcio</span>
+                                        </div>
+                                        <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-full h-2 bg-amber-400"></div>
+                                            <span className="block font-black text-content text-5xl mb-3">{saltAdditions.gypsum}g</span>
+                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Gypsum (CaSO4)</span>
+                                        </div>
+                                        <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-full h-2 bg-green-400"></div>
+                                            <span className="block font-black text-content text-5xl mb-3">{saltAdditions.epsom}g</span>
+                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Sal de Epsom</span>
+                                        </div>
+                                        {Number(saltAdditions.bakingSoda) > 0 && (
+                                            <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
+                                                <div className="absolute top-0 left-0 w-full h-2 bg-purple-400"></div>
+                                                <span className="block font-black text-content text-5xl mb-3">{saltAdditions.bakingSoda}g</span>
+                                                <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Bicarbonato Sodio</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-white dark:bg-slate-950 p-8 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner">
+                                        <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-6 text-center">Perfil Final Estimado</h5>
+                                        <div className="flex justify-around text-2xl font-black flex-wrap gap-6">
+                                            <span className="text-muted text-sm flex flex-col items-center">Ca <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.Ca}</span></span>
+                                            <span className="text-muted text-sm flex flex-col items-center">Mg <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Mg}</span></span>
+                                            <span className="text-muted text-sm flex flex-col items-center">SO4 <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.SO4}</span></span>
+                                            <span className="text-muted text-sm flex flex-col items-center">Cl <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Cl}</span></span>
+                                            <span className="text-muted text-sm flex flex-col items-center" title="Ajustado con Bicarbonato de Sodio">HCO3 <span className={(saltAdditions.finalEstimates.HCO3 >= (Number(scaledRecipe.waterProfile.HCO3) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.HCO3}</span></span>
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-muted mt-6 text-center italic font-medium">
+                                        * El perfil estimado puede diferir levemente del objetivo porque las sales aportan iones en pares (ej. el Cloruro de Calcio suma Cl y Ca simultáneamente).
+                                    </p>
                                 </div>
                             )}
                         </div>
+                    )
+                }
 
-                        <div className="bg-panel p-8 md:p-10 rounded-3xl border border-line shadow-sm">
-                            <h4 className="font-black text-content mb-8 text-2xl flex items-center gap-3">Tu Agua de la Llave (Base)</h4>
-                            <div className="grid grid-cols-5 gap-3 md:gap-6">
-                                {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
-                                    <div key={ion}>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">{ion}</label>
-                                        <input
-                                            type="number"
-                                            value={baseWater[ion] || 0}
-                                            readOnly // Simplificación en esta versión final, se puede hacer que sea de config de app.
-                                            className="w-full p-4 md:p-5 border border-line rounded-2xl text-center font-black text-xl md:text-2xl outline-none bg-surface text-content transition-all shadow-inner"
-                                        />
+                {/* TAB: TIPS */}
+                {
+                    activeTab === 'tips' && (
+                        <div className="space-y-6 animate-fadeIn">
+                            {Array.isArray(scaledRecipe.tips) && scaledRecipe.tips.map((tip, idx) => (
+                                <div key={idx} className="bg-surface border-l-8 border-amber-500 shadow-md p-8 rounded-r-3xl transition-transform hover:-translate-y-1">
+                                    <h3 className="text-2xl font-black text-content mb-4 flex items-center gap-3">
+                                        <Star className="text-amber-500 fill-amber-500" /> {tip.title || 'Tip Cervecero'}
+                                    </h3>
+                                    <p className="text-slate-600 dark:text-slate-300 text-lg leading-relaxed font-medium">
+                                        {tip.desc || ''}
+                                    </p>
+                                </div>
+                            ))}
+                            {(!scaledRecipe.tips || scaledRecipe.tips.length === 0) && (
+                                <p className="text-muted font-bold text-lg italic text-center py-12 bg-surface rounded-3xl">No hay tips específicos para esta receta, ¡aplica las buenas prácticas de siempre!</p>
+                            )}
+                        </div>
+                    )
+                }
+
+                {/* TAB: HISTORIAL CAMBIOS */}
+                {
+                    activeTab === 'history' && (
+                        <div className="space-y-6 animate-fadeIn">
+                            <h3 className="text-3xl font-black text-content mb-8 border-b border-line pb-4">Historial de Modificaciones</h3>
+                            <div className="border-l-4 border-slate-300 dark:border-slate-600 ml-6 pl-8 space-y-10">
+                                {Array.isArray(scaledRecipe.modifications) && [...scaledRecipe.modifications].reverse().map((mod, idx) => (
+                                    <div key={idx} className="relative">
+                                        <div className="absolute -left-[45px] top-1 bg-panel border-4 border-slate-300 dark:border-slate-600 w-6 h-6 rounded-full shadow-sm"></div>
+                                        <span className="text-sm font-black text-slate-400 tracking-widest uppercase block mb-2">{mod.date}</span>
+                                        <p className="text-content font-medium text-lg bg-surface p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">"{mod.note}"</p>
                                     </div>
                                 ))}
                             </div>
                         </div>
+                    )
+                }
 
-                        {saltAdditions && scaledRecipe.waterProfile && (
-                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-8 md:p-12 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-xl relative overflow-hidden">
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-                                    <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl md:text-4xl flex items-center gap-3">
-                                        <Scale size={40} className="text-amber-600" /> Adición de Sales
-                                    </h4>
-                                    <span className="bg-amber-600 text-white px-6 py-3 rounded-2xl text-lg font-black shadow-md">
-                                        Para {saltAdditions.totalWater} L (Total)
-                                    </span>
-                                </div>
-
-                                <p className="text-xl text-amber-800 dark:text-slate-300 font-medium mb-10">
-                                    Mezcla estas cantidades exactas en el agua <span className="font-black underline">antes</span> de agregar la malta.
-                                </p>
-
-                                <div className="grid md:grid-cols-4 gap-5 mb-10">
-                                    <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 w-full h-2 bg-blue-400"></div>
-                                        <span className="block font-black text-content text-5xl mb-3">{saltAdditions.cacl2}g</span>
-                                        <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Cloruro de Calcio</span>
-                                    </div>
-                                    <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 w-full h-2 bg-amber-400"></div>
-                                        <span className="block font-black text-content text-5xl mb-3">{saltAdditions.gypsum}g</span>
-                                        <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Gypsum (CaSO4)</span>
-                                    </div>
-                                    <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 w-full h-2 bg-green-400"></div>
-                                        <span className="block font-black text-content text-5xl mb-3">{saltAdditions.epsom}g</span>
-                                        <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Sal de Epsom</span>
-                                    </div>
-                                    {Number(saltAdditions.bakingSoda) > 0 && (
-                                        <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-full h-2 bg-purple-400"></div>
-                                            <span className="block font-black text-content text-5xl mb-3">{saltAdditions.bakingSoda}g</span>
-                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Bicarbonato Sodio</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="bg-white dark:bg-slate-950 p-8 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner">
-                                    <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-6 text-center">Perfil Final Estimado</h5>
-                                    <div className="flex justify-around text-2xl font-black flex-wrap gap-6">
-                                        <span className="text-muted text-sm flex flex-col items-center">Ca <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.Ca}</span></span>
-                                        <span className="text-muted text-sm flex flex-col items-center">Mg <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Mg}</span></span>
-                                        <span className="text-muted text-sm flex flex-col items-center">SO4 <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.SO4}</span></span>
-                                        <span className="text-muted text-sm flex flex-col items-center">Cl <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Cl}</span></span>
-                                        <span className="text-muted text-sm flex flex-col items-center" title="Ajustado con Bicarbonato de Sodio">HCO3 <span className={(saltAdditions.finalEstimates.HCO3 >= (Number(scaledRecipe.waterProfile.HCO3) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.HCO3}</span></span>
-                                    </div>
-                                </div>
-                                <p className="text-sm text-muted mt-6 text-center italic font-medium">
-                                    * El perfil estimado puede diferir levemente del objetivo porque las sales aportan iones en pares (ej. el Cloruro de Calcio suma Cl y Ca simultáneamente).
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* TAB: TIPS */}
-                {activeTab === 'tips' && (
-                    <div className="space-y-6 animate-fadeIn">
-                        {Array.isArray(scaledRecipe.tips) && scaledRecipe.tips.map((tip, idx) => (
-                            <div key={idx} className="bg-surface border-l-8 border-amber-500 shadow-md p-8 rounded-r-3xl transition-transform hover:-translate-y-1">
-                                <h3 className="text-2xl font-black text-content mb-4 flex items-center gap-3">
-                                    <Star className="text-amber-500 fill-amber-500" /> {tip.title || 'Tip Cervecero'}
-                                </h3>
-                                <p className="text-slate-600 dark:text-slate-300 text-lg leading-relaxed font-medium">
-                                    {tip.desc || ''}
-                                </p>
-                            </div>
-                        ))}
-                        {(!scaledRecipe.tips || scaledRecipe.tips.length === 0) && (
-                            <p className="text-muted font-bold text-lg italic text-center py-12 bg-surface rounded-3xl">No hay tips específicos para esta receta, ¡aplica las buenas prácticas de siempre!</p>
-                        )}
-                    </div>
-                )}
-
-                {/* TAB: HISTORIAL CAMBIOS */}
-                {activeTab === 'history' && (
-                    <div className="space-y-6 animate-fadeIn">
-                        <h3 className="text-3xl font-black text-content mb-8 border-b border-line pb-4">Historial de Modificaciones</h3>
-                        <div className="border-l-4 border-slate-300 dark:border-slate-600 ml-6 pl-8 space-y-10">
-                            {Array.isArray(scaledRecipe.modifications) && [...scaledRecipe.modifications].reverse().map((mod, idx) => (
-                                <div key={idx} className="relative">
-                                    <div className="absolute -left-[45px] top-1 bg-panel border-4 border-slate-300 dark:border-slate-600 w-6 h-6 rounded-full shadow-sm"></div>
-                                    <span className="text-sm font-black text-slate-400 tracking-widest uppercase block mb-2">{mod.date}</span>
-                                    <p className="text-content font-medium text-lg bg-surface p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">"{mod.note}"</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-            </div>
+            </div >
 
             {/* MODAL DE COCINAR LOTE */}
-            {showBrewModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-                    <div className="bg-panel w-full max-w-md rounded-3xl shadow-2xl border border-line overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="px-6 py-5 border-b border-line flex justify-between items-center bg-black/5 dark:bg-white/5">
-                            <h3 className="font-black text-content text-xl flex items-center gap-2">
-                                <Play size={24} className="text-amber-500 fill-amber-500" /> Nuevo Lote
-                            </h3>
-                            <button onClick={() => setShowBrewModal(false)} className="p-2 text-muted hover:text-content hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-5">
-                            <div>
-                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre de la Receta</label>
-                                <div className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold">{selectedRecipe.name}</div>
+            {
+                showBrewModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+                        <div className="bg-panel w-full max-w-md rounded-3xl shadow-2xl border border-line overflow-hidden" onClick={e => e.stopPropagation()}>
+                            <div className="px-6 py-5 border-b border-line flex justify-between items-center bg-black/5 dark:bg-white/5">
+                                <h3 className="font-black text-content text-xl flex items-center gap-2">
+                                    <Play size={24} className="text-amber-500 fill-amber-500" /> Nuevo Lote
+                                </h3>
+                                <button onClick={() => setShowBrewModal(false)} className="p-2 text-muted hover:text-content hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors">
+                                    <X size={20} />
+                                </button>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Volumen a Cocinar (L)</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    value={targetVol}
-                                    onChange={(e) => setTargetVol(Number(e.target.value))}
-                                    className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors text-center font-bold text-lg"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Lote / ID (Opcional)</label>
-                                <input
-                                    type="text"
-                                    placeholder="Ej: Lote #42 / IPA Especial"
-                                    value={batchIdentity}
-                                    onChange={(e) => setBatchIdentity(e.target.value)}
-                                    className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors font-medium"
-                                />
-                            </div>
+                            <div className="p-6 space-y-5">
+                                <div>
+                                    <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre de la Receta</label>
+                                    <div className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold">{selectedRecipe.name}</div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Volumen a Cocinar (L)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={targetVol}
+                                        onChange={(e) => setTargetVol(Number(e.target.value))}
+                                        className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors text-center font-bold text-lg"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Lote / ID (Opcional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: Lote #42 / IPA Especial"
+                                        value={batchIdentity}
+                                        onChange={(e) => setBatchIdentity(e.target.value)}
+                                        className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors font-medium"
+                                    />
+                                </div>
 
-                            <button
-                                onClick={handleStartBrew}
-                                disabled={targetVol <= 0 || isStartingBrew}
-                                className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-xl shadow-lg transition-transform hover:-translate-y-1 flex items-center justify-center gap-2 mt-2"
-                            >
-                                {isStartingBrew ? <Loader2 className="animate-spin" size={20} /> : <Thermometer size={20} />}
-                                {isStartingBrew ? 'Preparando equipo...' : 'Iniciar Producción'}
-                            </button>
+                                <button
+                                    onClick={handleStartBrew}
+                                    disabled={targetVol <= 0 || isStartingBrew}
+                                    className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-xl shadow-lg transition-transform hover:-translate-y-1 flex items-center justify-center gap-2 mt-2"
+                                >
+                                    {isStartingBrew ? <Loader2 className="animate-spin" size={20} /> : <Thermometer size={20} />}
+                                    {isStartingBrew ? 'Preparando equipo...' : 'Iniciar Producción'}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }

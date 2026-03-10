@@ -1,71 +1,101 @@
-import { collection, addDoc, serverTimestamp, getDocs, query, limit } from 'firebase/firestore';
+// /src/services/firestore/seedGuestData.js
+import { collection, doc, getDocs, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { initialRecipes, initialInventory } from '../../utils/helpers';
 
+// Bloqueo de módulo para evitar ejecuciones concurrentes en la misma sesión de JS
+let isSeeding = false;
+
 /**
  * Inyecta datos de prueba (receta y stock) para el Guest Mode.
- * Ahora utiliza los datos estandarizados de helpers.js para consistencia total.
+ * Utiliza Batches de Firestore para atomicidad y IDs determinísticos para IDEMPOTENCIA.
  * @param {string} uid - El ID del usuario anónimo
  */
 export async function seedGuestData(uid) {
-    if (!uid) {
-        console.error("🌱 [Seed] No UID provided for seeding.");
+    if (!uid) return;
+    if (isSeeding) {
+        console.warn("🌱 [Seed] Ya hay un proceso de seeding en curso. Omitiendo...");
         return;
     }
 
+    isSeeding = true;
     try {
-        console.log("🌱 [Seed] Verificando datos existentes para Guest:", uid);
+        console.log("🌱 [Seed] Iniciando saneamiento e inyección atómica para Guest:", uid);
 
-        // Verificar si ya tiene recetas para no duplicar
         const recipesRef = collection(db, 'users', uid, 'recipes');
         const inventoryRef = collection(db, 'users', uid, 'inventory');
-
-        const q = query(recipesRef, limit(1));
-        const snap = await getDocs(q);
-
-        if (!snap.empty) {
-            console.log("🌱 [Seed] El usuario ya tiene recetas. Omitiendo seed.");
-            return;
-        }
-
-        console.log("🌱 [Seed] Iniciando inyección de datos oficiales...");
-
         const timestamp = serverTimestamp();
 
-        // 1. Inyectar Inventario Base (Muestreo representativo)
-        // Tomamos una selección de los items iniciales para que el usuario pueda empezar
-        const itemsToSeed = initialInventory.slice(0, 15); // Primeros 15 items (Maltas, Lúpulos, Levas)
+        // 1. OBTENER ESTADO ACTUAL
+        const [invSnap, recSnap] = await Promise.all([
+            getDocs(inventoryRef),
+            getDocs(recipesRef)
+        ]);
 
-        let invCount = 0;
-        for (const item of itemsToSeed) {
-            const { id, ...itemData } = item; // Quitamos el id de helper para que Firestore genere uno nuevo
-            await addDoc(inventoryRef, {
+        const batch = writeBatch(db);
+        let operationsCount = 0;
+
+        // 2. LIMPIEZA DE HUÉRFANOS (Estrategia agresiva de deduplicación)
+        const stableInvIds = new Set(initialInventory.map(i => i.id));
+        const baseInvNames = new Set(initialInventory.map(i => i.name.toLowerCase().trim()));
+
+        invSnap.docs.forEach(docSnap => {
+            const data = docSnap.data();
+            const lowerName = (data.name || '').toLowerCase().trim();
+            // Si el nombre coincide con uno base pero el ID es aleatorio (no está en helpers), borrar
+            if (baseInvNames.has(lowerName) && !stableInvIds.has(docSnap.id)) {
+                batch.delete(docSnap.ref);
+                operationsCount++;
+            }
+        });
+
+        const stableRecIds = new Set(initialRecipes.map(r => r.id));
+        const baseRecNames = new Set(initialRecipes.map(r => r.name.toLowerCase().trim()));
+
+        recSnap.docs.forEach(docSnap => {
+            const data = docSnap.data();
+            const lowerName = (data.name || '').toLowerCase().trim();
+            if (baseRecNames.has(lowerName) && !stableRecIds.has(docSnap.id)) {
+                batch.delete(docSnap.ref);
+                operationsCount++;
+            }
+        });
+
+        // 3. INYECCIÓN IDEMPOTENTE (Usando IDs determinísticos)
+        // Sembramos TODO el catálogo para evitar "huecos" que generen duplicados luego
+        initialInventory.forEach(item => {
+            const { id, ...itemData } = item;
+            const itemRef = doc(db, 'users', uid, 'inventory', id);
+            batch.set(itemRef, {
                 ...itemData,
                 updatedAt: timestamp
             });
-            invCount++;
-        }
-        console.log(`🌱 [Seed] ${invCount} items de inventario inyectados.`);
+            operationsCount++;
+        });
 
-        // 2. Inyectar Recetas Base (Las primeras 2: Hazy y Stout)
-        const recipesToSeed = initialRecipes.slice(0, 2);
-
-        let recCount = 0;
-        for (const recipe of recipesToSeed) {
-            const { id, ...recipeData } = recipe; // Quitamos ID estático
-            await addDoc(recipesRef, {
+        initialRecipes.forEach(recipe => {
+            const { id, ...recipeData } = recipe;
+            const recipeRef = doc(db, 'users', uid, 'recipes', id);
+            batch.set(recipeRef, {
                 ...recipeData,
                 createdAt: timestamp,
                 updatedAt: timestamp
             });
-            recCount++;
+            operationsCount++;
+        });
+
+        // 4. EJECUCIÓN ATÓMICA
+        if (operationsCount > 0) {
+            await batch.commit();
+            console.log(`🌱 [Seed] Éxito: ${operationsCount} operaciones atómicas completadas.`);
+        } else {
+            console.log("🌱 [Seed] Todo en orden. No se requirieron cambios.");
         }
 
-        console.log(`🌱 [Seed] ${recCount} recetas inyectadas con éxito.`);
-        console.log("🌱 [Seed] Proceso completado exitosamente.");
-
     } catch (error) {
-        console.error("❌ [Seed] Error crítico inyectando datos:", error);
-        throw error; // Lanzar para que AuthContext pueda manejarlo si es necesario
+        console.error("❌ [Seed] Error crítico en seeding:", error);
+        throw error;
+    } finally {
+        isSeeding = false;
     }
 }

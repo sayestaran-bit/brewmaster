@@ -42,16 +42,25 @@ export function onInventorySnapshot(uid, onData, onError) {
  * Agrega un ítem al inventario.
  * @param {string} uid
  * @param {object} itemData - { category, name, stock, unit, price }
- * @returns {Promise<string>} id del nuevo documento
+ * @param {string} [customId] - (Opcional) ID sugerido para el documento
+ * @returns {Promise<string>} id del documento (customId o generado)
  */
-export async function addInventoryItem(uid, itemData) {
-    const ref = await addDoc(inventoryRef(uid), {
+export async function addInventoryItem(uid, itemData, customId = null) {
+    const data = {
         ...itemData,
         stock: Number(itemData.stock) || 0,
         price: Number(itemData.price) || 0,
         updatedAt: serverTimestamp(),
-    });
-    return ref.id;
+    };
+
+    if (customId) {
+        const ref = inventoryDocRef(uid, customId);
+        await setDoc(ref, data);
+        return customId;
+    } else {
+        const ref = await addDoc(inventoryRef(uid), data);
+        return ref.id;
+    }
 }
 
 /**

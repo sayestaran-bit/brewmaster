@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft, AlertTriangle, Activity, Package, Trash2, CheckCircle2 } from 'lucide-react';
+import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft, AlertTriangle, Activity, Package, Trash2, CheckCircle2, Sparkles } from 'lucide-react';
 import { formatCurrency, standardizeDate, formatTime, getFormattedDate } from '../../utils/formatters';
 import { calculateRecipeCost, calculateActualDeductedCost } from '../../utils/costCalculator';
 import { getEffectivePhase, getIngredientKey } from '../../utils/recipeUtils';

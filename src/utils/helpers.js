@@ -63,23 +63,23 @@ export const initialRecipes = [
         { name: "Citra", amount: 60, unit: "g", time: "Día 2", stage: "Dry Hop 1", phase: "fermenting", stepId: 7 },
         { name: "Mosaic", amount: 60, unit: "g", time: "Día 7", stage: "Dry Hop 2", phase: "fermenting", stepId: 8 }
       ],
-      yeast: { name: "Lallemand Verdant IPA", amount: 1, unit: "sobre" },
       others: [
-        { name: "Cloruro de Calcio (CaCl2)", amount: 5, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
-        { name: "Sulfato de Calcio (CaSO4)", amount: 2, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" }
+        { name: "Cloruro de Calcio (CaCl2)", amount: 8, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
+        { name: "Sulfato de Calcio (CaSO4)", amount: 3, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
+        { name: "Ácido Láctico (80%)", amount: 5, unit: "ml", phase: "cooking", category: "Sales Minerales", stepId: 2, time: "Mash" }
       ],
       water: { strike: 22, sparge: 12 }
     },
     steps: [
-      { id: 1, phase: 'cooking', title: "Ajuste de Agua y Calentamiento", desc: "Calentar 22L a 71°C. Objetivo: Sedosidad.", details: "1. Calienta el agua de empaste.\n2. Agrega sales (CaCl2) para alcanzar ratio Cloruro:Sulfato 2.5:1.\n3. Sanitiza todo el equipo de recirculación.", duration: 20 },
-      { id: 2, phase: 'cooking', title: "Maceración (Mash)", desc: "67°C por 60 min. pH objetivo 5.3.", details: "1. Incorpora granos evitando grumos.\n2. Recircula suavemente para no compactar la cama.\n3. Mide pH y ajusta con Ácido Láctico si es necesario.", duration: 60 },
-      { id: 3, phase: 'cooking', title: "Lavado (Sparge)", desc: "12L a 75°C. Extraer azúcares sin taninos.", details: "1. Realiza el Mash-out a 76°C por 10 min.\n2. Lava lentamente. No superes los 77°C en el agua de lavado.", duration: 25 },
-      { id: 4, phase: 'cooking', title: "Hervor y Adición Amargor", desc: "Hervir 60 min. Adición técnica de Magnum.", details: "1. Rompe hervor y vigila el hot break.\n2. Agrega Magnum. Hervor vigoroso.", duration: 60 },
-      { id: 5, phase: 'cooking', title: "Whirlpool Aromático", desc: "Bajar a 80°C. Reposo de 20 min.", details: "1. Enfría el mosto a 80°C (Crítico para evitar amargor extra).\n2. Agrega Citra/Mosaic.\n3. Crea el remolino y deja reposar 20 min tapado.", duration: 20 },
-      { id: 6, phase: 'fermenting', title: "Inoculación (Inoculation)", desc: "Enfriar a 18°C. Oxigenación extrema.", details: "1. Enfría a 18°C e inocula Verdant IPA.\n2. Oxigena con piedra difusora o chapoteo intenso.", duration: 15 },
-      { id: 7, phase: 'fermenting', title: "Dry Hop 1 (Biotransformación)", desc: "Día 2-3: Fermentación activa.", details: "1. Agrega 60g de Citra durante la fase activa.\n2. Esto libera aromas frutales únicos vía biotransformación.", duration: 10 },
-      { id: 8, phase: 'fermenting', title: "Dry Hop 2 y D-Rest", desc: "Día 7: Mosaic y subida a 21°C.", details: "1. Agrega Mosaic.\n2. Sube a 21°C por 48h para limpieza de diacetilo.", duration: 48 },
-      { id: 9, phase: 'bottling', title: "Cold Crash y Envasado", desc: "2°C por 48h. Evitar OXÍGENO.", details: "1. Purga con CO2 el recipiente de destino.\n2. Envasa con 6g/L de azúcar o carbonatación forzada.", duration: 60 }
+      { id: 1, phase: 'cooking', title: "Ajuste de Agua y Calentamiento", desc: "Calentar 22L a 71°C. Objetivo: Sedosidad.", details: "1. Calienta el agua de empaste.\n2. Agrega las Sales Minerales (CaCl2 y CaSO4) para alcanzar ratio Cloruro:Sulfato 2.5:1.\n3. Sanitiza todo el equipo de recirculación.", duration: 20 },
+      { id: 2, phase: 'cooking', title: "Maceración (Mash)", desc: "67°C por 60 min. pH objetivo 5.3.", details: "1. Incorpora granos evitando grumos.\n2. Recircula suavemente para no compactar la cama.\n3. Mide pH a los 10 min y ajusta con Ácido Láctico si es necesario.", duration: 60 },
+      { id: 3, phase: 'cooking', title: "Lavado (Sparge)", desc: "12L a 75°C. Extraer azúcares sin taninos.", details: "1. Realiza el Mash-out a 76°C por 10 min.\n2. Lava lentamente con agua a 75°C. No superes los 77°C para evitar astringencia.", duration: 25 },
+      { id: 4, phase: 'cooking', title: "Hervor y Adición Amargor", desc: "Hervir 60 min. Adición técnica de Magnum.", details: "1. Rompe hervor y elimina la espuma inicial.\n2. Agrega Magnum a los 60 min restantes.\n3. Mantén un hervor vigoroso y constante.", duration: 60 },
+      { id: 5, phase: 'cooking', title: "Whirlpool Aromático", desc: "Bajar a 80°C. Reposo de 20 min.", details: "1. Enfría el mosto rápidamente a 80°C.\n2. Agrega la carga masiva de Citra y Mosaic.\n3. Crea el remolino (Whirlpool) y deja reposar 20 min tapado para atrapar aromas.", duration: 20 },
+      { id: 6, phase: 'fermenting', title: "Inoculación (Inoculation)", desc: "Enfriar a 18°C. Oxigenación extrema.", details: "1. Enfría a 18°C e inocula Verdant IPA.\n2. Oxigena intensamente el mosto para asegurar una fermentación saludable.", duration: 2 },
+      { id: 7, phase: 'fermenting', title: "Dry Hop 1 (Biotransformación)", desc: "Día 2-3: Fermentación activa.", details: "1. Agrega 60g de Citra durante la fase de biotransformación (fermentación activa).\n2. El lúpulo reaccionará con la levadura para crear nuevos compuestos aromáticos.", duration: 5 },
+      { id: 8, phase: 'fermenting', title: "Dry Hop 2 y D-Rest", desc: "Día 7: Mosaic y subida a 21°C.", details: "1. Agrega 60g de Mosaic.\n2. Sube la temperatura a 21°C por 48h para limpieza de diacetilo y terminación de fermentación.", duration: 7 },
+      { id: 9, phase: 'bottling', title: "Cold Crash y Envasado", desc: "2°C por 48h. Evitar OXÍGENO.", details: "1. Baja a 2°C para clarificar.\n2. Empuja con CO2 al envasar. Usa 6g/L de dextrosa si carbonatas en botella.", duration: 60 }
     ],
     tips: [
       { title: "Oxidación", desc: "El oxígeno es el enemigo #1. Minimiza aperturas del fermentador." },
@@ -104,18 +104,22 @@ export const initialRecipes = [
         { name: "Galaxy", amount: 100, unit: 'g', time: "Día 4", stage: "Dry Hop 1", phase: "fermenting", stepId: 5 },
         { name: "Citra", amount: 50, unit: 'g', time: "Día 8", stage: "Dry Hop 2", phase: "fermenting", stepId: 6 }
       ],
-      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2 }],
+      others: [
+        { name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2, time: "15 min" },
+        { name: "Cloruro de Calcio (CaCl2)", amount: 10, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
+        { name: "Sulfato de Calcio (CaSO4)", amount: 4, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" }
+      ],
       yeast: { name: 'Lallemand Verdant IPA', amount: 2, unit: 'sobres' },
       water: { strike: 25, sparge: 12 }
     },
     steps: [
-      { id: 1, phase: 'cooking', title: "Maceración Densa", desc: "66°C por 60 min. Carga pesada.", details: "1. Integra 8.5kg de grano con cuidado.\n2. Recircula lento para evitar compactación por la gran cantidad de proteínas.", duration: 60 },
-      { id: 2, phase: 'cooking', title: "Hervor de Densidad", desc: "Hervir 60 min. Vigila el boil-over.", details: "1. Agrega Magnum al inicio.\n2. Un mosto de 1.080 tiende a subir rápido al hervir. Vigila.", duration: 60 },
-      { id: 3, phase: 'cooking', title: "Whirlpool Doble", desc: "78°C por 30 min. Saturación de Hop oils.", details: "1. Enfría a 78°C.\n2. Agrega la carga masiva y deja 30 min para máxima extracción.", duration: 30 },
-      { id: 4, phase: 'fermenting', title: "Inoculación y Oxigenación", desc: "18°C. Doble Pitching.", details: "1. Enfría a 18°C e inocula 2 sobres hidratados.\n2. Oxigena el doble (2 min con piedra).", duration: 15 },
-      { id: 5, phase: 'fermenting', title: "Dry Hop 1 (Active)", desc: "Día 4: 100g Galaxy.", details: "1. Agrega el Galaxy con cuidado de no introducir oxígeno.", duration: 10 },
-      { id: 6, phase: 'fermenting', title: "Dry Hop 2 y Cold Crash", desc: "Día 8 y clarificación.", details: "1. Agrega 50g Citra.\n2. Después de 48h, baja a 1°C para limpiar el 'Hop Burn'.", duration: 72 },
-      { id: 7, phase: 'bottling', title: "Envasado DDH", desc: "Carbonatación media (2.4 vol).", details: "1. Envasa evitando todo contacto con aire.\n2. Consume fresca.", duration: 60 }
+      { id: 1, phase: 'cooking', title: "Maceración Densa", desc: "66°C por 60 min. Carga pesada.", details: "1. Integra 8.5kg de grano con cuidado.\n2. Agrega CaCl2 y CaSO4.\n3. Recircula lento para evitar compactación por la gran cantidad de proteínas.", duration: 60 },
+      { id: 2, phase: 'cooking', title: "Hervor de Densidad", desc: "Hervir 60 min. Vigila el boil-over.", details: "1. Agrega Magnum al inicio (60 min).\n2. A los 15 min finales agrega Irish Moss para clarificar.\n3. Un mosto de 1.080 tiende a subir rápido al hervir. Vigila.", duration: 60 },
+      { id: 3, phase: 'cooking', title: "Whirlpool Doble", desc: "78°C por 30 min. Saturación de Hop oils.", details: "1. Enfría a 78°C.\n2. Agrega la carga masiva de Galaxy y Citra y deja 30 min para máxima extracción.", duration: 30 },
+      { id: 4, phase: 'fermenting', title: "Inoculación y Oxigenación", desc: "18°C. Doble Pitching.", details: "1. Enfría a 18°C e inocula 2 sobres hidratados.\n2. Oxigena el doble de lo normal (2 min con piedra).", duration: 4 },
+      { id: 5, phase: 'fermenting', title: "Dry Hop 1 (Active)", desc: "Día 4: 100g Galaxy.", details: "1. Agrega los 100g de Galaxy con cuidado de no introducir oxígeno.", duration: 4 },
+      { id: 6, phase: 'fermenting', title: "Dry Hop 2 y Cold Crash", desc: "Día 8 y clarificación.", details: "1. Agrega 50g Citra.\n2. Después de 48h, baja a 1°C para limpiar el 'Hop Burn' generado por tanto lúpulo.", duration: 7 },
+      { id: 7, phase: 'bottling', title: "Envasado DDH", desc: "Carbonatación media (2.4 vol).", details: "1. Envasa evitando todo contacto con aire (transferencia cerrada si es posible).\n2. Consume fresca para aprovechar el perfil del Galaxy.", duration: 60 }
     ],
     tips: [{ title: "Hop Burn", desc: "Un Cold Crash largo (4 días) es vital para que el picor del lúpulo decante." }], modifications: []
   },
@@ -131,27 +135,33 @@ export const initialRecipes = [
         { name: "Trigo en hojuelas", amount: 1.0, unit: 'kg', phase: "cooking", stepId: 1 }
       ],
       hops: [
-        { name: "Columbus", amount: 20, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking", stepId: 2 },
+        { name: "Columbus", amount: 40, unit: 'g', time: "90 min", stage: "Hervor", phase: "cooking", stepId: 2 },
         { name: "Citra", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool", phase: "cooking", stepId: 3 },
         { name: "Mosaic", amount: 100, unit: 'g', time: "30 min", stage: "Whirlpool", phase: "cooking", stepId: 3 },
         { name: "Galaxy", amount: 150, unit: 'g', time: "Día 5", stage: "Dry Hop 1", phase: "fermenting", stepId: 5 },
-        { name: "Citra", amount: 100, unit: 'g', time: "Día 10", stage: "Dry Hop 2", phase: "fermenting", stepId: 5 }
+        { name: "Citra", amount: 100, unit: 'g', time: "Día 10", stage: "Dry Hop 2", phase: "fermenting", stepId: 6 },
+        { name: "Mosaic", amount: 100, unit: 'g', time: "Día 14", stage: "Dry Hop 3", phase: "fermenting", stepId: 7 }
       ],
       others: [
-        { name: "Maltodextrina", amount: 0.5, unit: "kg", phase: "cooking", category: "Aditivos", stepId: 2 },
-        { name: "Nutriente", amount: 5, unit: "g", phase: "cooking", category: "Aditivos", stepId: 2 }
+        { name: "Maltodextrina", amount: 0.5, unit: "kg", phase: "cooking", category: "Aditivos", stepId: 2, time: "15 min" },
+        { name: "Nutriente de Levadura", amount: 8, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 2, time: "15 min" },
+        { name: "Cloruro de Calcio (CaCl2)", amount: 15, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
+        { name: "Sulfato de Calcio (CaSO4)", amount: 5, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" }
       ],
       yeast: { name: 'Lallemand Verdant IPA', amount: 3, unit: 'sobres' },
       water: { strike: 28, sparge: 10 }
     },
     steps: [
-      { id: 1, phase: 'cooking', title: "Maceración al Límite", desc: "65°C por 90 min. Volumen masivo.", details: "1. Mezcla los 11kg de grano. Paciencia.\n2. Maceración larga para asegurar conversión.", duration: 90 },
-      { id: 2, phase: 'cooking', title: "Concentración Hervor", desc: "90 min vigoroso.", details: "1. Añade Columbus al inicio.\n2. A los 15 min finales añade Nutriente y Maltodextrina.", duration: 90 },
-      { id: 3, phase: 'cooking', title: "Whirlpool Saturado", desc: "Remolino a 75°C.", details: "1. Muy denso. Recircula con fuerza.\n2. 30 min de reposo.", duration: 30 },
-      { id: 4, phase: 'fermenting', title: "Inoculación Triple", desc: "Inocular 3 sobres a 18°C.", details: "1. Control de temperatura ACTIVO. La fermentación generará mucho calor.", duration: 120 },
-      { id: 5, phase: 'fermenting', title: "Triple Dry Hop", desc: "Días 5 y 10: 250g totales.", details: "1. Carga masiva. Purga con CO2 al abrir.", duration: 20 },
-      { id: 6, phase: 'bottling', title: "Envasado y Guarda", desc: "Paciencia. Mejora con tiempo.", details: "1. Madura 1 mes en frío antes de servir.", duration: 60 }
-    ], tips: [{ title: "Temperatura", desc: "Si sube de 20°C ambient, el alcohol se volverá agresivo 'hot'." }], modifications: []
+      { id: 1, phase: 'cooking', title: "Maceración al Límite", desc: "65°C por 90 min. Volumen masivo.", details: "1. Mezcla los 11kg de grano. Agrega sales CaCl2 y CaSO4.\n2. Maceración larga de 90 min para asegurar máxima extracción de azúcares complejos.", duration: 90 },
+      { id: 2, phase: 'cooking', title: "Concentración Hervor", desc: "90 min vigoroso.", details: "1. Añade Columbus al completar el romper hervor (90 min).\n2. A los 15 min finales añade Nutriente y Maltodextrina.\n3. Mantén un hervor potente para concentrar el mosto.", duration: 90 },
+      { id: 3, phase: 'cooking', title: "Whirlpool Saturado", desc: "Remolino a 75°C.", details: "1. Enfría a 75°C.\n2. Agrega 200g de Citra/Mosaic. 30 min de reposo tapado.", duration: 30 },
+      { id: 4, phase: 'fermenting', title: "Inoculación Triple", desc: "Incular 3 sobres a 18°C.", details: "1. Oxigena intensamente con piedra difusora por 3 min.\n2. Control de temperatura CRÍTICO: La fermentación con 3 sobres genera mucho calor propio.", duration: 5 },
+      { id: 5, phase: 'fermenting', title: "Dry Hop 1 (Galaxy)", desc: "Día 5: 150g Galaxy.", details: "1. Agrega 150g de Galaxy. Purga con CO2 al abrir el fermentador.", duration: 5 },
+      { id: 6, phase: 'fermenting', title: "Dry Hop 2 (Citra)", desc: "Día 10: 100g Citra.", details: "1. Agrega 100g de Citra. Mantén presión de CO2 si es posible.", duration: 4 },
+      { id: 7, phase: 'fermenting', title: "Dry Hop 3 y Retama", desc: "Día 14: 100g Mosaic.", details: "1. Agrega 100g de Mosaic.\n2. Prepárate para el envasado tras 48h de reposo.", duration: 7 },
+      { id: 8, phase: 'bottling', title: "Envasado y Guarda Larga", desc: "Paciencia. Mejora con tiempo.", details: "1. Madura 1 mes en frío antes de servir para equilibrar el alto ABV y la carga de lúpulo.", duration: 60 }
+    ],
+    tips: [{ title: "Temperatura", desc: "Si sube de 20°C ambient, el alcohol se volverá agresivo 'hot'." }], modifications: []
   },
   {
     id: 'oatmeal-stout-pro', category: 'Pastry Stout', name: "Expreso de Medianoche",
@@ -165,16 +175,20 @@ export const initialRecipes = [
         { name: "Malta Chocolate", amount: 0.2, unit: 'kg', phase: "cooking", stepId: 2 }
       ],
       hops: [{ name: "Fuggles", amount: 40, unit: 'g', time: "60 min", stage: "Hervor", phase: "cooking", stepId: 3 }],
-      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 3 }],
+      others: [
+        { name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 3, time: "15 min" },
+        { name: "Cloruro de Calcio (CaCl2)", amount: 10, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
+        { name: "Ácido Láctico (80%)", amount: 3, unit: "ml", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Mash" }
+      ],
       yeast: { name: 'S-04', amount: 1, unit: 'sobre' },
       water: { strike: 18, sparge: 14 }
     },
     steps: [
-      { id: 1, phase: 'cooking', title: "Maceración Sedosa", desc: "68°C por 50 min. Solo base.", details: "1. Pale Ale y Avena solamente.\n2. Buscamos azúcares complejos.", duration: 50 },
-      { id: 2, phase: 'cooking', title: "Capping (Tostadas)", desc: "Añadir oscuras al final.", details: "1. Agrega Chocolate/Tostada los últimos 10 min de maceración.\n2. Evita la acidez excesiva.", duration: 15 },
-      { id: 3, phase: 'cooking', title: "Hervor Clásico", desc: "60 min Fuggles.", details: "1. Amargor de soporte técnico.", duration: 60 },
-      { id: 4, phase: 'fermenting', title: "Fermentación Inglesa", desc: "19°C con S-04.", details: "1. Mantén temperatura estable.", duration: 120 },
-      { id: 5, phase: 'bottling', title: "Envasado Cremoso", desc: "Carbonatación baja.", details: "1. 5g/L de azúcar. Menos burbuja = más cuerpo perceptivo.", duration: 40 }
+      { id: 1, phase: 'cooking', title: "Maceración Sedosa", desc: "68°C por 50 min. Solo base.", details: "1. Mezcla Pale Ale y Avena. Agrega CaCl2 para potenciar el cuerpo maltoso.\n2. Buscamos azúcares complejos para una sensación en boca sedosa.", duration: 50 },
+      { id: 2, phase: 'cooking', title: "Capping (Tostadas)", desc: "Añadir oscuras al final.", details: "1. Agrega Cebada Tostada y Malta Chocolate los últimos 10-15 min de maceración.\n2. Esto aporta color y aroma a café sin extraer la acidez astringente de las cáscaras quemadas.", duration: 15 },
+      { id: 3, phase: 'cooking', title: "Hervor Clásico", desc: "60 min Fuggles.", details: "1. Agrega Fuggles al inicio (60 min).\n2. A los 15 min finales agrega Irish Moss para una clarificación perfecta.", duration: 60 },
+      { id: 4, phase: 'fermenting', title: "Fermentación Inglesa", desc: "19°C con S-04.", details: "1. Inocula y mantén 19°C estables para evitar ésteres frutales excesivos.", duration: 14 },
+      { id: 5, phase: 'bottling', title: "Envasado Cremoso", desc: "Carbonatación baja.", details: "1. 5g/L de dextrosa. Una carbonatación baja resalta la textura de la avena.", duration: 40 }
     ], modifications: []
   },
   {
@@ -188,18 +202,23 @@ export const initialRecipes = [
       ],
       hops: [
         { name: 'Magnum', amount: 15, unit: 'g', time: '60 min', stage: 'Hervor', phase: "cooking", stepId: 2 },
-        { name: 'Saaz', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking", stepId: 2 }
+        { name: 'Saaz', amount: 20, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking", stepId: 2 },
+        { name: 'Saaz', amount: 20, unit: 'g', time: '0 min', stage: 'Whirlpool', phase: "cooking", stepId: 2 }
       ],
-      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2 }],
+      others: [
+        { name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2, time: "15 min" },
+        { name: "Cloruro de Calcio (CaCl2)", amount: 3, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
+        { name: "Sulfato de Calcio (CaSO4)", amount: 3, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" }
+      ],
       yeast: { name: 'W-34/70', amount: 2, unit: 'sobres' },
       water: { strike: 18, sparge: 14 }
     },
     steps: [
-      { id: 1, phase: 'cooking', title: "Proteic Rest y Sacarificación", desc: "Escalones: 52°C y 64°C.", details: "1. Inicia a 52°C por 15 min.\n2. Sube a 64°C por 45 min para mosto muy fermentable (secura).", duration: 60 },
-      { id: 2, phase: 'cooking', title: "Hervor de 90 Minutos", desc: "Crucial para eliminar DMS.", details: "1. Hervor largo sin tapa.\n2. Agrega Saaz al final.", duration: 90 },
-      { id: 3, phase: 'fermenting', title: "Fermentación Lager", desc: "10°C constantes.", details: "1. Inocula en frío.\n2. Control riguroso los primeros 7 días.", duration: 168 },
-      { id: 4, phase: 'fermenting', title: "D-Rest y Clarificación", desc: "Subida a 16°C.", details: "1. Limpieza de subproductos de fermentación.", duration: 72 },
-      { id: 5, phase: 'bottling', title: "Lagering (Guarda en Frío)", desc: "1°C por 4 semanas.", details: "1. La verdadera Lager se hace en la guarda.", duration: 60 }
+      { id: 1, phase: 'cooking', title: "Maceración Escalonada", desc: "Decocción opcional o escalones: 52°C y 64°C.", details: "1. Inicia a 52°C (descanso proteico) por 15 min.\n2. Sube a 64°C por 45 min para un mosto muy atenuable.\n3. Agrega sales para un perfil de agua blanda checa.", duration: 60 },
+      { id: 2, phase: 'cooking', title: "Hervor de 90 Minutos", desc: "Crucial para eliminar DMS.", details: "1. Hervor largo y vigoroso sin tapa.\n2. Agrega Magnum a los 60 min, Saaz a los 15 min y Saaz final al apagar el fuego (Whirlpool).\n3. Irish Moss incluido a los 15 min.", duration: 90 },
+      { id: 3, phase: 'fermenting', title: "Fermentación Lager", desc: "10°C constantes.", details: "1. Enfría a 10°C e inocula los 2 sobres. Mantén temperatura rigurosa para limpieza de sabor.", duration: 7 },
+      { id: 4, phase: 'fermenting', title: "D-Rest y Clarificación", desc: "Subida a 16°C.", details: "1. Sube a 16°C por 72h para que la levadura reabsorba el diacetilo.\n2. Luego baja lentamente la temperatura.", duration: 3 },
+      { id: 5, phase: 'bottling', title: "Envasado y Lagering (Guarda)", desc: "1°C por 4 semanas.", details: "1. La verdadera Lager cristalina se logra con una guarda prolongada en frío extremo antes de servir.", duration: 60 }
     ], modifications: []
   },
   {
@@ -217,15 +236,19 @@ export const initialRecipes = [
         { name: 'Cascade', amount: 20, unit: 'g', time: '60 min', stage: 'Hervor', phase: "cooking", stepId: 2 },
         { name: 'Cascade', amount: 30, unit: 'g', time: '15 min', stage: 'Hervor', phase: "cooking", stepId: 2 }
       ],
-      others: [{ name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2 }],
+      others: [
+        { name: 'Irish Moss', amount: 5, unit: 'g', phase: 'cooking', category: 'Aditivos', stepId: 2, time: "15 min" },
+        { name: "Sulfato de Calcio (CaSO4)", amount: 8, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" },
+        { name: "Cloruro de Calcio (CaCl2)", amount: 4, unit: "g", phase: "cooking", category: "Sales Minerales", stepId: 1, time: "Start" }
+      ],
       yeast: { name: 'US-05', amount: 1, unit: 'sobre' },
       water: { strike: 18, sparge: 14 }
     },
     steps: [
-      { id: 1, phase: 'cooking', title: "Maceración Maltosa", desc: "66°C por 60 min.", details: "1. Equilibrio de maltas especiales.\n2. Recircula hasta que el mosto esté brillante.", duration: 60 },
-      { id: 2, phase: 'cooking', title: "Hervor Cascade", desc: "Cítrico y balanceado.", details: "1. Cascade en dos adiciones.\n2. Irish Moss para clarificar en caliente.", duration: 60 },
-      { id: 3, phase: 'fermenting', title: "Fermentación US-05", desc: "19°C. Perfil limpio.", details: "1. Deja que el lúpulo brille sobre el fondo maltoso.", duration: 120 },
-      { id: 4, phase: 'bottling', title: "Limpieza y Pack", desc: "2.3 volúmenes de CO2.", details: "1. Carbonatación estándar americana.", duration: 40 }
+      { id: 1, phase: 'cooking', title: "Maceración Maltosa", desc: "66°C por 60 min.", details: "1. Agrega sales SO4 para resaltar el carácter del lúpulo.\n2. Recircula hasta que el mosto esté brillante para un color rubí limpio.", duration: 60 },
+      { id: 2, phase: 'cooking', title: "Hervor Cascade", desc: "Cítrico y balanceado.", details: "1. Cascade a los 60 min y a los 15 min.\n2. Irish Moss incluido para clarificar el mosto caliente.", duration: 60 },
+      { id: 3, phase: 'fermenting', title: "Fermentación US-05", desc: "19°C. Perfil limpio.", details: "1. Deja que el US-05 trabaje tranquilo a 19°C para un perfil neutro que deje brillar la malta y el lúpulo.", duration: 14 },
+      { id: 4, phase: 'bottling', title: "Carbonatación y Pack", desc: "2.3 volúmenes de CO2.", details: "1. Usa 6-7g/L de dextrosa. Carbonatación estándar americana para resaltar el aroma.", duration: 40 }
     ], modifications: []
   }
 ];

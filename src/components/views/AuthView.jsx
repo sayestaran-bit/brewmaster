@@ -23,12 +23,12 @@ export default function AuthView() {
 
     const navigate = useNavigate();
 
-    // Redirección si ya está auntenticado
+    // Redirección si ya está auntenticado y no está cargando (importante para Guest Seeding)
     useEffect(() => {
-        if (currentUser) {
+        if (currentUser && !loadingAuth) {
             navigate('/dashboard', { replace: true });
         }
-    }, [currentUser, navigate]);
+    }, [currentUser, loadingAuth, navigate]);
 
     const { darkMode } = useAppContext();
 

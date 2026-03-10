@@ -136,14 +136,16 @@ export const AuthProvider = ({ children }) => {
      */
     const loginAsGuest = useCallback(async () => {
         setAuthError(null);
+        setLoadingAuth(true); // Bloquear UI durante el proceso
         try {
-            const credential = await signInAnonymously(auth);
-            // El check de si ya existe data se movió adentro de seedGuestData para mayor robustez
-            await seedGuestData(credential.user.uid);
+            await signInAnonymously(auth);
+            // El seeding se maneja automáticamente en AppLayout.jsx (GuestSeeder)
+            // para evitar duplicidad de triggers.
             return { success: true };
         } catch (err) {
             const msg = mapAuthError(err.code);
             setAuthError(msg);
+            setLoadingAuth(false);
             return { success: false, error: msg };
         }
     }, []);

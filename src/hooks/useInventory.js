@@ -41,8 +41,8 @@ export function useInventory() {
     const lowStockItems = useMemo(() => getLowStockItems(inventory), [inventory]);
 
     // CRUD
-    const addItem = useCallback(async (data) => {
-        return await _addItem(currentUser.uid, data);
+    const addItem = useCallback(async (data, itemId = null) => {
+        return await _addItem(currentUser.uid, data, itemId);
     }, [currentUser]);
 
     const updateItem = useCallback(async (itemId, data) => {

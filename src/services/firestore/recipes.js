@@ -5,7 +5,7 @@
 // no necesiten saber NADA sobre la estructura de la base de datos.
 
 import {
-    collection, doc, addDoc, updateDoc, deleteDoc,
+    collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
     onSnapshot, query, orderBy, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -35,20 +35,30 @@ export function onRecipesSnapshot(uid, onData, onError) {
     );
 }
 
-// ── CRUD ───────────────────────────────────────────────────────────────────────
 /**
  * Crea una nueva receta en Firestore.
  * @param {string} uid
  * @param {object} recipeData - datos de la receta sin id ni timestamps
- * @returns {Promise<string>} id del nuevo documento
+ * @param {string} [customId] - (Opcional) ID sugerido para el documento
+ * @returns {Promise<string>} id del documento (customId o generado)
  */
-export async function addRecipe(uid, recipeData) {
-    const ref = await addDoc(recipesRef(uid), {
-        ...recipeData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-    });
-    return ref.id;
+export async function addRecipe(uid, recipeData, customId = null) {
+    if (customId) {
+        const ref = recipeDocRef(uid, customId);
+        await setDoc(ref, {
+            ...recipeData,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
+        return customId;
+    } else {
+        const ref = await addDoc(recipesRef(uid), {
+            ...recipeData,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
+        return ref.id;
+    }
 }
 
 /**

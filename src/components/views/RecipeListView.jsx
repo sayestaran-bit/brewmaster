@@ -49,7 +49,7 @@ import EmptyState from '../ui/EmptyState';
 export default function RecipeListView() {
     const navigate = useNavigate();
     const { currentUser } = useAuth();
-    const isGuest = currentUser?.isAnonymous;
+    const isGuest = currentUser ? currentUser.isAnonymous : true;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
 
     const { recipes, addRecipe, deleteRecipe, updateRecipe } = useRecipes();
@@ -173,27 +173,28 @@ export default function RecipeListView() {
     );
 
     const handleUpdateBaseRecipes = async () => {
-        if (window.confirm('Esto agregará las recetas base y algunos insumos por defecto. Las que ya existan se mantendrán. ¿Continuar?')) {
+        if (isGuest) return;
+        if (isUpdatingBase) return;
+
+        if (window.confirm('Esto agregará las recetas base y algunos insumos por defecto. Las que ya existan se actualizarán. ¿Continuar?')) {
             setIsUpdatingBase(true);
             try {
-                const missingRecipes = initialRecipes.filter(base =>
-                    !safeRecipes.some(r => r.name.toLowerCase() === base.name.toLowerCase())
-                );
-                for (const recipe of missingRecipes) {
-                    await addRecipe(recipe);
+                // Inyectar Recetas con IDs estables (Idempotente)
+                for (const recipe of initialRecipes) {
+                    const { id, ...recipeData } = recipe;
+                    await addRecipe(recipeData, id); 
                 }
 
-                const safeInventory = Array.isArray(inventory) ? inventory : [];
-                const missingInventory = initialInventory.filter(base =>
-                    !safeInventory.some(i => i.name.toLowerCase() === base.name.toLowerCase())
-                );
-                for (const item of missingInventory) {
-                    await addItem({ ...item, stock: Number(item.stock), price: Number(item.price) });
+                // Inyectar Inventario con IDs estables (Idempotente)
+                for (const item of initialInventory) {
+                    const { id, ...itemData } = item;
+                    await addItem({ ...itemData, stock: Number(itemData.stock), price: Number(itemData.price) }, id);
                 }
-                alert('¡Catálogo base actualizado!');
+                
+                alert('¡Catálogo base actualizado con éxito!');
             } catch (err) {
                 console.error('Error actualizando base:', err);
-                alert('Error al actualizar la base.');
+                alert('Error al actualizar la base: ' + err.message);
             } finally {
                 setIsUpdatingBase(false);
             }

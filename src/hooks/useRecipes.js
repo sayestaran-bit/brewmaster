@@ -37,10 +37,10 @@ export function useRecipes() {
     }, [currentUser]);
 
     // CRUD con validación integrada
-    const addRecipe = useCallback(async (data) => {
+    const addRecipe = useCallback(async (data, recipeId = null) => {
         const { valid, errors } = validateRecipe(data);
         if (!valid) throw new Error(errors.join(' '));
-        return await _addRecipe(currentUser.uid, data);
+        return await _addRecipe(currentUser.uid, data, recipeId);
     }, [currentUser]);
 
     const updateRecipe = useCallback(async (recipeId, data) => {
