@@ -100,20 +100,55 @@ export function checkFeasibility(recipe, inventory, targetVolume) {
 
 export function validateRecipe(recipeData, isPartial = false) {
     const errors = [];
+    const skippedStages = recipeData?.skippedStages || [];
 
     // Si es parcial, solo validamos lo que viene. Si es completo, todo es obligatorio.
     const check = (field) => !isPartial || (field in recipeData);
 
     if (check('name') && !recipeData?.name?.trim())
         errors.push('El nombre de la receta es obligatorio.');
+    
+    // Si no es parcial, la categoría es obligatoria
     if (check('category') && !recipeData?.category?.trim())
         errors.push('La categoría es obligatoria.');
+
     if (check('targetVolume') && (!recipeData?.targetVolume || Number(recipeData.targetVolume) <= 0))
         errors.push('El volumen objetivo debe ser mayor a 0.');
-    if (check('ingredients') && (!Array.isArray(recipeData?.ingredients?.malts) || recipeData.ingredients.malts.length === 0))
-        errors.push('La receta debe tener al menos una malta.');
+
+    // Regla de Malta: Solo obligatoria si Maceración NO está omitida
+    const mashingSkipped = skippedStages.includes('mashing');
+    if (check('ingredients') && !mashingSkipped && (!Array.isArray(recipeData?.ingredients?.malts) || recipeData.ingredients.malts.length === 0)) {
+        errors.push('La receta debe tener al menos una malta (o marca la etapa de Maceración como omitida).');
+    }
+
     if (check('steps') && (!Array.isArray(recipeData?.steps) || recipeData.steps.length === 0))
         errors.push('La receta debe tener al menos un paso.');
+
+    // Validación estricta: Tiempo de adición vs Duración del paso (especialmente Cocción)
+    if (check('ingredients') && check('steps')) {
+        const boilingSkipped = skippedStages.includes('boiling');
+        
+        if (!boilingSkipped) {
+            const boilStep = recipeData.steps.find(s => s.id === 'boiling' || s.stageId === 'boiling');
+            if (boilStep) {
+                const boilDuration = Number(boilStep.duration || 0);
+                
+                // Validar lúpulos
+                (recipeData.ingredients?.hops || []).forEach(h => {
+                    if ((h.stepId === 'boiling' || h.stageId === 'boiling') && Number(h.additionTime) > boilDuration) {
+                        errors.push(`El lúpulo "${h.name}" tiene un tiempo de adición (${h.additionTime}) superior a la duración de la Cocción (${boilDuration}).`);
+                    }
+                });
+
+                // Validar otros (aditivos)
+                (recipeData.ingredients?.others || []).forEach(o => {
+                    if ((o.stepId === 'boiling' || o.stageId === 'boiling') && Number(o.additionTime) > boilDuration) {
+                        errors.push(`El aditivo "${o.name}" tiene un tiempo de adición (${o.additionTime}) superior a la duración de la Cocción (${boilDuration}).`);
+                    }
+                });
+            }
+        }
+    }
 
     return { valid: errors.length === 0, errors };
 }

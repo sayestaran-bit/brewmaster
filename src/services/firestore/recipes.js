@@ -9,6 +9,9 @@ import {
     onSnapshot, query, orderBy, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { sanitizeRecipeForSaving } from '../../utils/helpers';
+import { calculateWater } from '../../utils/brewMath';
+import { getEquipmentProfile, getDefaultEquipment } from './equipment';
 
 // ── Ruta de la colección de recetas de un usuario ─────────────────────────────
 const recipesRef = (uid) =>
@@ -16,6 +19,45 @@ const recipesRef = (uid) =>
 
 const recipeDocRef = (uid, recipeId) =>
     doc(db, 'users', uid, 'recipes', recipeId);
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+/**
+ * Si la receta tiene un equipmentId, calcula los volúmenes de agua automáticamente.
+ * Si no tiene, intenta usar el equipo predeterminado.
+ */
+async function enrichRecipeWithWaterMath(uid, recipeData) {
+    try {
+        let equipment = null;
+        if (recipeData.equipmentId) {
+            equipment = await getEquipmentProfile(uid, recipeData.equipmentId);
+        }
+        
+        if (!equipment) {
+            equipment = await getDefaultEquipment(uid);
+        }
+
+        if (!equipment) return recipeData;
+
+        const totalGrains = (recipeData.ingredients?.malts || []).reduce(
+            (acc, m) => acc + (Number(m.amount) || 0), 0
+        );
+
+        const water = calculateWater({
+            targetVolume: recipeData.targetVolume || 20,
+            boilTime: recipeData.boilTime || 60,
+            totalGrains,
+            equipment
+        });
+
+        return {
+            ...recipeData,
+            waterVolumes: water // Inyectamos el objeto con preBoil, total, strike, sparge
+        };
+    } catch (error) {
+        console.error("[RecipesService] Error enriching water math:", error);
+        return recipeData;
+    }
+}
 
 // ── Suscripción en tiempo real ─────────────────────────────────────────────────
 /**
@@ -43,17 +85,20 @@ export function onRecipesSnapshot(uid, onData, onError) {
  * @returns {Promise<string>} id del documento (customId o generado)
  */
 export async function addRecipe(uid, recipeData, customId = null) {
+    const enrichedData = await enrichRecipeWithWaterMath(uid, recipeData);
+    const cleanData = sanitizeRecipeForSaving(enrichedData);
+    
     if (customId) {
         const ref = recipeDocRef(uid, customId);
         await setDoc(ref, {
-            ...recipeData,
+            ...cleanData,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
         });
         return customId;
     } else {
         const ref = await addDoc(recipesRef(uid), {
-            ...recipeData,
+            ...cleanData,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
         });
@@ -68,8 +113,11 @@ export async function addRecipe(uid, recipeData, customId = null) {
  * @param {object} data - campos a actualizar
  */
 export async function updateRecipe(uid, recipeId, data) {
+    const enrichedData = await enrichRecipeWithWaterMath(uid, data);
+    const cleanData = sanitizeRecipeForSaving(enrichedData);
+    
     await updateDoc(recipeDocRef(uid, recipeId), {
-        ...data,
+        ...cleanData,
         updatedAt: serverTimestamp(),
     });
 }

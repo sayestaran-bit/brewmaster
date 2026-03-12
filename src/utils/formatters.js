@@ -47,8 +47,17 @@ export const parseDateToTimestamp = (dateStr) => {
 /**
  * Formateo estricto del temporizador del BrewSession
  */
+/**
+ * Formateo estricto del temporizador del BrewSession
+ */
 export const formatTime = (seconds) => {
-    const m = Math.floor((seconds % 3600) / 60);
+    if (seconds >= 3600) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };

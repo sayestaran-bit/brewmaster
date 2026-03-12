@@ -21,6 +21,7 @@ const InventoryView = lazy(() => import('./components/views/InventoryView'));
 const ActiveBatchesView = lazy(() => import('./components/views/ActiveBatchesView'));
 const HistoryView = lazy(() => import('./components/views/HistoryView'));
 const CostAnalysisView = lazy(() => import('./components/views/CostAnalysisView'));
+const EquipmentSettings = lazy(() => import('./components/views/EquipmentSettings'));
 // BrewSession is the heaviest view — always defer it
 const BrewSessionView = lazy(() => import('./components/views/BrewSessionView'));
 
@@ -98,6 +99,7 @@ function MainApp() {
             <Route path="active" element={<ActiveBatchesView />} />
             <Route path="inventory" element={<InventoryView />} />
             <Route path="costs" element={<CostAnalysisView />} />
+            <Route path="equipment" element={<EquipmentSettings />} />
             <Route path="history" element={<HistoryView />} />
           </Route>
 

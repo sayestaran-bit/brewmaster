@@ -1,7 +1,10 @@
 // /src/components/views/InventoryView.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, Droplets, TrendingUp, Info, ListChecks, AlertTriangle } from 'lucide-react';
+import { 
+    Package, Scale, Plus, Save, Wheat, Leaf, Beaker, Trash2, 
+    Droplets, TrendingUp, Info, ListChecks, AlertTriangle, RefreshCw, X 
+} from 'lucide-react';
 import { useInventory } from '../../hooks/useInventory';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventoryAlerts } from '../../hooks/useInventoryAlerts';
@@ -17,18 +20,39 @@ export default function InventoryView() {
     const isGuest = false; // Deshabilitado temporalmente para pruebas locales: currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
     const { recipes } = useRecipes();
-    const { inventory, addItem, updateItem, deleteItem } = useInventory();
+    const { 
+        inventory, 
+        shoppingLists, 
+        addItem, 
+        updateItem, 
+        updateItemAndSync, 
+        deleteItem, 
+        deleteShoppingList, 
+        convertPurchaseToStock, 
+        isSyncing 
+    } = useInventory();
+    
     const { isLowStock } = useInventoryAlerts(inventory);
-    const [newInvItem, setNewInvItem] = useState({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
+    const [newInvItem, setNewInvItem] = useState({ 
+        category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' 
+    });
     const [showInvForm, setShowInvForm] = useState(false);
     const [isShoppingListOpen, setIsShoppingListOpen] = useState(false);
+    const [checkInList, setCheckInList] = useState(null);
 
-    const totalInventoryValue = inventory.reduce((acc, item) => acc + ((item.stock || 0) * (item.price || 0)), 0);
+    const totalInventoryValue = inventory.reduce((acc, item) => 
+        acc + ((item.stock || 0) * (item.price || 0)), 0
+    );
 
     const handleAddInvItem = async () => {
         if (!newInvItem.name.trim()) return;
-        await addItem({ ...newInvItem, stock: Number(newInvItem.stock), price: Number(newInvItem.price) });
+        await addItem({ 
+            ...newInvItem, 
+            stock: Number(newInvItem.stock), 
+            price: Number(newInvItem.price) 
+        });
         setNewInvItem({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
+        setShowInvForm(false);
     };
 
     const handleDeleteInvItem = async (id) => {
@@ -43,21 +67,95 @@ export default function InventoryView() {
                 icon={Package}
                 iconColor="text-blue-500"
                 title="Tu Inventario"
-                subtitle={<span className="flex items-center gap-1.5"><Scale size={14} /> Capital Estimado: <span className="text-emerald-600 dark:text-emerald-400 font-black">{formatCurrency(totalInventoryValue)}</span></span>}
+                subtitle={
+                    <div className="flex items-center gap-4">
+                        <span className="flex items-center gap-1.5">
+                            <Scale size={14} /> Capital Estimado: 
+                            <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                                {formatCurrency(totalInventoryValue)}
+                            </span>
+                        </span>
+                        {isSyncing && (
+                            <span className="flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse border border-blue-200 dark:border-blue-800">
+                                <RefreshCw size={10} className="animate-spin" /> Sincronizando Recetas...
+                            </span>
+                        )}
+                    </div>
+                }
                 action={
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm" icon={ListChecks} onClick={() => setIsShoppingListOpen(true)} className="text-blue-600 border-blue-200 hover:bg-blue-50">
-                            Lista de Compras
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            icon={ListChecks} 
+                            onClick={() => setIsShoppingListOpen(true)} 
+                            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                        >
+                            Planificar Compras
                         </Button>
-                        <Button variant="outline" size="sm" icon={TrendingUp} onClick={() => navigate('/costs')} className="text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            icon={TrendingUp} 
+                            onClick={() => navigate('/costs')} 
+                            className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                        >
                             Costos
                         </Button>
-                        <Button variant="secondary" size="sm" icon={Plus} disabled={isGuest} title={isGuest ? guestTooltip : undefined} onClick={() => setShowInvForm(!showInvForm)}>
+                        <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            icon={Plus} 
+                            disabled={isGuest} 
+                            title={isGuest ? guestTooltip : undefined} 
+                            onClick={() => setShowInvForm(!showInvForm)}
+                        >
                             Añadir Insumo
                         </Button>
                     </div>
                 }
             />
+
+            {/* Planificación de Compras Section */}
+            {shoppingLists.some(l => l.status !== 'purchased') && (
+                <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/50 rounded-2xl p-6 mb-8 animate-fadeIn">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-sm font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest flex items-center gap-2">
+                            <ListChecks size={18} /> Borradores de Compras ({shoppingLists.filter(l => l.status !== 'purchased').length})
+                        </h3>
+                    </div>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {shoppingLists.filter(l => l.status !== 'purchased').map(list => (
+                            <div key={list.id} className="bg-panel p-4 rounded-xl border border-line shadow-sm hover:border-blue-400 transition-all group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-[10px] font-black text-muted uppercase tracking-tighter">
+                                        {list.updatedAt ? new Date(list.updatedAt?.seconds * 1000 || list.updatedAt).toLocaleDateString() : 'Pendiente'}
+                                    </span>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button 
+                                            onClick={() => deleteShoppingList(list.id)} 
+                                            className="p-1 text-red-500 hover:bg-red-50 rounded-md"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="text-sm font-bold text-content mb-3">
+                                    {list.items?.length || 0} ítems | Est: <span className="text-emerald-600 font-black">{formatCurrency(list.totalEstCost || 0)}</span>
+                                </div>
+                                <Button 
+                                    size="xs" 
+                                    variant="primary" 
+                                    className="w-full text-[10px] uppercase font-black"
+                                    onClick={() => setCheckInList(list)}
+                                >
+                                    Realizar Check-in
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <ShoppingListModal
                 isOpen={isShoppingListOpen}
@@ -70,7 +168,15 @@ export default function InventoryView() {
                 <div className="bg-panel p-6 rounded-2xl shadow-sm border border-line flex flex-wrap gap-4 items-end mb-8 animate-fadeIn">
                     <div className="w-full md:w-1/5">
                         <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Categoría</label>
-                        <select className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" value={newInvItem.category} onChange={e => setNewInvItem({ ...newInvItem, category: e.target.value, unit: e.target.value === 'Levadura' ? 'sobre' : e.target.value === 'Lúpulo' || e.target.value === 'Sales Minerales' ? 'g' : e.target.value === 'Aditivos' ? 'un' : 'kg' })}>
+                        <select 
+                            className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" 
+                            value={newInvItem.category} 
+                            onChange={e => setNewInvItem({ 
+                                ...newInvItem, 
+                                category: e.target.value, 
+                                unit: e.target.value === 'Levadura' ? 'sobre' : e.target.value === 'Lúpulo' || e.target.value === 'Sales Minerales' ? 'g' : e.target.value === 'Aditivos' ? 'un' : 'kg' 
+                            })}
+                        >
                             <option value="Malta">Malta</option>
                             <option value="Lúpulo">Lúpulo</option>
                             <option value="Levadura">Levadura</option>
@@ -80,23 +186,44 @@ export default function InventoryView() {
                     </div>
                     <div className="w-full md:w-2/5">
                         <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Insumo</label>
-                        <input type="text" className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" placeholder="Ej: Malta Caramelo" value={newInvItem.name} onChange={e => setNewInvItem({ ...newInvItem, name: e.target.value })} />
+                        <input 
+                            type="text" 
+                            className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" 
+                            placeholder="Ej: Malta Caramelo" 
+                            value={newInvItem.name} 
+                            onChange={e => setNewInvItem({ ...newInvItem, name: e.target.value })} 
+                        />
                     </div>
                     <div className="w-full md:w-1/5 flex gap-2">
                         <div className="w-1/2">
                             <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Stock</label>
-                            <input type="number" className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center bg-surface text-content" value={newInvItem.stock} onChange={e => setNewInvItem({ ...newInvItem, stock: e.target.value })} />
+                            <input 
+                                type="number" 
+                                className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center bg-surface text-content" 
+                                value={newInvItem.stock} 
+                                onChange={e => setNewInvItem({ ...newInvItem, stock: e.target.value })} 
+                            />
                         </div>
                         <div className="w-1/2">
                             <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Unidad</label>
-                            <input type="text" className="w-full p-3 border border-line rounded-xl outline-none bg-surface text-center text-muted/50 font-bold cursor-not-allowed disabled:bg-surface" value={newInvItem.unit} disabled />
+                            <input 
+                                type="text" 
+                                className="w-full p-3 border border-line rounded-xl outline-none bg-surface text-center text-muted/50 font-bold cursor-not-allowed disabled:bg-surface" 
+                                value={newInvItem.unit} 
+                                disabled 
+                            />
                         </div>
                     </div>
                     <div className="w-full md:w-1/5">
                         <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Precio Unit.</label>
                         <div className="relative">
                             <span className="absolute left-3 top-3 text-muted">$</span>
-                            <input type="number" className="w-full p-3 pl-8 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" value={newInvItem.price} onChange={e => setNewInvItem({ ...newInvItem, price: e.target.value })} />
+                            <input 
+                                type="number" 
+                                className="w-full p-3 pl-8 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" 
+                                value={newInvItem.price} 
+                                onChange={e => setNewInvItem({ ...newInvItem, price: e.target.value })} 
+                            />
                         </div>
                     </div>
 
@@ -112,7 +239,10 @@ export default function InventoryView() {
                     </div>
 
                     <div className="w-full md:w-auto flex justify-end mt-2 md:mt-0">
-                        <button onClick={handleAddInvItem} className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex justify-center items-center h-[50px] px-8 transition-colors shadow-sm">
+                        <button 
+                            onClick={handleAddInvItem} 
+                            className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex justify-center items-center h-[50px] px-8 transition-colors shadow-sm"
+                        >
                             <Save size={20} className="mr-2" /> Guardar Insumo
                         </button>
                     </div>
@@ -122,6 +252,8 @@ export default function InventoryView() {
             {['Malta', 'Lúpulo', 'Levadura', 'Sales Minerales', 'Aditivos'].map(category => {
                 const catIcon = category === 'Malta' ? <Wheat size={18} className="text-amber-500" /> : category === 'Lúpulo' ? <Leaf size={18} className="text-green-500" /> : category === 'Sales Minerales' ? <Droplets size={18} className="text-blue-500" /> : category === 'Aditivos' ? <Beaker size={18} className="text-purple-500" /> : <Beaker size={18} className="text-blue-500" />;
                 const categoryItems = Array.isArray(inventory) ? inventory.filter(i => i.category === category) : [];
+
+                if (categoryItems.length === 0) return null;
 
                 return (
                     <div key={category} className="bg-panel rounded-2xl shadow-sm border border-line overflow-hidden mb-8">
@@ -147,9 +279,18 @@ export default function InventoryView() {
                                                 <td className={`px-6 py-5 font-bold ${low ? 'text-red-500' : 'text-content'} relative group/tooltip`}>
                                                     <div className="flex items-center gap-2">
                                                         {low && <AlertTriangle size={16} className="text-red-500 animate-pulse" />}
-                                                        {item.name}
+                                                        <input 
+                                                            type="text"
+                                                            defaultValue={item.name}
+                                                            onBlur={(e) => {
+                                                                if (e.target.value !== item.name) {
+                                                                    updateItemAndSync(item.id, { name: e.target.value });
+                                                                }
+                                                            }}
+                                                            className={`bg-transparent border-none outline-none focus:ring-0 p-0 font-bold ${low ? 'text-red-500' : 'text-content'} w-full focus:bg-white/5 rounded px-1 -ml-1 transition-all`}
+                                                        />
                                                         {item.description && (
-                                                            <div className="relative flex items-center">
+                                                            <div className="relative flex items-center shrink-0">
                                                                 <Info size={16} className={`${low ? 'text-red-400' : 'text-blue-400'} cursor-help`} />
                                                                 <div className="absolute left-6 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl pointer-events-none whitespace-normal z-[60]">
                                                                     {item.description}
@@ -168,7 +309,16 @@ export default function InventoryView() {
                                                             onBlur={(e) => updateItem(item.id, { stock: parseFloat(Number(e.target.value).toFixed(4)) })}
                                                             className={`w-full max-w-[100px] p-2 border ${low ? 'border-red-500/50 focus:ring-red-500' : 'border-line focus:ring-blue-500'} rounded-lg text-center outline-none font-medium bg-surface focus:bg-panel ${low ? 'text-red-600' : 'text-content'} transition-all disabled:opacity-75 disabled:cursor-not-allowed`}
                                                         />
-                                                        <span className={`text-muted font-bold shrink-0 ${low ? 'text-red-400' : ''}`}>{item.unit}</span>
+                                                        <input
+                                                            type="text"
+                                                            defaultValue={item.unit}
+                                                            onBlur={(e) => {
+                                                                if (e.target.value !== item.unit) {
+                                                                    updateItem(item.id, { unit: e.target.value });
+                                                                }
+                                                            }}
+                                                            className={`w-12 p-1 bg-transparent border-none outline-none text-muted font-bold text-center focus:bg-white/5 rounded focus:ring-1 focus:ring-blue-500/30 ${low ? 'text-red-400' : ''}`}
+                                                        />
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-5">
@@ -200,10 +350,86 @@ export default function InventoryView() {
                                     })}
                                 </tbody>
                             </table>
-                        </div >
-                    </div >
-                )
+                        </div>
+                    </div>
+                );
             })}
-        </div >
+
+            {/* Modal de Check-in */}
+            {checkInList && (
+                <CheckInModal 
+                    list={checkInList} 
+                    onClose={() => setCheckInList(null)} 
+                    onConfirm={async (confirmedItems) => {
+                        await convertPurchaseToStock(checkInList.id, confirmedItems);
+                        setCheckInList(null);
+                        alert('¡Stock actualizado correctamente!');
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+// ── Check-in Modal Component ──────────────────────────────────────────────────
+function CheckInModal({ list, onClose, onConfirm }) {
+    const [quantities, setQuantities] = useState(
+        list.items.reduce((acc, item, idx) => ({ ...acc, [idx]: item.toBuy || item.amount }), {})
+    );
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-panel w-full max-w-2xl rounded-3xl shadow-2xl border border-line flex flex-col max-h-[80vh] overflow-hidden animate-in zoom-in duration-200">
+                <div className="p-6 border-b border-line flex justify-between items-center bg-black/5 dark:bg-white/5">
+                    <div>
+                        <h2 className="text-xl font-black text-content flex items-center gap-2">
+                             <TrendingUp className="text-emerald-500" /> Confirmar Recepción
+                        </h2>
+                        <p className="text-xs text-muted font-bold uppercase tracking-widest mt-1">Ajusta las cantidades reales recibidas</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full">
+                        <X size={24} className="text-muted" />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    {list.items.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-4 bg-surface rounded-2xl border border-line">
+                            <div>
+                                <span className="font-bold text-content block">{item.name}</span>
+                                <span className="text-[10px] font-black uppercase text-muted tracking-widest">{item.category}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs text-muted">Planeado: <span className="font-bold">{item.toBuy || item.amount} {item.unit}</span></span>
+                                <div className="relative">
+                                    <input 
+                                        type="number"
+                                        value={quantities[idx]}
+                                        onChange={(e) => setQuantities({ ...quantities, [idx]: Number(e.target.value) })}
+                                        className="w-24 p-2 text-center border border-line rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold bg-panel"
+                                    />
+                                    <span className="absolute -right-6 top-1/2 -translate-y-1/2 text-xs font-bold text-muted">{item.unit}</span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="p-6 border-t border-line bg-black/5 dark:bg-white/5 flex gap-3">
+                    <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
+                    <Button 
+                        variant="primary" 
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20" 
+                        onClick={() => {
+                            const confirmed = list.items.map((item, idx) => ({
+                                ...item,
+                                amount: quantities[idx]
+                            }));
+                            onConfirm(confirmed);
+                        }}
+                    >
+                        Confirmar e Incrementar Stock
+                    </Button>
+                </div>
+            </div>
+        </div>
     );
 }

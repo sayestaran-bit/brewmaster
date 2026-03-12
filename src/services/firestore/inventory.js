@@ -6,7 +6,8 @@
 
 import {
     collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
-    onSnapshot, query, orderBy, runTransaction, serverTimestamp, getDoc, getDocs
+    onSnapshot, query, orderBy, runTransaction, serverTimestamp, getDoc, getDocs,
+    writeBatch, increment
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getIngredientKey } from '../../utils/recipeUtils';
@@ -329,6 +330,187 @@ export async function toggleIngredientConsumption(uid, batchId, ingredient, isCo
             transaction.update(batchRef, {
                 consumedIngredients: updatedConsumed,
                 totalCost: Number(Math.max(0, currentCost - toggleCost).toFixed(2))
+            });
+        }
+    });
+}
+/**
+ * Actualiza un ítem del inventario y sincroniza los cambios con todas las recetas.
+ */
+export async function updateInventoryItemAndSync(uid, itemId, newData) {
+    const itemRef = inventoryDocRef(uid, itemId);
+    const recipesColRef = collection(db, 'users', uid, 'recipes');
+    
+    // 1. Obtener datos actuales del ítem para el fallback por nombre
+    const itemSnap = await getDoc(itemRef);
+    if (!itemSnap.exists()) return;
+    const oldItem = itemSnap.data();
+    const oldName = (oldItem.name || '').toLowerCase().trim();
+
+    // 2. Obtener recetas actuales
+    const recipesSnap = await getDocs(recipesColRef);
+    const userRecipes = recipesSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+    
+    let batch = writeBatch(db);
+    let operationCount = 0;
+    
+    // 3. Actualizar el ítem en el inventario
+    batch.update(itemRef, {
+        ...newData,
+        updatedAt: serverTimestamp()
+    });
+    operationCount++;
+    
+    // 4. Sincronizar con recetas
+    for (const recipe of userRecipes) {
+        let recipeHasChanged = false;
+        const updatedIngredients = { ...recipe.ingredients };
+
+        ['malts', 'hops', 'others', 'yeast'].forEach(cat => {
+            const target = updatedIngredients[cat];
+            if (!target) return;
+
+            if (Array.isArray(target)) {
+                updatedIngredients[cat] = target.map(ing => {
+                    const ingName = (ing.name || '').toLowerCase().trim();
+                    const isMatch = ing.inventoryId === itemId || 
+                                   (!ing.inventoryId && ingName === oldName);
+                    
+                    if (isMatch) {
+                        recipeHasChanged = true;
+                        const updatedIng = { ...ing, inventoryId: itemId }; // Inyectar ID si faltaba
+                        if (newData.name) updatedIng.name = newData.name;
+                        if (newData.category) updatedIng.category = newData.category;
+                        return updatedIng;
+                    }
+                    return ing;
+                });
+            } else if (cat === 'yeast') {
+                const ingName = (target.name || '').toLowerCase().trim();
+                const isMatch = target.inventoryId === itemId || 
+                               (!target.inventoryId && ingName === oldName);
+                if (isMatch) {
+                    recipeHasChanged = true;
+                    updatedIngredients[cat] = { 
+                        ...target,
+                        inventoryId: itemId,
+                        name: newData.name || target.name,
+                        category: newData.category || target.category
+                    };
+                }
+            }
+        });
+
+        if (recipeHasChanged) {
+            if (operationCount >= 499) {
+                await batch.commit();
+                batch = writeBatch(db);
+                operationCount = 0;
+            }
+            const recipeRef = doc(db, 'users', uid, 'recipes', recipe.id);
+            batch.update(recipeRef, { 
+                ingredients: updatedIngredients,
+                updatedAt: serverTimestamp() 
+            });
+            operationCount++;
+        }
+    }
+    
+    if (operationCount > 0) {
+        await batch.commit();
+    }
+}
+
+// ── CRUD Shopping Lists ────────────────────────────────────────────────────────
+const shoppingListsRef = (uid) => collection(db, 'users', uid, 'shoppingLists');
+const shoppingListDocRef = (uid, id) => doc(db, 'users', uid, 'shoppingLists', id);
+
+export function onShoppingListsSnapshot(uid, onData, onError) {
+    if (!uid) return () => { };
+    const q = query(shoppingListsRef(uid), orderBy('updatedAt', 'desc'));
+    return onSnapshot(q, (snap) => onData(snap.docs.map(d => ({ ...d.data(), id: d.id }))), onError);
+}
+
+export async function addShoppingList(uid, listData) {
+    const data = {
+        ...listData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    };
+    const ref = await addDoc(shoppingListsRef(uid), data);
+    return ref.id;
+}
+
+export async function updateShoppingList(uid, listId, data) {
+    await updateDoc(shoppingListDocRef(uid, listId), {
+        ...data,
+        updatedAt: serverTimestamp(),
+    });
+}
+
+export async function deleteShoppingList(uid, listId) {
+    await deleteDoc(shoppingListDocRef(uid, listId));
+}
+
+/**
+ * Incrementa el stock del inventario basado en una lista de compras confirmada.
+ */
+export async function convertPurchaseToStock(uid, listId, confirmedItems) {
+    const batch = writeBatch(db);
+    const listRef = shoppingListDocRef(uid, listId);
+    
+    confirmedItems.forEach(item => {
+        if (item.inventoryId) {
+            const itemRef = inventoryDocRef(uid, item.inventoryId);
+            batch.update(itemRef, {
+                stock: increment(Number(item.amount) || 0),
+                updatedAt: serverTimestamp()
+            });
+        }
+    });
+    
+    batch.update(listRef, {
+        status: 'purchased',
+        updatedAt: serverTimestamp()
+    });
+    
+    return await batch.commit();
+}
+
+/**
+ * Sincroniza el nombre y categoría de un insumo del catálogo con todas las recetas que lo utilizan.
+ * (Mantenida por retrocompatibilidad o llamadas puntuales que prefieran inyectar su propio batch)
+ */
+export function syncInventoryNameWithRecipes(uid, itemId, newName, newCategory, batch, userRecipes) {
+    if (!userRecipes || !Array.isArray(userRecipes)) return;
+
+    userRecipes.forEach(recipe => {
+        let recipeHasChanged = false;
+        const updatedIngredients = { ...recipe.ingredients };
+
+        ['malts', 'hops', 'others', 'yeast'].forEach(cat => {
+            const target = updatedIngredients[cat];
+            if (!target) return;
+
+            if (Array.isArray(target)) {
+                updatedIngredients[cat] = target.map(ing => {
+                    if (ing.inventoryId === itemId) {
+                        recipeHasChanged = true;
+                        return { ...ing, name: newName, category: newCategory };
+                    }
+                    return ing;
+                });
+            } else if (cat === 'yeast' && target.inventoryId === itemId) {
+                recipeHasChanged = true;
+                updatedIngredients[cat] = { ...target, name: newName, category: newCategory };
+            }
+        });
+
+        if (recipeHasChanged) {
+            const recipeRef = doc(db, 'users', uid, 'recipes', recipe.id);
+            batch.update(recipeRef, { 
+                ingredients: updatedIngredients,
+                updatedAt: serverTimestamp() 
             });
         }
     });

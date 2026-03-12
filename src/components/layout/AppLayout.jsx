@@ -4,7 +4,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
     Beaker, RefreshCw, Cloud, Sun, Moon, LogOut,
     LayoutDashboard, BookOpen, Flame, Package, History,
-    BarChart2
+    BarChart2, Settings
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
@@ -33,6 +33,7 @@ const NAV_ITEMS = [
     { to: '/recipes', label: 'Recetas', Icon: BookOpen, activeColor: 'text-orange-500  border-orange-500  bg-orange-50/50  dark:bg-orange-900/20' },
     { to: '/active', label: 'Producción', Icon: Flame, activeColor: 'text-emerald-500 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20', badge: true },
     { to: '/inventory', label: 'Inventario', Icon: Package, activeColor: 'text-sky-500     border-sky-500     bg-sky-50/50     dark:bg-sky-900/20' },
+    { to: '/equipment', label: 'Equipo', Icon: Settings, activeColor: 'text-rose-500      border-rose-500      bg-rose-50/50      dark:bg-rose-900/20' },
     { to: '/history', label: 'Historial', Icon: History, activeColor: 'text-violet-500  border-violet-500  bg-violet-50/50  dark:bg-violet-900/20' },
 ];
 

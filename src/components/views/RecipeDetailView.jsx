@@ -1,16 +1,19 @@
 // /src/components/views/RecipeDetailView.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X, Trash2 } from 'lucide-react';
+import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X, Trash2, Save, Printer, History, Calendar, ChevronRight, Lock, Settings, AlertTriangle } from 'lucide-react';
 import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
 import { formatCurrency, getFormattedDate } from '../../utils/formatters';
-import { getEffectivePhase } from '../../utils/recipeUtils';
+import { getEffectivePhase, getSafeAdditionTime, calculateRequiredSalts, MINERAL_SALTS } from '../../utils/recipeUtils';
+import { generateRecipeDiff } from '../../utils/recipeDiff';
 import { calculateRecipeCost } from '../../utils/costCalculator';
 import { getRecipeAdvice } from '../../services/gemini';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
+import { useEquipment } from '../../hooks/useEquipment';
 import { useAuth } from '../../context/AuthContext';
 import { useActiveBatches } from '../../hooks/useActiveBatches';
+import { calculateWater } from '../../utils/brewMath';
 
 export default function RecipeDetailView() {
     const { id } = useParams();
@@ -18,7 +21,7 @@ export default function RecipeDetailView() {
     const { currentUser } = useAuth();
     const isGuest = false; // Deshabilitado temporalmente para pruebas locales: currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
-    const { recipes, deleteRecipe } = useRecipes();
+    const { recipes, deleteRecipe, updateRecipe } = useRecipes();
     const { inventory } = useInventory();
 
     const [selectedRecipe, setSelectedRecipe] = useState(null);
@@ -31,6 +34,8 @@ export default function RecipeDetailView() {
     const [showBrewModal, setShowBrewModal] = useState(false);
     const [batchIdentity, setBatchIdentity] = useState('');
     const [isStartingBrew, setIsStartingBrew] = useState(false);
+    const [localTapWater, setLocalTapWater] = useState(baseWater);
+    const [isSavingWater, setIsSavingWater] = useState(false);
 
     const { startBatch } = useActiveBatches();
 
@@ -53,6 +58,8 @@ export default function RecipeDetailView() {
             totalCost: 0,
             status: 'Cocinando',
             phase: 'cooking',
+            equipmentId: scaledRecipe.ingredients.water.equipmentId,
+            equipmentName: scaledRecipe.ingredients.water.equipmentName,
             phaseTimestamps: {
                 cookingStart: Date.now(),
                 fermentationStart: null,
@@ -94,6 +101,7 @@ export default function RecipeDetailView() {
             if (found) {
                 setSelectedRecipe(found);
                 setTargetVol(found.targetVolume || 20);
+                setLocalTapWater(found.tapWaterProfile || baseWater);
             } else {
                 navigate('/recipes');
             }
@@ -101,70 +109,147 @@ export default function RecipeDetailView() {
     }, [id, recipes, navigate]);
 
     // --- HOOKS ALWAYS AT THE TOP TO AVOID REACT ERROR 310 ---
+    const { equipment } = useEquipment();
     const scaledRecipe = useMemo(() => {
         if (!selectedRecipe) return null;
         const scaleFactor = (targetVol || 1) / (selectedRecipe.targetVolume || 1);
+        
+        // 1. Escalar ingredientes base
         const safeMalts = Array.isArray(selectedRecipe.ingredients?.malts) ? selectedRecipe.ingredients.malts : [];
         const safeHops = Array.isArray(selectedRecipe.ingredients?.hops) ? selectedRecipe.ingredients.hops : [];
         const safeOthers = Array.isArray(selectedRecipe.ingredients?.others) ? selectedRecipe.ingredients.others : [];
         const safeYeast = typeof selectedRecipe.ingredients?.yeast === 'string'
             ? { name: selectedRecipe.ingredients.yeast, amount: 1, unit: 'sobre' }
             : (selectedRecipe.ingredients?.yeast || { name: 'Levadura', amount: 1, unit: 'sobre' });
+
+        const malts = safeMalts.map(m => ({ ...m, amount: ((Number(m.amount) || 0) * scaleFactor).toFixed(2) }));
+        const hops = safeHops.map(h => ({ ...h, amount: Math.round((Number(h.amount) || 0) * scaleFactor) }));
+        let others = safeOthers.map(o => ({ ...o, amount: ((Number(o.amount) || 0) * scaleFactor).toFixed(2) }));
+        
+        // 2. Lógica Dinámica de Agua (Equipo vs Manual)
+        let water = {
+            strike: ((Number(selectedRecipe.ingredients?.water?.strike) || 15) * scaleFactor).toFixed(1),
+            sparge: ((Number(selectedRecipe.ingredients?.water?.sparge) || 15) * scaleFactor).toFixed(1),
+            isCalculated: false,
+            equipmentName: null,
+            equipmentId: null,
+            isOverflowing: false,
+            maxVolume: null,
+            mashVolume: null
+        };
+
+        const activeProfile = equipment?.find(e => e.id === selectedRecipe.equipmentId) || equipment?.find(e => e.isDefault);
+        
+        if (activeProfile) {
+            const totalGrain = malts.reduce((acc, m) => acc + (parseFloat(m.amount) || 0), 0);
+            const boilStep = (selectedRecipe.steps || []).find(s => s.stageId === 'boiling');
+            const boilTime = boilStep ? (parseFloat(boilStep.duration) || 60) : 60;
+
+            const waterMath = calculateWater({
+                targetVolume: targetVol || 20,
+                boilTime,
+                totalGrains: totalGrain,
+                equipment: activeProfile
+            });
+
+            // Cálculo de desbordamiento (Strike + Desplazamiento del Grano [~0.67 L/kg])
+            const mashVolume = waterMath.strikeWater + (totalGrain * 0.67);
+            const isOverflowing = mashVolume > (activeProfile.totalVolume || 999);
+
+            water = {
+                strike: waterMath.strikeWater,
+                sparge: waterMath.spargeWater,
+                isCalculated: true,
+                equipmentName: activeProfile.name,
+                equipmentId: activeProfile.id,
+                isOverflowing,
+                maxVolume: activeProfile.totalVolume,
+                mashVolume: mashVolume.toFixed(1)
+            };
+        }
+
+        // 3. Calcular sales de agua dinámicas e integrarlas
+        let waterCalcResult = null;
+        if (selectedRecipe.waterProfile) {
+            const totalWaterLiters = Number(water.strike) + Number(water.sparge);
+            if (totalWaterLiters > 0) {
+                waterCalcResult = calculateRequiredSalts(selectedRecipe.waterProfile, localTapWater, totalWaterLiters);
+                if (waterCalcResult?.salts) {
+                    const dynamicSalts = waterCalcResult.salts.map(s => ({
+                        ...s,
+                        category: 'Sales Minerales',
+                        phase: 'cooking',
+                        stepId: 'mashing',
+                        isDynamic: true // Flag para UI
+                    }));
+                    others = [...others, ...dynamicSalts];
+                }
+            }
+        }
+
         return {
             ...selectedRecipe,
-            ingredients: {
-                malts: safeMalts.map(m => ({ ...m, amount: ((Number(m.amount) || 0) * scaleFactor).toFixed(2) })),
-                hops: safeHops.map(h => ({ ...h, amount: Math.round((Number(h.amount) || 0) * scaleFactor) })),
-                others: safeOthers.map(o => ({ ...o, amount: ((Number(o.amount) || 0) * scaleFactor).toFixed(2) })),
-                yeast: safeYeast,
-                water: {
-                    strike: ((Number(selectedRecipe.ingredients?.water?.strike) || 15) * scaleFactor).toFixed(1),
-                    sparge: ((Number(selectedRecipe.ingredients?.water?.sparge) || 15) * scaleFactor).toFixed(1),
-                },
-            },
+            ingredients: { malts, hops, others, yeast: safeYeast, water },
+            waterCalc: waterCalcResult,
+            activeEquipment: activeProfile // Referencia directa para facilitar acceso
         };
-    }, [selectedRecipe, targetVol]);
+    }, [selectedRecipe, targetVol, localTapWater, equipment]);
+
+    const [expandedMods, setExpandedMods] = useState([]);
+    const [editingModIdx, setEditingModIdx] = useState(null);
+    const [tempModNote, setTempModNote] = useState('');
+
+    const toggleModExpansion = (idx) => {
+        setExpandedMods(prev => 
+            prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+        );
+    };
+
+    const handleUpdateModNote = async (idx) => {
+        if (!selectedRecipe || editingModIdx === null) return;
+        
+        const newMods = [...scaledRecipe.modifications];
+        newMods[idx] = { ...newMods[idx], note: tempModNote };
+        
+        try {
+            await updateRecipe(selectedRecipe.id, { modifications: newMods });
+            setEditingModIdx(null);
+        } catch (err) {
+            alert("Error al actualizar la nota: " + err.message);
+        }
+    };
 
     const costInfo = useMemo(
-        () => selectedRecipe ? calculateRecipeCost(selectedRecipe, inventory, targetVol) : null,
-        [selectedRecipe, inventory, targetVol]
+        () => scaledRecipe ? calculateRecipeCost(scaledRecipe, inventory, targetVol) : null,
+        [scaledRecipe, inventory, targetVol]
     );
 
-    const saltAdditions = useMemo(() => {
-        if (!scaledRecipe || !scaledRecipe.waterProfile) return null;
-        const target = scaledRecipe.waterProfile;
-        const totalWaterLiters = Number(scaledRecipe.ingredients.water.strike) + Number(scaledRecipe.ingredients.water.sparge);
-        if (totalWaterLiters <= 0) return null;
-        const diff = {
-            Ca: Math.max(0, (Number(target.Ca) || 0) - baseWater.Ca),
-            Mg: Math.max(0, (Number(target.Mg) || 0) - baseWater.Mg),
-            SO4: Math.max(0, (Number(target.SO4) || 0) - baseWater.SO4),
-            Cl: Math.max(0, (Number(target.Cl) || 0) - baseWater.Cl),
-            HCO3: Math.max(0, (Number(target.HCO3) || 0) - baseWater.HCO3),
-        };
-        const epsomGrams = (diff.Mg * totalWaterLiters) / 99;
-        const epsomSO4Contributed = (epsomGrams * 390) / totalWaterLiters || 0;
-        const cacl2Grams = (diff.Cl * totalWaterLiters) / 482;
-        const cacl2CaContributed = (cacl2Grams * 272) / totalWaterLiters || 0;
-        const bakingSodaGrams = (diff.HCO3 * totalWaterLiters) / 728;
-        const remainingSO4 = Math.max(0, diff.SO4 - epsomSO4Contributed);
-        const gypsumGrams = (remainingSO4 * totalWaterLiters) / 558;
-        const gypsumCaContributed = (gypsumGrams * 232) / totalWaterLiters || 0;
-        return {
-            totalWater: totalWaterLiters.toFixed(1),
-            gypsum: gypsumGrams.toFixed(1),
-            cacl2: cacl2Grams.toFixed(1),
-            epsom: epsomGrams.toFixed(1),
-            bakingSoda: bakingSodaGrams.toFixed(1),
-            finalEstimates: {
-                Ca: Math.round(baseWater.Ca + cacl2CaContributed + gypsumCaContributed),
-                Mg: Math.round(baseWater.Mg + diff.Mg),
-                SO4: Math.round(baseWater.SO4 + epsomSO4Contributed + remainingSO4),
-                Cl: Math.round(baseWater.Cl + diff.Cl),
-                HCO3: Math.round(baseWater.HCO3 + diff.HCO3),
-            },
-        };
-    }, [scaledRecipe]);
+
+    const hasWaterChanges = useMemo(() => {
+        if (!selectedRecipe) return false;
+        const current = selectedRecipe.tapWaterProfile || baseWater;
+        return JSON.stringify(localTapWater) !== JSON.stringify(current);
+    }, [selectedRecipe, localTapWater]);
+
+    const handlePrint = () => {
+        window.print();
+    };
+
+    const handleSaveWater = async () => {
+        if (!selectedRecipe || isSavingWater) return;
+        setIsSavingWater(true);
+        try {
+            await updateRecipe(selectedRecipe.id, {
+                ...selectedRecipe,
+                tapWaterProfile: localTapWater
+            });
+        } catch (error) {
+            console.error("Error saving water profile:", error);
+            alert("No se pudo guardar el perfil de agua.");
+        } finally {
+            setIsSavingWater(false);
+        }
+    };
 
     const toggleStep = (id) => setCompletedSteps(prev => prev.includes(id) ? prev.filter(stepId => stepId !== id) : [...prev, id]);
     const toggleStepDetails = (e, id) => { e.stopPropagation(); setExpandedStep(prev => prev === id ? null : id); };
@@ -219,9 +304,17 @@ export default function RecipeDetailView() {
             {/* HEADER DINÁMICO */}
             <div className={`${theme.bg} text-white p-8 md:p-12 rounded-t-[2.5rem] shadow-xl flex flex-col md:flex-row justify-between items-start md:items-end relative overflow-hidden`}>
                 <div className="relative z-10 w-full md:w-2/3">
-                    <span className="bg-white/20 px-5 py-2 rounded-full text-sm font-black tracking-[0.2em] uppercase mb-4 inline-block shadow-sm backdrop-blur-md">
-                        {scaledRecipe.category || 'Sin Categoría'}
-                    </span>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        <span className="bg-white/20 px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm backdrop-blur-md border border-white/10" title="Familia">
+                            {scaledRecipe.family || 'Ale'}
+                        </span>
+                        <span className="bg-white/20 px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm backdrop-blur-md border border-white/10" title="Estilo">
+                            {scaledRecipe.style || 'IPA'}
+                        </span>
+                        <span className="bg-white/40 px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm backdrop-blur-md border border-white/20" title="Sub-estilo / Categoría">
+                            {scaledRecipe.subStyle || scaledRecipe.category}
+                        </span>
+                    </div>
                     <h2 className="text-5xl md:text-6xl font-black mb-3 leading-[0.9] drop-shadow-md tracking-tighter">{scaledRecipe.name || 'Receta Sin Nombre'}</h2>
 
                     {scaledRecipe.description && (
@@ -360,6 +453,19 @@ export default function RecipeDetailView() {
                                 <h3 className="text-2xl font-black flex items-center gap-3 border-b border-amber-200 dark:border-amber-800/50 pb-4 mb-6 text-amber-900 dark:text-amber-500">
                                     <Wheat className="text-amber-500" size={28} /> Granos y Agua
                                 </h3>
+                                
+                                {scaledRecipe.ingredients.water.isOverflowing && (
+                                    <div className="mb-6 p-5 bg-red-500/10 border-2 border-red-500/50 rounded-2xl animate-pulse flex flex-col gap-2 shadow-lg shadow-red-500/10">
+                                        <div className="flex items-center gap-2 text-red-500">
+                                            <AlertTriangle size={24} className="flex-shrink-0" />
+                                            <h4 className="font-black text-sm uppercase tracking-tighter">¡PELIGRO DE DESBORDAMIENTO!</h4>
+                                        </div>
+                                        <p className="text-[11px] text-red-700 dark:text-red-400 font-bold leading-tight">
+                                            El volumen estimado del empaste ({scaledRecipe.ingredients.water.mashVolume}L) supera la capacidad total de tu equipo ({scaledRecipe.ingredients.water.maxVolume}L). Considera reducir el volumen objetivo o la carga de grano.
+                                        </p>
+                                    </div>
+                                )}
+
                                 <ul className="space-y-4">
                                     {scaledRecipe.ingredients.malts.map((malt, idx) => {
                                         const stockItem = costInfo.ingredients.find(i => i.category === 'Malta' && i.name === (malt.name || 'Malta desconocida'));
@@ -391,13 +497,36 @@ export default function RecipeDetailView() {
                                         );
                                     })}
                                     <li className="flex justify-between items-center pt-4 mt-4 border-t border-dashed border-amber-300 dark:border-amber-800/50">
-                                        <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={18} /> Agua Strike (Macerar)</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={18} /> Agua Strike (Macerar)</span>
+                                            {scaledRecipe.ingredients.water.isCalculated && (
+                                                <div className="bg-amber-500 text-slate-900 rounded-full p-1 shadow-md border border-panel animate-pulse" title={`Volumen calculado por equipo: ${scaledRecipe.ingredients.water.equipmentName}`}>
+                                                    <Lock size={12} />
+                                                </div>
+                                            )}
+                                        </div>
                                         <span className="font-black text-blue-800 dark:text-blue-300 text-xl">{scaledRecipe.ingredients.water.strike} L</span>
                                     </li>
-                                    <li className="flex justify-between items-center pt-3">
-                                        <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={18} /> Agua Sparge (Lavar)</span>
-                                        <span className="font-black text-blue-800 dark:text-blue-300 text-xl">{scaledRecipe.ingredients.water.sparge} L</span>
-                                    </li>
+                                    {!scaledRecipe.skippedStages?.includes('sparging') && (
+                                        <li className="flex justify-between items-center pt-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2"><Droplets size={18} /> Agua Sparge (Lavar)</span>
+                                                {scaledRecipe.ingredients.water.isCalculated && (
+                                                    <div className="bg-amber-500 text-slate-900 rounded-full p-1 shadow-md border border-panel animate-pulse" title={`Volumen calculado por equipo: ${scaledRecipe.ingredients.water.equipmentName}`}>
+                                                        <Lock size={12} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <span className="font-black text-blue-800 dark:text-blue-300 text-xl">{scaledRecipe.ingredients.water.sparge} L</span>
+                                        </li>
+                                    )}
+                                    {scaledRecipe.ingredients.water.isCalculated && (
+                                        <li className="flex justify-end pt-3">
+                                            <span className="text-[10px] text-amber-500 font-black uppercase tracking-widest flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-sm">
+                                                <Settings size={14} className="animate-spin-slow" /> USANDO EQUIPO: {scaledRecipe.ingredients.water.equipmentName}
+                                            </span>
+                                        </li>
+                                    )}
                                 </ul>
                             </div>
 
@@ -435,9 +564,9 @@ export default function RecipeDetailView() {
                                                     <span className="bg-panel border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    {hop.time && (
+                                                    {(hop.additionTime !== undefined || hop.time) && (
                                                         <span className="text-green-700 dark:text-green-300 font-bold text-sm flex items-center gap-1 bg-green-100/50 dark:bg-green-900/40 w-fit px-3 py-1.5 rounded-lg border border-green-200/50 dark:border-green-800">
-                                                            <Clock size={16} /> {hop.time} | {hop.use || hop.stage || 'Hervor'}
+                                                            <Clock size={16} /> {hop.additionTime !== undefined ? `${hop.additionTime}${hop.additionTimeUnit || 'm'}` : hop.time} | {hop.use || hop.stage || 'Hervor'}
                                                         </span>
                                                     )}
                                                     {hop.phase === 'fermenting' && (
@@ -490,6 +619,11 @@ export default function RecipeDetailView() {
                                                         <div className="flex items-center gap-2">
                                                             <div className="flex items-center gap-1 group/tooltip relative">
                                                                 <span className="font-bold text-slate-800 dark:text-slate-200 text-lg">{other.name || 'Aditivo'}</span>
+                                                                {other.isDynamic && (
+                                                                    <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-black px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 flex items-center gap-1 ml-2">
+                                                                        <Sparkles size={10} /> Ajuste Sales
+                                                                    </span>
+                                                                )}
                                                                 {invItem?.description && (
                                                                     <>
                                                                         <Info size={16} className="text-blue-400 cursor-help ml-1" />
@@ -527,9 +661,9 @@ export default function RecipeDetailView() {
                         </div>
 
                         {[
-                            { id: 'cooking', title: 'Fases de Cocción', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'cooking'), icon: <Thermometer size={24} />, colorClass: 'text-amber-600 dark:text-amber-500', bgClass: 'bg-amber-50/50 dark:bg-amber-900/10' },
-                            { id: 'fermenting', title: 'Fases de Fermentación', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'fermenting'), icon: <Activity size={24} />, colorClass: 'text-purple-600 dark:text-purple-500', bgClass: 'bg-purple-50/50 dark:bg-purple-900/10' },
-                            { id: 'bottling', title: 'Fase de Envasado', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'bottling'), icon: <Clock size={24} />, colorClass: 'text-blue-600 dark:text-blue-500', bgClass: 'bg-blue-50/50 dark:bg-blue-900/10' }
+                            { id: 'cooking', title: 'Fases de Cocción', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'cooking' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Thermometer size={24} />, colorClass: 'text-amber-600 dark:text-amber-500', bgClass: 'bg-amber-50/50 dark:bg-amber-900/10' },
+                            { id: 'fermenting', title: 'Fases de Fermentación', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'fermenting' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Activity size={24} />, colorClass: 'text-purple-600 dark:text-purple-500', bgClass: 'bg-purple-50/50 dark:bg-purple-900/10' },
+                            { id: 'bottling', title: 'Fase de Envasado', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'bottling' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Clock size={24} />, colorClass: 'text-blue-600 dark:text-blue-500', bgClass: 'bg-blue-50/50 dark:bg-blue-900/10' }
                         ].map(phaseGrp => phaseGrp.steps.length > 0 && (
                             <div key={phaseGrp.id} className={`p-8 rounded-3xl border border-line shadow-sm mb-8 ${phaseGrp.bgClass}`}>
                                 <h4 className={`text-2xl font-black flex items-center gap-3 mb-6 ${phaseGrp.colorClass} border-b border-gray-200/50 dark:border-slate-700/50 pb-4`}>
@@ -538,26 +672,32 @@ export default function RecipeDetailView() {
 
                                 {/* Mostrar Insumos de esta fase */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                    {scaledRecipe.ingredients.hops.filter(h => getEffectivePhase(h) === phaseGrp.id).map((h, i) => (
+                                    {scaledRecipe.ingredients.hops.filter(h => getEffectivePhase(h) === phaseGrp.id && (!h.stageId || !scaledRecipe.skippedStages?.includes(h.stageId))).map((h, i) => (
                                         <div key={`h-${i}`} className="bg-surface p-4 rounded-2xl border border-line flex justify-between items-center shadow-sm">
                                             <div className="flex items-center gap-3">
                                                 <div className={`p-2 rounded-lg ${phaseGrp.id === 'cooking' ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'}`}><Leaf size={16} /></div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-content text-sm">{h.name}</span>
-                                                    <span className="text-[10px] text-muted uppercase font-black">{h.time} | {h.use || 'Adición'}</span>
-                                                </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-content text-sm">{h.name}</span>
+                                                        <span className="text-[10px] text-muted uppercase font-black">
+                                                            {h.additionTime !== undefined ? 
+                                                                (h.additionTime === (scaledRecipe.steps.find(s => s.stageId === 'boiling')?.duration || 60) ? 'INICIO' : `@ ${h.additionTime}${h.additionTimeUnit || 'm'}`) 
+                                                                : (h.time || 'Adición')}
+                                                        </span>
+                                                    </div>
                                             </div>
                                             <span className="font-black text-content">{h.amount} g</span>
                                         </div>
                                     ))}
-                                    {scaledRecipe.ingredients.others.filter(o => getEffectivePhase(o) === phaseGrp.id && o.category === 'Sales Minerales').map((o, i) => (
+                                    {scaledRecipe.ingredients.others.filter(o => getEffectivePhase(o) === phaseGrp.id && o.category === 'Sales Minerales' && (!o.stageId || !scaledRecipe.skippedStages?.includes(o.stageId))).map((o, i) => (
                                         <div key={`s-${i}`} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/20 flex justify-between items-center shadow-sm">
                                             <div className="flex items-center gap-3">
                                                 <div className="bg-blue-500 text-white p-2 rounded-lg shadow-sm"><Sparkles size={16} /></div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-blue-900 dark:text-blue-100 text-sm">{o.name}</span>
-                                                    <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase font-black">{o.time || 'Start'} | Sal Mineral</span>
-                                                </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-blue-900 dark:text-blue-100 text-sm">{o.name}</span>
+                                                        <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase font-black">
+                                                            {o.additionTime !== undefined ? (o.additionTime === 0 ? 'INICIO' : `@ ${o.additionTime}${o.additionTimeUnit || 'm'}`) : (o.time || 'Start')} | Sal Mineral
+                                                        </span>
+                                                    </div>
                                             </div>
                                             <span className="font-black text-blue-900 dark:text-blue-100">{o.amount} {o.unit || 'g'}</span>
                                         </div>
@@ -582,11 +722,54 @@ export default function RecipeDetailView() {
                                                             <h3 className={`font-black text-xl md:text-2xl ${completedSteps.includes(globalId) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-content'}`}>
                                                                 {step.title || 'Paso'}
                                                             </h3>
-                                                            {step.duration && <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-2 py-1 rounded-lg border border-line whitespace-nowrap"><Clock size={12} className="inline mr-1" />{step.duration} {['fermenting', 'bottling'].includes(getEffectivePhase(step)) ? 'd' : 'min'}</span>}
+                                                            {step.duration && (
+                                                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-2 py-1 rounded-lg border border-line whitespace-nowrap">
+                                                                    <Clock size={12} className="inline mr-1" />
+                                                                    {step.duration} {step.timeUnit || (['fermenting', 'bottling'].includes(getEffectivePhase(step)) ? 'd' : 'm')}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <p className={`text-base md:text-lg leading-relaxed font-medium ${completedSteps.includes(globalId) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
                                                             {step.desc || ''}
                                                         </p>
+
+                                                        {/* Insumos vinculados a este paso */}
+                                                        {(() => {
+                                                            const stepMalts = scaledRecipe.ingredients.malts.filter(m => m.stepId === step.id);
+                                                            const stepHops = scaledRecipe.ingredients.hops.filter(h => h.stepId === step.id);
+                                                            const stepOthers = scaledRecipe.ingredients.others.filter(o => o.stepId === step.id);
+                                                            
+                                                            if (stepMalts.length === 0 && stepHops.length === 0 && stepOthers.length === 0) return null;
+
+                                                            return (
+                                                                <div className="mt-4 flex flex-wrap gap-2">
+                                                                    {stepMalts.map((m, i) => (
+                                                                        <span key={`m-${i}`} className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black px-2 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1">
+                                                                            <Wheat size={10} /> {m.name} ({m.amount} {m.unit || 'kg'})
+                                                                            {(m.additionTime !== undefined || m.time || true) && (
+                                                                                <span className="opacity-60 ml-1">@ {getSafeAdditionTime(m, step)}{m.additionTimeUnit || 'm'}</span>
+                                                                            )}
+                                                                        </span>
+                                                                    ))}
+                                                                    {stepHops.map((h, i) => (
+                                                                        <span key={`h-${i}`} className="bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-black px-2 py-1 rounded-lg border border-green-500/20 flex items-center gap-1">
+                                                                            <Leaf size={10} /> {h.name} ({h.amount} {h.unit || 'g'})
+                                                                            {(h.additionTime !== undefined || h.time || true) && (
+                                                                                <span className="opacity-60 ml-1">@ {getSafeAdditionTime(h, step)}{h.additionTimeUnit || 'm'}</span>
+                                                                            )}
+                                                                        </span>
+                                                                    ))}
+                                                                    {stepOthers.map((o, i) => (
+                                                                        <span key={`o-${i}`} className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-black px-2 py-1 rounded-lg border border-purple-500/20 flex items-center gap-1">
+                                                                            <Sparkles size={10} /> {o.name} ({o.amount} {o.unit || 'g'})
+                                                                            {(o.additionTime !== undefined || o.time || true) && (
+                                                                                <span className="opacity-60 ml-1">@ {getSafeAdditionTime(o, step)}{o.additionTimeUnit || 'm'}</span>
+                                                                            )}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
                                                     {step.details && typeof step.details === 'string' && (
                                                         <button
@@ -601,8 +784,10 @@ export default function RecipeDetailView() {
 
                                                 {expandedStep === globalId && step.details && typeof step.details === 'string' && (
                                                     <div className="p-6 md:p-8 bg-surface/80 border border-t-0 border-line rounded-b-2xl text-slate-800 dark:text-slate-200 animate-fadeIn text-sm md:text-base shadow-inner">
-                                                        <h4 className="font-black flex items-center gap-2 mb-3 text-amber-700 dark:text-amber-500 uppercase tracking-wider text-xs"><Info size={18} /> Técnica:</h4>
-                                                        <div className="pl-4 border-l-2 border-amber-300 dark:border-amber-700 font-medium whitespace-pre-line text-slate-600 dark:text-slate-300">
+                                                        <h4 className="font-black flex items-center gap-2 mb-4 text-amber-700 dark:text-amber-500 uppercase tracking-wider text-[10px] bg-amber-500/5 w-fit px-3 py-1.5 rounded-lg border border-amber-500/10">
+                                                            <Info size={16} /> Guía Técnica y Control Pro:
+                                                        </h4>
+                                                        <div className="pl-5 border-l-4 border-amber-300 dark:border-amber-700/50 font-medium whitespace-pre-line text-slate-700 dark:text-slate-300 leading-relaxed">
                                                             {step.details}
                                                         </div>
                                                     </div>
@@ -624,111 +809,159 @@ export default function RecipeDetailView() {
                 }
 
                 {/* TAB: AGUA */}
-                {
-                    activeTab === 'water' && (
-                        <div className="space-y-8 animate-fadeIn">
-                            <div className="bg-blue-50/50 dark:bg-blue-900/10 p-8 md:p-10 rounded-3xl border border-blue-100 dark:border-blue-800 shadow-sm relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 text-blue-500 pointer-events-none">
-                                    <Droplets size={200} />
-                                </div>
-                                <h3 className="text-3xl font-black text-blue-900 dark:text-blue-400 mb-2 flex items-center gap-3 relative z-10">
-                                    <Droplets size={32} className="text-blue-500" /> Perfil Mineral Objetivo
-                                </h3>
-                                <p className="text-blue-800 dark:text-blue-300 text-lg mb-8 font-medium relative z-10 max-w-2xl">
-                                    Ajustar el agua es el secreto para transformar una buena cerveza en una cerveza de campeonato mundial.
-                                </p>
-
-                                {scaledRecipe.waterProfile ? (
-                                    <div className="grid grid-cols-5 gap-3 md:gap-5 text-center relative z-10">
-                                        {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
-                                            <div key={ion} className="bg-panel p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col transition-transform hover:-translate-y-1">
-                                                <span className="block font-black text-slate-400 text-xs md:text-sm uppercase tracking-widest mb-2">{ion}</span>
-                                                <span className="text-blue-600 dark:text-blue-400 font-black text-3xl md:text-4xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="bg-panel p-8 rounded-2xl text-center text-muted font-bold border border-blue-100 dark:border-slate-700 relative z-10 text-lg">
-                                        No hay un perfil estricto para esta receta.
-                                    </div>
-                                )}
+                {activeTab === 'water' && (
+                    <div className="space-y-8 animate-fadeIn">
+                        <div className="bg-blue-50/50 dark:bg-blue-900/10 p-8 md:p-10 rounded-3xl border border-blue-100 dark:border-blue-800 shadow-sm relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 text-blue-500 pointer-events-none">
+                                <Droplets size={200} />
                             </div>
+                            <h3 className="text-3xl font-black text-blue-900 dark:text-blue-400 mb-2 flex items-center gap-3 relative z-10">
+                                <Droplets size={32} className="text-blue-500" /> Perfil Mineral Objetivo
+                            </h3>
+                            <p className="text-blue-800 dark:text-blue-300 text-lg mb-8 font-medium relative z-10 max-w-2xl">
+                                Ajustar el agua es el secreto para transformar una buena cerveza en una cerveza de campeonato mundial.
+                            </p>
 
-                            <div className="bg-panel p-8 md:p-10 rounded-3xl border border-line shadow-sm">
-                                <h4 className="font-black text-content mb-8 text-2xl flex items-center gap-3">Tu Agua de la Llave (Base)</h4>
-                                <div className="grid grid-cols-5 gap-3 md:gap-6">
-                                    {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
-                                        <div key={ion}>
-                                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">{ion}</label>
-                                            <input
-                                                type="number"
-                                                value={baseWater[ion] || 0}
-                                                readOnly // Simplificación en esta versión final, se puede hacer que sea de config de app.
-                                                className="w-full p-4 md:p-5 border border-line rounded-2xl text-center font-black text-xl md:text-2xl outline-none bg-surface text-content transition-all shadow-inner"
-                                            />
+                            {scaledRecipe.waterProfile ? (
+                                <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-5 text-center relative z-10">
+                                    {['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].map(ion => (
+                                        <div key={ion} className="bg-panel p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col transition-transform hover:-translate-y-1">
+                                            <span className="block font-black text-slate-400 text-[10px] md:text-sm uppercase tracking-widest mb-2">{ion}</span>
+                                            <span className="text-blue-600 dark:text-blue-400 font-black text-2xl md:text-4xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
                                         </div>
                                     ))}
                                 </div>
-                            </div>
-
-                            {saltAdditions && scaledRecipe.waterProfile && (
-                                <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-8 md:p-12 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-xl relative overflow-hidden">
-                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-                                        <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl md:text-4xl flex items-center gap-3">
-                                            <Scale size={40} className="text-amber-600" /> Adición de Sales
-                                        </h4>
-                                        <span className="bg-amber-600 text-white px-6 py-3 rounded-2xl text-lg font-black shadow-md">
-                                            Para {saltAdditions.totalWater} L (Total)
-                                        </span>
-                                    </div>
-
-                                    <p className="text-xl text-amber-800 dark:text-slate-300 font-medium mb-10">
-                                        Mezcla estas cantidades exactas en el agua <span className="font-black underline">antes</span> de agregar la malta.
-                                    </p>
-
-                                    <div className="grid md:grid-cols-4 gap-5 mb-10">
-                                        <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-full h-2 bg-blue-400"></div>
-                                            <span className="block font-black text-content text-5xl mb-3">{saltAdditions.cacl2}g</span>
-                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Cloruro de Calcio</span>
-                                        </div>
-                                        <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-full h-2 bg-amber-400"></div>
-                                            <span className="block font-black text-content text-5xl mb-3">{saltAdditions.gypsum}g</span>
-                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Gypsum (CaSO4)</span>
-                                        </div>
-                                        <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-full h-2 bg-green-400"></div>
-                                            <span className="block font-black text-content text-5xl mb-3">{saltAdditions.epsom}g</span>
-                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Sal de Epsom</span>
-                                        </div>
-                                        {Number(saltAdditions.bakingSoda) > 0 && (
-                                            <div className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden">
-                                                <div className="absolute top-0 left-0 w-full h-2 bg-purple-400"></div>
-                                                <span className="block font-black text-content text-5xl mb-3">{saltAdditions.bakingSoda}g</span>
-                                                <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">Bicarbonato Sodio</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="bg-white dark:bg-slate-950 p-8 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner">
-                                        <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-6 text-center">Perfil Final Estimado</h5>
-                                        <div className="flex justify-around text-2xl font-black flex-wrap gap-6">
-                                            <span className="text-muted text-sm flex flex-col items-center">Ca <span className={(saltAdditions.finalEstimates.Ca >= (Number(scaledRecipe.waterProfile.Ca) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.Ca}</span></span>
-                                            <span className="text-muted text-sm flex flex-col items-center">Mg <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Mg}</span></span>
-                                            <span className="text-muted text-sm flex flex-col items-center">SO4 <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.SO4}</span></span>
-                                            <span className="text-muted text-sm flex flex-col items-center">Cl <span className="text-green-500 text-3xl">{saltAdditions.finalEstimates.Cl}</span></span>
-                                            <span className="text-muted text-sm flex flex-col items-center" title="Ajustado con Bicarbonato de Sodio">HCO3 <span className={(saltAdditions.finalEstimates.HCO3 >= (Number(scaledRecipe.waterProfile.HCO3) || 0)) ? 'text-green-500 text-3xl' : 'text-amber-500 text-3xl'}>{saltAdditions.finalEstimates.HCO3}</span></span>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-muted mt-6 text-center italic font-medium">
-                                        * El perfil estimado puede diferir levemente del objetivo porque las sales aportan iones en pares (ej. el Cloruro de Calcio suma Cl y Ca simultáneamente).
-                                    </p>
+                            ) : (
+                                <div className="bg-panel p-8 rounded-2xl text-center text-muted font-bold border border-blue-100 dark:border-slate-700 relative z-10 text-lg">
+                                    No hay un perfil estricto para esta receta.
                                 </div>
                             )}
                         </div>
-                    )
-                }
+
+                        <div className="bg-panel p-8 md:p-10 rounded-3xl border border-line shadow-sm">
+                            <div className="flex justify-between items-center mb-8">
+                                <h4 className="font-black text-content text-2xl flex items-center gap-3">Tu Agua de la Llave (Base)</h4>
+                                {hasWaterChanges && (
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => setLocalTapWater(selectedRecipe.tapWaterProfile || baseWater)}
+                                            className="px-4 py-2 text-xs font-black uppercase text-muted hover:text-red-500 transition-colors"
+                                        >
+                                            Restablecer
+                                        </button>
+                                        <button 
+                                            onClick={handleSaveWater}
+                                            disabled={isSavingWater}
+                                            className="bg-emerald-500 text-white px-5 py-2 rounded-xl text-xs font-black uppercase shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-2"
+                                        >
+                                            {isSavingWater ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                            Guardar Cambios
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-6">
+                                {['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].map(ion => (
+                                    <div key={ion}>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">{ion}</label>
+                                        <input
+                                            type="number"
+                                            value={localTapWater[ion] || 0}
+                                            onChange={(e) => setLocalTapWater(prev => ({ ...prev, [ion]: Number(e.target.value) || 0 }))}
+                                            className="w-full p-4 md:p-5 border border-line rounded-2xl text-center font-black text-xl md:text-2xl outline-none bg-surface text-content transition-all shadow-inner focus:ring-2 focus:ring-blue-500/30"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {scaledRecipe.waterCalc && scaledRecipe.waterCalc.salts && (
+                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-8 md:p-12 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-xl relative overflow-hidden">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+                                    <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl md:text-4xl flex items-center gap-3">
+                                        <Scale size={40} className="text-amber-600" /> Adición de Sales
+                                    </h4>
+                                    <span className="bg-amber-600 text-white px-6 py-3 rounded-2xl text-lg font-black shadow-md">
+                                        Para {((Number(scaledRecipe.ingredients.water.strike) + Number(scaledRecipe.ingredients.water.sparge))).toFixed(1)} L (Total)
+                                    </span>
+                                </div>
+
+                                <p className="text-xl text-amber-800 dark:text-slate-300 font-medium mb-10">
+                                    Mezcla estas cantidades exactas en el agua <span className="font-black underline">antes</span> de agregar la malta.
+                                </p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
+                                    {scaledRecipe.waterCalc.salts.map((salt, idx) => (
+                                        <div key={idx} className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden transition-all duration-500 hover:scale-105">
+                                            <div className={`absolute top-0 left-0 w-full h-2 ${
+                                                salt.name.includes('Calcio') ? 'bg-blue-400' : 
+                                                salt.name.includes('Magnesio') ? 'bg-green-400' : 
+                                                salt.name.includes('Sodio') ? 'bg-purple-400' : 'bg-amber-400'
+                                            }`}></div>
+                                            <span className="block font-black text-content text-5xl mb-3 tabular-nums transition-all duration-500">
+                                                {salt.amount}g
+                                            </span>
+                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">{salt.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="bg-white dark:bg-slate-950 p-8 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner">
+                                    <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-6 text-center">Perfil Final Estimado vs Objetivo</h5>
+                                    <div className="flex justify-around text-2xl font-black flex-wrap gap-8">
+                                        {['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].map(ion => {
+                                            const final = scaledRecipe.waterCalc.finalProfile[ion];
+                                            const target = scaledRecipe.waterProfile[ion];
+                                            const error = Math.abs(final - target);
+                                            const deviationPercent = target > 0 ? (error / target) * 100 : 0;
+                                            const isCritical = deviationPercent > 20 && error > 10;
+                                            const statusColor = error < 5 ? 'text-green-500' : error < 15 ? 'text-amber-500' : 'text-red-500';
+
+                                            return (
+                                                <div key={ion} className="flex flex-col items-center">
+                                                    <span className="text-muted text-[10px] uppercase tracking-widest mb-1 font-black">{ion}</span>
+                                                    <span className={`${statusColor} text-3xl tabular-nums flex items-center gap-1`}>
+                                                        {Math.round(final)}
+                                                        {isCritical && <Info size={14} className="text-red-500 animate-pulse" title="Desviación mayor al 20%" />}
+                                                    </span>
+                                                    <span className="text-[10px] text-muted-foreground opacity-50 font-bold">Obj: {target}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    
+                                    {/* Alerta de Desviación Crítica */}
+                                    {(() => {
+                                        const criticalIons = ['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].filter(ion => {
+                                            const error = Math.abs(scaledRecipe.waterCalc.finalProfile[ion] - scaledRecipe.waterProfile[ion]);
+                                            const target = scaledRecipe.waterProfile[ion];
+                                            return target > 0 && (error / target) * 100 > 20 && error > 10;
+                                        });
+
+                                        if (criticalIons.length > 0) {
+                                            return (
+                                                <div className="mt-8 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-4 animate-bounce-subtle">
+                                                    <div className="bg-red-500 text-white p-2 rounded-xl shadow-lg"><Info size={20} /></div>
+                                                    <div className="text-left">
+                                                        <h6 className="font-black text-red-600 dark:text-red-400 text-sm uppercase">¡Aviso de Saturación Mineral!</h6>
+                                                        <p className="text-xs font-medium text-red-500/80">
+                                                            Los iones de <span className="font-black">{criticalIons.join(', ')}</span> se desvían más de un 20%. 
+                                                            Esto ocurre si tu agua base ya supera el objetivo o las sales añadidas saturan el perfil.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+                                </div>
+                                <p className="text-sm text-muted mt-6 text-center italic font-medium">
+                                    * El motor de cálculo ajusta las sales dinámicamente según tu perfil base. El error residual se debe a que las sales aportan iones en pares vinculados.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* TAB: TIPS */}
                 {
@@ -751,23 +984,212 @@ export default function RecipeDetailView() {
                     )
                 }
 
-                {/* TAB: HISTORIAL CAMBIOS */}
-                {
-                    activeTab === 'history' && (
-                        <div className="space-y-6 animate-fadeIn">
-                            <h3 className="text-3xl font-black text-content mb-8 border-b border-line pb-4">Historial de Modificaciones</h3>
-                            <div className="border-l-4 border-slate-300 dark:border-slate-600 ml-6 pl-8 space-y-10">
-                                {Array.isArray(scaledRecipe.modifications) && [...scaledRecipe.modifications].reverse().map((mod, idx) => (
-                                    <div key={idx} className="relative">
-                                        <div className="absolute -left-[45px] top-1 bg-panel border-4 border-slate-300 dark:border-slate-600 w-6 h-6 rounded-full shadow-sm"></div>
-                                        <span className="text-sm font-black text-slate-400 tracking-widest uppercase block mb-2">{mod.date}</span>
-                                        <p className="text-content font-medium text-lg bg-surface p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">"{mod.note}"</p>
+                {/* TAB: EVOLUCIÓN (CAMBIOS) */}
+                {activeTab === 'history' && (
+                    <div className="space-y-10 animate-fadeIn">
+                        {/* Estilos para impresión */}
+                        <style dangerouslySetInnerHTML={{ __html: `
+                            @media print {
+                                body * { visibility: hidden; }
+                                #printable-report, #printable-report * { visibility: visible; }
+                                #printable-report { 
+                                    position: absolute; 
+                                    left: 0; 
+                                    top: 0; 
+                                    width: 100%; 
+                                    padding: 40px;
+                                    color: black !important;
+                                    background: white !important;
+                                }
+                                .no-print { display: none !important; }
+                                .print-only { display: block !important; }
+                                .timeline-line { border-left: 2px solid #ccc !important; }
+                                .timeline-dot { border: 2px solid #333 !important; background: white !important; }
+                            }
+                        `}} />
+
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-line pb-8 no-print">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-slate-800 text-white p-4 rounded-2xl shadow-lg">
+                                    <History size={32} />
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black text-content tracking-tighter">Evolución del Lote</h3>
+                                    <p className="text-muted font-medium text-sm">Línea de tiempo técnica de ajustes y modificaciones.</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={handlePrint}
+                                className="bg-panel hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold px-6 py-4 rounded-2xl flex items-center gap-3 transition-all shadow-sm border border-line hover:scale-105 active:scale-95 whitespace-nowrap"
+                            >
+                                <Printer size={20} /> Descargar Reporte PDF
+                            </button>
+                        </div>
+
+                        {/* Report Container (for Printing) */}
+                        <div id="printable-report" className="space-y-10">
+                            {/* Header solo para impresión */}
+                            <div className="hidden print-only border-b-4 border-black pb-6 mb-10">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h1 className="text-4xl font-black uppercase tracking-tighter">Reporte de Evolución Técnica</h1>
+                                        <p className="text-lg font-bold">Receta: {scaledRecipe.name}</p>
+                                        <p className="text-sm opacity-70">Generado el: {new Date().toLocaleDateString()} a las {new Date().toLocaleTimeString()}</p>
                                     </div>
-                                ))}
+                                    <div className="text-right">
+                                        <p className="text-2xl font-black">{scaledRecipe.category}</p>
+                                        <p className="text-sm">V. Final: {targetVol} L</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="relative ml-6 md:ml-12 border-l-4 border-slate-200 dark:border-slate-800 pl-10 md:pl-16 space-y-12 py-4 timeline-line">
+                                {Array.isArray(scaledRecipe.modifications) && scaledRecipe.modifications.map((mod, idx) => {
+                                    const isExpanded = expandedMods.includes(idx);
+                                    const hasChanges = mod.changes && Object.keys(mod.changes).length > 0;
+
+                                    return (
+                                        <div key={idx} className="relative group">
+                                            {/* Punto de la línea de tiempo */}
+                                            <div className="absolute -left-[54px] md:-left-[78px] top-2 bg-white dark:bg-slate-900 border-4 border-slate-300 dark:border-slate-600 w-8 h-8 rounded-full shadow-md z-10 flex items-center justify-center transition-colors group-hover:border-blue-500 timeline-dot">
+                                                <div className="w-2.5 h-2.5 bg-slate-400 dark:bg-slate-500 rounded-full group-hover:bg-blue-500 transition-colors"></div>
+                                            </div>
+
+                                            {/* Fecha y Autor */}
+                                            <div className="flex items-center gap-3 mb-3 no-print">
+                                                <Calendar size={14} className="text-slate-400" />
+                                                <span className="text-sm font-black text-slate-400 tracking-widest uppercase">{mod.date || new Date(mod.timestamp).toLocaleDateString()}</span>
+                                                <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full text-[10px] font-bold text-slate-500 border border-slate-200 dark:border-slate-700">Versión {scaledRecipe.modifications.length - idx}</span>
+                                                <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{mod.author || 'Productor'}</span>
+                                            </div>
+
+                                            {/* Card del Cambio */}
+                                            <div className="bg-panel p-6 md:p-8 rounded-[2rem] border border-line shadow-sm transition-all hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900/50">
+                                                <div className="flex justify-between items-start mb-4 gap-4">
+                                                    {editingModIdx === idx ? (
+                                                        <div className="flex-1 flex flex-col gap-2">
+                                                            <textarea 
+                                                                className="w-full p-4 border border-blue-500 rounded-2xl bg-surface text-content font-bold text-lg outline-none"
+                                                                value={tempModNote}
+                                                                onChange={(e) => setTempModNote(e.target.value)}
+                                                                autoFocus
+                                                            />
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => handleUpdateModNote(idx)} className="bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest">Guardar</button>
+                                                                <button onClick={() => setEditingModIdx(null)} className="text-muted px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest">Cancelar</button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-content font-bold text-xl md:text-2xl leading-tight flex-1">
+                                                            "{mod.note}"
+                                                        </p>
+                                                    )}
+                                                    
+                                                    <div className="flex gap-2 no-print">
+                                                        {editingModIdx !== idx && (
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setEditingModIdx(idx);
+                                                                    setTempModNote(mod.note);
+                                                                }}
+                                                                className="text-slate-400 hover:text-blue-500 p-2 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
+                                                                title="Editar nota"
+                                                            >
+                                                                <Edit3 size={18} />
+                                                            </button>
+                                                        )}
+                                                        {hasChanges && (
+                                                            <button 
+                                                                onClick={() => toggleModExpansion(idx)}
+                                                                className="text-slate-400 hover:text-blue-500 p-2 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
+                                                                title="Ver detalles técnicos"
+                                                            >
+                                                                <ChevronRight className={`transition-transform duration-300 ${isExpanded ? 'rotate-90 text-blue-500' : ''}`} size={24} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Detalle Técnico Expandible */}
+                                                {hasChanges && (
+                                                    <div className={`${isExpanded ? 'max-h-[1000px] opacity-100 mt-6' : 'max-h-0 opacity-0'} overflow-hidden transition-all duration-500 ease-in-out print:max-h-none print:opacity-100 print:mt-8`}>
+                                                        <div className="bg-surface p-6 rounded-2xl border border-line space-y-4">
+                                                            <h5 className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-line pb-2">Ajustes Técnicos Realizados</h5>
+                                                            
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                                                                {/* Parámetros */}
+                                                                {mod.changes.parameters && mod.changes.parameters.length > 0 && (
+                                                                    <div className="space-y-2">
+                                                                        <span className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">Parámetros Críticos</span>
+                                                                        {mod.changes.parameters.map((p, i) => (
+                                                                            <div key={i} className="flex flex-col text-sm">
+                                                                                <span className="text-muted font-medium">{p.field}:</span>
+                                                                                <span className="font-bold flex items-center gap-2">
+                                                                                    <span className="line-through opacity-40">{p.old}</span>
+                                                                                    <ChevronRight size={12} className="text-blue-400" />
+                                                                                    <span className="text-blue-600 dark:text-blue-400">{p.new}</span>
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Ingredientes */}
+                                                                {mod.changes.ingredients && mod.changes.ingredients.length > 0 && (
+                                                                    <div className="space-y-2">
+                                                                        <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter">Modificación de Insumos</span>
+                                                                        {mod.changes.ingredients.map((ing, i) => (
+                                                                            <div key={i} className="flex flex-col text-sm">
+                                                                                <span className="text-muted font-medium">{ing.context || ing.field}:</span>
+                                                                                <span className="font-bold flex items-center gap-2">
+                                                                                    <span className="line-through opacity-40">{ing.old}</span>
+                                                                                    <ChevronRight size={12} className="text-emerald-400" />
+                                                                                    <span className="text-emerald-600 dark:text-emerald-400">{ing.new}</span>
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Perfil de Agua */}
+                                                                {mod.changes.waterProfile && mod.changes.waterProfile.length > 0 && (
+                                                                    <div className="space-y-2">
+                                                                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-tighter">Ajuste de Sales / Iones</span>
+                                                                        {mod.changes.waterProfile.map((ion, i) => (
+                                                                            <div key={i} className="flex flex-col text-sm">
+                                                                                <span className="text-muted font-medium">{ion.field}:</span>
+                                                                                <span className="font-bold flex items-center gap-2">
+                                                                                    <span className="line-through opacity-40">{ion.old}</span>
+                                                                                    <ChevronRight size={12} className="text-amber-400" />
+                                                                                    <span className="text-amber-600 dark:text-amber-400">{ion.new}</span>
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Mensaje si no hay cambios técnicos registrados */}
+                                                {!hasChanges && idx > 0 && (
+                                                    <p className="text-xs text-muted italic mt-4">Nota informativa sin ajustes técnicos directos en parámetros.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Footer del PDF */}
+                            <div className="hidden print-only mt-20 pt-10 border-t border-slate-300 text-center">
+                                <p className="text-sm italic font-medium">Brewmaster OS - Sistema de Control de Producción Artesanal</p>
+                                <p className="text-[10px] uppercase tracking-widest mt-2">Reporte de Evolución - Brewmaster OS</p>
                             </div>
                         </div>
-                    )
-                }
+                    </div>
+                )}
 
             </div >
 

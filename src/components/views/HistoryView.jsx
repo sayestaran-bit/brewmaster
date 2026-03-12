@@ -1,10 +1,10 @@
 // /src/components/views/HistoryView.jsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { History, ArrowLeft, CalendarClock, Trash2, Beer, Droplets, Star, Search, Filter } from 'lucide-react';
+import { History, ArrowLeft, CalendarClock, Trash2, Beer, Droplets, Star, Search, Filter, Settings } from 'lucide-react';
 import { useHistory } from '../../hooks/useHistory';
 import { formatCurrency, standardizeDate } from '../../utils/formatters';
-import { Activity, Download } from 'lucide-react'; // ensure imported
+import { Activity, Download } from 'lucide-react'; 
 import * as XLSX from 'xlsx';
 
 export default function HistoryView() {
@@ -53,6 +53,7 @@ export default function HistoryView() {
             data.push(["Lote / Identidad", batch.customName || "Sin nombre"]);
             data.push(["Receta", batch.recipeName]);
             data.push(["Categoría", batch.category]);
+            data.push(["Equipo", batch.equipmentName || "N/A"]);
             data.push(["Volumen", `${batch.volume} L`]);
             data.push(["Fecha Cocción", standardizeDate(batch.dateBrewed || batch.date)]);
             data.push(["Fecha Envasado", batch.dateBottled ? standardizeDate(batch.dateBottled) : "N/A"]);
@@ -288,6 +289,11 @@ export default function HistoryView() {
                                                 </span>
                                             )}
                                             <span className="bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5"><Droplets size={16} /> {h.volume || 0} L</span>
+                                            {h.equipmentName && (
+                                                <span className="bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-500 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5 shadow-sm">
+                                                    <Settings size={16} className="text-amber-500" /> {h.equipmentName}
+                                                </span>
+                                            )}
                                             <span className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5">💰 Total: {formatCurrency(h.totalCost)}</span>
                                             <span className="bg-emerald-100 dark:bg-emerald-800/50 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5 text-xs uppercase tracking-wider">🏷️ x Litro: {formatCurrency((Number(h.totalCost) || 0) / (Number(h.volume) || 1))}</span>
                                         </div>

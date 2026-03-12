@@ -7,6 +7,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
     onInventorySnapshot,
+    updateInventoryItemAndSync as _updateItemAndSync,
+    onShoppingListsSnapshot,
+    addShoppingList as _addShoppingList,
+    updateShoppingList as _updateShoppingList,
+    deleteShoppingList as _deleteShoppingList,
+    convertPurchaseToStock as _convertPurchaseToStock,
     addInventoryItem as _addItem,
     updateInventoryItem as _updateItem,
     deleteInventoryItem as _deleteItem,
@@ -18,7 +24,9 @@ import { getLowStockItems } from '../utils/validators';
 export function useInventory() {
     const { currentUser } = useAuth();
     const [inventory, setInventory] = useState([]);
+    const [shoppingLists, setShoppingLists] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [error, setError] = useState(null);
 
     // Suscripción en tiempo real
@@ -29,12 +37,22 @@ export function useInventory() {
             return;
         }
         setLoading(true);
-        const unsub = onInventorySnapshot(
+        const unsubInv = onInventorySnapshot(
             currentUser.uid,
             (data) => { setInventory(data); setLoading(false); setError(null); },
-            (err) => { console.error('useInventory:', err); setError(err.message); setLoading(false); }
+            (err) => { console.error('useInventory (Inv):', err); setError(err.message); setLoading(false); }
         );
-        return unsub;
+
+        const unsubShop = onShoppingListsSnapshot(
+            currentUser.uid,
+            (data) => { setShoppingLists(data); setError(null); },
+            (err) => { console.error('useInventory (Shop):', err); setError(err.message); }
+        );
+
+        return () => {
+            unsubInv();
+            unsubShop();
+        };
     }, [currentUser]);
 
     // Alertas de stock bajo — memoizadas, solo recalculan cuando inventory cambia
@@ -49,8 +67,34 @@ export function useInventory() {
         await _updateItem(currentUser.uid, itemId, data);
     }, [currentUser]);
 
+    const updateItemAndSync = useCallback(async (itemId, data) => {
+        setIsSyncing(true);
+        try {
+            await _updateItemAndSync(currentUser.uid, itemId, data);
+        } finally {
+            setIsSyncing(false);
+        }
+    }, [currentUser]);
+
     const deleteItem = useCallback(async (itemId) => {
         await _deleteItem(currentUser.uid, itemId);
+    }, [currentUser]);
+
+    // Shopping List CRUD
+    const addShoppingList = useCallback(async (data) => {
+        return await _addShoppingList(currentUser.uid, data);
+    }, [currentUser]);
+
+    const updateShoppingList = useCallback(async (listId, data) => {
+        await _updateShoppingList(currentUser.uid, listId, data);
+    }, [currentUser]);
+
+    const deleteShoppingList = useCallback(async (listId) => {
+        await _deleteShoppingList(currentUser.uid, listId);
+    }, [currentUser]);
+
+    const convertPurchaseToStock = useCallback(async (listId, confirmedItems) => {
+        return await _convertPurchaseToStock(currentUser.uid, listId, confirmedItems);
     }, [currentUser]);
 
     /**
@@ -66,5 +110,22 @@ export function useInventory() {
     }, [currentUser.uid, inventory]);
 
 
-    return { inventory, loading, error, lowStockItems, addItem, updateItem, deleteItem, deductBatch, toggleIngredient };
+    return { 
+        inventory, 
+        shoppingLists,
+        loading, 
+        isSyncing,
+        error, 
+        lowStockItems, 
+        addItem, 
+        updateItem, 
+        updateItemAndSync,
+        deleteItem, 
+        deductBatch, 
+        toggleIngredient,
+        addShoppingList,
+        updateShoppingList,
+        deleteShoppingList,
+        convertPurchaseToStock
+    };
 }

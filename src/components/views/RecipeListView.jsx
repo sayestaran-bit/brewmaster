@@ -59,6 +59,7 @@ export default function RecipeListView() {
     const [isUpdatingBase, setIsUpdatingBase] = useState(false);
     const [showFeasibility, setShowFeasibility] = useState(false);
     const [feasibilityVolume, setFeasibilityVolume] = useState(20);
+    const [selectedSubStyle, setSelectedSubStyle] = useState(null);
 
     const safeRecipes = useMemo(() => Array.isArray(recipes) ? recipes : [], [recipes]);
 
@@ -76,12 +77,24 @@ export default function RecipeListView() {
     }, [safeRecipes]);
 
     const grouped = useMemo(() => {
-        return localRecipes.reduce((acc, recipe) => {
-            const cat = recipe.category || 'Sin Categoría';
-            if (!acc[cat]) acc[cat] = [];
-            acc[cat].push(recipe);
-            return acc;
-        }, {});
+        const result = {};
+        for (const recipe of localRecipes) {
+            const cat = recipe.category || 'Otros';
+            // Filter by subStyle if category is IPA and a subStyle is selected
+            if (cat === 'IPA' && selectedSubStyle && recipe.subStyle !== selectedSubStyle) {
+                continue;
+            }
+            if (!result[cat]) result[cat] = [];
+            result[cat].push(recipe);
+        }
+        return result;
+    }, [localRecipes, selectedSubStyle]);
+
+    // Extract available subStyles for IPA category
+    const ipaSubStyles = useMemo(() => {
+        const ipas = localRecipes.filter(r => r.category === 'IPA');
+        const styles = [...new Set(ipas.map(r => r.subStyle).filter(Boolean))];
+        return styles.sort();
     }, [localRecipes]);
 
     // Category sorting logic
@@ -301,6 +314,25 @@ export default function RecipeListView() {
 
                         return (
                             <SortableCategoryBlock key={category} category={category} theme={theme}>
+                                {category === 'IPA' && ipaSubStyles.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-6 animate-fadeIn">
+                                        <button
+                                            onClick={() => setSelectedSubStyle(null)}
+                                            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${!selectedSubStyle ? 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20' : 'bg-surface text-muted border-line hover:border-amber-500/50'}`}
+                                        >
+                                            Todas las IPA
+                                        </button>
+                                        {ipaSubStyles.map(sub => (
+                                            <button
+                                                key={sub}
+                                                onClick={() => setSelectedSubStyle(selectedSubStyle === sub ? null : sub)}
+                                                className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${selectedSubStyle === sub ? 'bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20' : 'bg-surface text-muted border-line hover:border-orange-500/50'}`}
+                                            >
+                                                {sub}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 <SortableContext items={categoryItems.map(r => r.id)} strategy={rectSortingStrategy}>
                                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
                                         {categoryItems.map(recipe => (
@@ -326,7 +358,7 @@ export default function RecipeListView() {
 
 // ── Internal Helper Components ──────────────────────────────────────────────
 
-function SortableRecipeCard(props) {
+const SortableRecipeCard = React.memo(function SortableRecipeCard(props) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.recipe.id });
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -349,9 +381,9 @@ function SortableRecipeCard(props) {
             <RecipeCard {...props} />
         </div>
     );
-}
+});
 
-function SortableCategoryBlock({ category, theme, children }) {
+const SortableCategoryBlock = React.memo(function SortableCategoryBlock({ category, theme, children }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `cat-${category}` });
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -379,4 +411,4 @@ function SortableCategoryBlock({ category, theme, children }) {
             {children}
         </div>
     );
-}
+});

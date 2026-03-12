@@ -27,7 +27,8 @@ export default function RecipeCard({
     onClick,
     onDelete
 }) {
-    const theme = getThemeForCategory(recipe?.category);
+    const category = recipe?.category || recipe?.style || 'IPA';
+    const theme = getThemeForCategory(category);
     const srmColorHex = getSrmColor(recipe?.colorSRM);
 
     const safeHistory = Array.isArray(history) ? history : [];

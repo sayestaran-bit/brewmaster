@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft, AlertTriangle, Activity, Package, Trash2, CheckCircle2, Sparkles } from 'lucide-react';
+import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft, AlertTriangle, Activity, Package, Trash2, CheckCircle2, Sparkles, Wheat, Leaf } from 'lucide-react';
 import { formatCurrency, standardizeDate, formatTime, getFormattedDate } from '../../utils/formatters';
 import { calculateRecipeCost, calculateActualDeductedCost } from '../../utils/costCalculator';
-import { getEffectivePhase, getIngredientKey } from '../../utils/recipeUtils';
+import { getEffectivePhase, getIngredientKey, BREWING_STAGES, TIME_UNITS, getSafeAdditionTime, getTimeMultiplier, isCountdownStage } from '../../utils/recipeUtils';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
 import { useActiveBatches } from '../../hooks/useActiveBatches';
+import { useEquipment } from '../../hooks/useEquipment';
+import { Settings } from 'lucide-react';
 
 function ElapsedTimer({ startTime, label, colorClass = "text-slate-400" }) {
     const [elapsed, setElapsed] = useState(0);
@@ -51,6 +53,7 @@ export default function BrewSessionView() {
     const { recipes } = useRecipes();
     const { inventory, deductBatch, toggleIngredient } = useInventory();
     const { batches, startBatch, transitionBatchPhase, completeBatch, updateBatchField, updateProgress } = useActiveBatches();
+    const { equipment } = useEquipment();
 
     const currentPhase = searchParams.get('phase') || 'cooking';
 
@@ -74,18 +77,39 @@ export default function BrewSessionView() {
     const stepsArray = useMemo(() => {
         if (!recipe) return [];
         const rawSteps = Array.isArray(recipe.steps) && recipe.steps.length > 0 ? recipe.steps : [];
-        let filtered = rawSteps.filter(s => s.phase === currentPhase);
-
-        if (currentPhase === 'cooking' && filtered.length === 0) {
-            filtered = rawSteps.filter(s => !s.phase || s.phase === 'cooking');
-            if (filtered.length === 0) {
-                filtered = [{ title: "Cocción Genérica", desc: "Sigue tu instinto cervecero.", duration: 60 }];
+        const skippedStages = recipe.skippedStages || [];
+        
+        // 1. Get stages for the current phase
+        const phaseStages = BREWING_STAGES.filter(stage => stage.phase === currentPhase);
+        
+        // 2. Build the steps array following the roadmap order
+        let roadmapSteps = [];
+        
+        phaseStages.forEach(stage => {
+            // Skip if the stage is marked as skipped
+            if (skippedStages.includes(stage.id)) return;
+            
+            // Get sub-steps for this stage
+            const subSteps = rawSteps.filter(s => s.stageId === stage.id);
+            
+            if (subSteps.length > 0) {
+                roadmapSteps.push(...subSteps.map(s => ({ ...s, stageLabel: stage.label })));
+            } else {
+                // Default step if none defined but stage is active
+                roadmapSteps.push({ 
+                    id: `default-${stage.id}`,
+                    title: stage.label, 
+                    desc: "Sigue el proceso estándar.", 
+                    duration: 0, 
+                    timeUnit: 'm',
+                    stageId: stage.id,
+                    stageLabel: stage.label,
+                    phase: currentPhase
+                });
             }
-        }
-        if (currentPhase !== 'cooking' && filtered.length === 0) {
-            filtered = [{ title: `Fase de ${currentPhase === 'fermenting' ? 'Fermentación' : 'Embotellado'} genérica`, desc: "Sigue el proceso estándar o añade notas.", duration: null }];
-        }
-        return filtered;
+        });
+
+        return roadmapSteps;
     }, [recipe, currentPhase]);
 
     const safeStepIdx = stepsArray.length > 0 ? Math.min(brewState.stepIdx, stepsArray.length - 1) : 0;
@@ -113,11 +137,10 @@ export default function BrewSessionView() {
 
                 const currentStepIdx = foundBatch?.currentStep || 0;
                 const safeIdx = Math.min(currentStepIdx, stepsArray.length - 1);
-                const currentStep = stepsArray[safeIdx] || {};
 
-                // FIX: Use 86400 (seconds in a day) for non-cooking phases
-                const multiplier = currentPhase === 'cooking' ? 60 : 86400;
+                const currentStep = stepsArray[safeIdx] || {};
                 const rawDuration = parseFloat(currentStep.duration);
+                const multiplier = getTimeMultiplier(currentStep.timeUnit);
                 const recipeDuration = !isNaN(rawDuration) ? rawDuration * multiplier : 0;
                 let initialTime = recipeDuration;
                 let dbIsRunning = false;
@@ -217,6 +240,7 @@ export default function BrewSessionView() {
 
         let currentBatchId = batch?.id;
         if (!batch && currentPhase === 'cooking') {
+            const activeProfile = equipment?.find(e => e.id === recipe.equipmentId) || equipment?.find(e => e.isDefault);
             try {
                 const initialBatch = {
                     recipeId: recipe.id,
@@ -228,12 +252,14 @@ export default function BrewSessionView() {
                     currentStep: brewState.stepIdx,
                     timestamp: now,
                     date: getFormattedDate(),
+                    equipmentId: activeProfile?.id || null,
+                    equipmentName: activeProfile?.name || null,
                     timer: {
                         isRunning: newRunning,
                         targetEndTime: newRunning ? now + (brewState.timeLeft * 1000) : null,
                         pausedAt: !newRunning ? now : null
                     },
-                    [`${currentPhase}_metrics`]: {} // FIX: Correct schema for metrics
+                    [`${currentPhase}_metrics`]: {} 
                 };
                 const newId = await startBatch(initialBatch);
                 navigate(`/brew/${newId}?phase=cooking`, { replace: true });
@@ -254,7 +280,7 @@ export default function BrewSessionView() {
             if (newRunning) {
                 let remainingSecs = Number(brewState.timeLeft) || 0;
                 if (remainingSecs <= 0 && step?.duration) {
-                    const multiplier = currentPhase === 'cooking' ? 60 : 86400;
+                    const multiplier = getTimeMultiplier(step.timeUnit);
                     const rawDur = parseFloat(step.duration);
                     remainingSecs = !isNaN(rawDur) ? rawDur * multiplier : 0;
                 }
@@ -268,7 +294,7 @@ export default function BrewSessionView() {
                 const metricsArray = Array.isArray(rawMetrics) ? rawMetrics : Object.values(rawMetrics);
 
                 if (!metricsArray.find(m => Number(m.stepIdx) === Number(brewState.stepIdx))) {
-                    const multiplier = currentPhase === 'cooking' ? 60 : 86400;
+                    const multiplier = getTimeMultiplier(step.timeUnit);
                     updates[metricKey] = {
                         stepIdx: brewState.stepIdx,
                         title: step.title,
@@ -426,9 +452,9 @@ export default function BrewSessionView() {
         } else {
             const nextIdx = safeStepIdx + 1;
             const nextStep = stepsArray[nextIdx];
-            const multiplier = currentPhase === 'cooking' ? 60 : 86400;
+            const getTimeMultiplier = (u) => u === 'd' ? 86400 : (u === 'h' ? 3600 : 60);
             const rawNextDur = nextStep ? parseFloat(nextStep.duration) : NaN;
-            const nextTime = !isNaN(rawNextDur) ? rawNextDur * multiplier : 0;
+            const nextTime = !isNaN(rawNextDur) ? rawNextDur * getTimeMultiplier(nextStep?.timeUnit) : 0;
             if (batch) {
                 const newCompleted = Array.from(new Set([...(batch.completedSteps || []), safeStepIdx]));
                 await updateBatchField(batch.id, {
@@ -565,6 +591,10 @@ export default function BrewSessionView() {
             if (ingStage.includes('madura') && stepTitle.includes('madura')) return true;
         }
 
+        if (phase === 'bottling') {
+            if (ingStage.includes('envasado') && stepTitle.includes('envasado')) return true;
+        }
+
         // 4. Fallback: textual matching on stage/time
         if (ingStage && (stepTitle.includes(ingStage) || stepDesc.includes(ingStage))) return true;
 
@@ -662,6 +692,25 @@ export default function BrewSessionView() {
                 <div>
                     <h2 className="text-2xl md:text-3xl font-black flex items-center gap-3 text-amber-500 mb-2">
                         {labels.icon} {labels.title} <span className="text-white">{batch?.customName || recipe.name}</span>
+                        <div className="flex gap-2 ml-4">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">
+                                {recipe.family || 'Ale'}
+                            </span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">
+                                {recipe.style || 'IPA'}
+                            </span>
+                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest bg-slate-700 px-3 py-1 rounded-lg border border-slate-600">
+                                {recipe.subStyle || recipe.category}
+                            </span>
+                        </div>
+                        {batch?.equipmentName && (
+                            <div className="flex flex-col items-start ml-2 md:ml-4 border-l border-amber-500/30 pl-4">
+                                <span className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] mb-0.5">Equipo de Producción</span>
+                                <span className="text-sm font-black text-white px-3 py-1 bg-amber-500/20 rounded-lg border border-amber-500/30 flex items-center gap-2 shadow-lg shadow-amber-500/5">
+                                    <Settings size={14} className="animate-spin-slow text-amber-500" /> {batch.equipmentName}
+                                </span>
+                            </div>
+                        )}
                     </h2>
                     {batch && (
                         <div className="flex gap-2">
@@ -698,7 +747,66 @@ export default function BrewSessionView() {
                 {step?.details && (
                     <div className="bg-slate-800/80 backdrop-blur-md p-6 md:p-8 rounded-2xl text-left max-w-3xl border border-slate-600/50 text-slate-200 w-full shadow-2xl">
                         <span className="font-black flex items-center gap-2 mb-3 text-amber-400 uppercase tracking-wider text-sm"><Info size={20} /> Detalle Técnico</span>
-                        <div className="leading-relaxed">{step.details}</div>
+                        <div className="leading-relaxed whitespace-pre-line">{step.details}</div>
+                        
+                        {/* Insumos del Paso Actual (Prominente) */}
+                        {(() => {
+                            const stepMalts = (recipe.ingredients.malts || []).filter(m => m.stepId === step.id);
+                            const stepHops = (recipe.ingredients.hops || []).filter(h => h.stepId === step.id);
+                            const stepOthers = (recipe.ingredients.others || []).filter(o => o.stepId === step.id);
+                            const yeast = recipe.ingredients.yeast;
+                            const isYeastInStep = yeast && yeast.stepId === step.id;
+                            
+                            if (stepMalts.length === 0 && stepHops.length === 0 && stepOthers.length === 0 && !isYeastInStep) return null;
+
+                            return (
+                                <div className="mt-6 pt-6 border-t border-slate-700/50">
+                                    <span className="font-black flex items-center gap-2 mb-3 text-emerald-400 uppercase tracking-wider text-[10px]"><Package size={16} /> Agregar en este momento:</span>
+                                    <div className="flex flex-wrap gap-3">
+                                        {stepMalts.map((m, i) => (
+                                            <div key={`m-${i}`} className="bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl flex items-center gap-2">
+                                                <Wheat size={14} className="text-amber-500" />
+                                                <span className="text-sm font-bold text-amber-100">{m.name}</span>
+                                                <span className="text-xs font-black bg-amber-500/20 px-2 py-0.5 rounded text-amber-400">{Math.round(m.amount * (targetVolume / (recipe.targetVolume || 20)))} {m.unit || 'kg'}</span>
+                                                {(m.additionTime !== undefined || m.time || true) && (
+                                                    <span className="text-[10px] font-black text-slate-400">@ {getSafeAdditionTime(m, step)}{m.additionTimeUnit || 'm'}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {stepHops.map((h, i) => (
+                                            <div key={`h-${i}`} className="bg-green-500/10 border border-green-500/20 px-3 py-2 rounded-xl flex items-center gap-2">
+                                                <Leaf size={14} className="text-green-500" />
+                                                <span className="text-sm font-bold text-green-100">{h.name}</span>
+                                                <span className="text-xs font-black bg-green-500/20 px-2 py-0.5 rounded text-green-400">{Math.round(h.amount * (targetVolume / (recipe.targetVolume || 20)))} {h.unit || 'g'}</span>
+                                                {(h.additionTime !== undefined || h.time || true) && (
+                                                    <span className="text-[10px] font-black text-slate-400 group relative">
+                                                        @ {getSafeAdditionTime(h, step)}{h.additionTimeUnit || 'm'}
+                                                        <Info size={10} className="inline ml-1 opacity-50 cursor-help" title="Tiempo relativo al proceso (ej. 60=inicio, 0=final en Hervor)" />
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {isYeastInStep && (
+                                            <div className="bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 rounded-xl flex items-center gap-2">
+                                                <Activity size={14} className="text-yellow-500" />
+                                                <span className="text-sm font-bold text-yellow-100">{yeast.name}</span>
+                                                <span className="text-xs font-black bg-yellow-500/20 px-2 py-0.5 rounded text-yellow-400">{yeast.amount || 1} {yeast.unit || 'sobre'}</span>
+                                            </div>
+                                        )}
+                                        {stepOthers.map((o, i) => (
+                                            <div key={`o-${i}`} className="bg-purple-500/10 border border-purple-500/20 px-3 py-2 rounded-xl flex items-center gap-2">
+                                                <Sparkles size={14} className="text-purple-500" />
+                                                <span className="text-sm font-bold text-purple-100">{o.name}</span>
+                                                <span className="text-xs font-black bg-purple-500/20 px-2 py-0.5 rounded text-purple-400">{o.amount * (targetVolume / (recipe.targetVolume || 20))} {o.unit || 'g'}</span>
+                                                {(o.additionTime !== undefined || o.time || true) && (
+                                                    <span className="text-[10px] font-black text-slate-400">@ {getSafeAdditionTime(o, step)}{o.additionTimeUnit || 'm'}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
                 )}
 
@@ -719,7 +827,10 @@ export default function BrewSessionView() {
                             </div>
                         </div>
                         <div className={`text-8xl md:text-[10rem] font-black font-mono tracking-tighter ${brewState.timeLeft === 0 && brewState.isRunning ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
-                            {currentPhase === 'cooking' ? formatTime(brewState.timeLeft) : `${Math.floor(brewState.timeLeft / 86400)}d`}
+                            {brewState.timeLeft >= 86400 
+                                ? `${Math.floor(brewState.timeLeft / 86400)}d ${formatTime(brewState.timeLeft % 86400)}`
+                                : formatTime(brewState.timeLeft)
+                            }
                         </div>
                         <button onClick={handleToggleTimer} className={`px-12 py-6 rounded-full font-black text-2xl flex items-center gap-4 text-white transition-all shadow-xl hover:scale-105 ${brewState.isRunning ? 'bg-orange-600' : 'bg-emerald-600'}`}>
                             {brewState.isRunning ? <><Pause size={32} /> Pausar</> : <><Play size={32} /> Iniciar</>}
@@ -737,81 +848,92 @@ export default function BrewSessionView() {
                             <span className="font-black flex items-center gap-3 text-emerald-400 uppercase tracking-widest text-sm">
                                 <Package size={22} className="text-emerald-500" /> Control de Insumos: {currentPhase === 'cooking' ? 'Cocción' : currentPhase === 'fermenting' ? 'Fermentación' : 'Embotellado'}
                             </span>
-                            {currentStepIngredientsCount > 0 && (
-                                <span className="bg-emerald-500 text-slate-900 text-[10px] font-black px-2 py-1 rounded-full animate-pulse uppercase tracking-tighter">
-                                    {currentStepIngredientsCount} para este paso
-                                </span>
-                            )}
                         </div>
 
-                        <div className="space-y-10">
-                            {Object.entries(groupedPhaseIngredients).map(([stageName, ings]) => {
-                                const hasMatches = ings.some(i => i.matchesCurrentStep);
+                        <div className="space-y-6">
+                            {(() => {
+                                const activeInCurrentStep = Object.entries(groupedPhaseIngredients).reduce((acc, [stage, ings]) => {
+                                    const matches = ings.filter(i => i.matchesCurrentStep);
+                                    if (matches.length > 0) acc.push(...matches);
+                                    return acc;
+                                }, []);
+
+                                if (activeInCurrentStep.length === 0) {
+                                    return (
+                                        <div className="py-8 px-4 border-2 border-dashed border-slate-700/50 rounded-2xl text-center">
+                                            <p className="text-slate-500 font-medium italic">No hay adiciones de insumos programadas para esta etapa.</p>
+                                        </div>
+                                    );
+                                }
+
                                 return (
-                                    <div key={stageName} className={`space-y-4 p-4 rounded-2xl transition-all ${hasMatches ? 'bg-emerald-500/5 border border-emerald-500/20 shadow-lg' : ''}`}>
-                                        <div className="flex items-center gap-3">
-                                            <span className={`text-[11px] font-black uppercase tracking-[0.2em] whitespace-nowrap ${hasMatches ? 'text-emerald-400' : 'text-slate-500'}`}>
-                                                {stageName}
-                                            </span>
-                                            <div className={`h-[1px] flex-1 ${hasMatches ? 'bg-emerald-500/30' : 'bg-slate-700/50'}`}></div>
-                                            {hasMatches && <span className="text-[10px] font-bold text-emerald-500 italic">Corresponde al paso actual</span>}
-                                        </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {activeInCurrentStep.map((ing, idx) => {
+                                            const key = getIngredientKey(ing);
+                                            const isConsumed = !!batch.consumedIngredients?.[key];
+                                            const scaleFactor = targetVolume / (recipe.targetVolume || 20);
+                                            const scaledAmount = ing.category === 'Lúpulo' || ing.category === 'Levadura'
+                                                ? Math.round(ing.amount * scaleFactor)
+                                                : (ing.amount * scaleFactor).toFixed(2);
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            {ings.map((ing, idx) => {
-                                                const key = getIngredientKey(ing);
-                                                const isConsumed = !!batch.consumedIngredients?.[key];
-                                                const scaleFactor = targetVolume / (recipe.targetVolume || 20);
-                                                const scaledAmount = ing.category === 'Lúpulo' || ing.category === 'Levadura'
-                                                    ? Math.round(ing.amount * scaleFactor)
-                                                    : (ing.amount * scaleFactor).toFixed(2);
+                                            const isMineral = ing.category === 'Sales Minerales';
 
-                                                const isMineral = ing.category === 'Sales Minerales';
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    onClick={() => handleToggleIngredient(ing, !isConsumed)}
+                                                    className={`flex flex-col p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden ${isConsumed
+                                                        ? 'bg-emerald-500/20 border-emerald-500/50 shadow-inner scale-[0.98]'
+                                                        : 'bg-slate-700/50 border-emerald-500/30 hover:border-emerald-400 shadow-md translate-y-[-2px]'
+                                                        }`}
+                                                >
+                                                    {!isConsumed && (
+                                                        <div className={`absolute top-0 right-0 ${isMineral ? 'bg-blue-500' : 'bg-emerald-500'} w-2 h-full`}></div>
+                                                    )}
 
-                                                return (
-                                                    <div
-                                                        key={idx}
-                                                        onClick={() => handleToggleIngredient(ing, !isConsumed)}
-                                                        className={`flex flex-col p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden ${isConsumed
-                                                            ? 'bg-emerald-500/20 border-emerald-500/50 shadow-inner scale-[0.98]'
-                                                            : ing.matchesCurrentStep
-                                                                ? `${isMineral ? 'bg-blue-500/10 border-blue-500/50 hover:border-blue-400' : 'bg-slate-700/50 border-emerald-500/30 hover:border-emerald-400'} shadow-md translate-y-[-2px]`
-                                                                : 'bg-slate-700/20 border-slate-700 hover:border-slate-500 opacity-80 hover:opacity-100'
-                                                            }`}
-                                                    >
-                                                        {ing.matchesCurrentStep && !isConsumed && (
-                                                            <div className={`absolute top-0 right-0 ${isMineral ? 'bg-blue-500' : 'bg-emerald-500'} w-2 h-full`}></div>
-                                                        )}
-
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className={`w-6 h-6 rounded border flex items-center justify-center transition-all ${isConsumed ? 'bg-emerald-500 border-emerald-500' : 'bg-slate-900 border-slate-600 group-hover:border-slate-400'
-                                                                    }`}>
-                                                                    {isConsumed ? <CheckCircle2 size={16} className="text-slate-900" /> : isMineral ? <Sparkles size={12} className="text-blue-400" /> : null}
-                                                                </div>
-                                                                <p className={`text-sm font-bold ${isConsumed ? 'text-emerald-400 line-through opacity-70' : isMineral ? 'text-blue-100' : 'text-white'}`}>{ing.name}</p>
-                                                            </div>
-                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase ${isConsumed ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-500' : isMineral ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800 border-slate-700 text-slate-400'
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-6 h-6 rounded border flex items-center justify-center transition-all ${isConsumed ? 'bg-emerald-500 border-emerald-500' : 'bg-slate-900 border-slate-600 group-hover:border-slate-400'
                                                                 }`}>
-                                                                {ing.time || ing.stage || 'General'}
-                                                            </span>
+                                                                {isConsumed ? <CheckCircle2 size={16} className="text-slate-900" /> : isMineral ? <Sparkles size={12} className="text-blue-400" /> : null}
+                                                            </div>
+                                                            <p className={`text-sm font-bold ${isConsumed ? 'text-emerald-400 line-through opacity-70' : isMineral ? 'text-blue-100' : 'text-white'}`}>{ing.name}</p>
                                                         </div>
+                                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase transition-colors ${isConsumed ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-500' : isMineral ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800 border-slate-700 text-slate-400'
+                                                            }`}>
+                                                            {(() => {
+                                                                const normTime = getSafeAdditionTime(ing, step);
+                                                                const isStart = isCountdownStage(step.stageId)
+                                                                    ? normTime === Number(step.duration || 0)
+                                                                    : normTime === 0;
 
-                                                        <div className="flex items-center justify-between pl-9 mt-1">
-                                                            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
-                                                                {ing.category} • {scaledAmount} {ing.unit || (ing.category === 'Malta' ? 'kg' : 'g')}
-                                                            </p>
-                                                            {isConsumed && (
-                                                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Añadido</span>
-                                                            )}
-                                                        </div>
+                                                                if (isStart) return 'INICIO';
+                                                                return `@ ${ing.additionTime}${ing.additionTimeUnit || 'm'}`;
+                                                            })()}
+                                                        </span>
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
+
+                                                    <div className="flex items-center justify-between pl-9 mt-1">
+                                                        <p className={`text-[10px] ${isConsumed ? 'text-emerald-600' : 'text-slate-400'} font-medium uppercase tracking-tighter`}>
+                                                            {ing.category} • {scaledAmount} {ing.unit || (ing.category === 'Malta' ? 'kg' : 'g')}
+                                                        </p>
+                                                        {isConsumed && (
+                                                            <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Añadido</span>
+                                                        )}
+                                                    </div>
+
+                                                    {!isConsumed && (
+                                                        <div className="mt-3 pt-3 border-t border-slate-600/30 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <span className="text-[8px] font-black text-emerald-500 uppercase tracking-tighter">Click para marcar como añadido</span>
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 );
-                            })}
+                            })()}
                         </div>
                         <div className="mt-8 pt-6 border-t border-slate-700/50 flex flex-col items-center gap-2">
                             <p className="text-[10px] text-slate-600 uppercase tracking-widest font-black">Recordatorio Profesional</p>
