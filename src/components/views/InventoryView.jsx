@@ -9,6 +9,7 @@ import { useInventory } from '../../hooks/useInventory';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventoryAlerts } from '../../hooks/useInventoryAlerts';
 import { formatCurrency } from '../../utils/formatters';
+import { INGREDIENT_CARE_TIPS } from '../../utils/helpers';
 import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
@@ -46,9 +47,14 @@ export default function InventoryView() {
 
     const handleAddInvItem = async () => {
         if (!newInvItem.name.trim()) return;
+        const stockValue = Number(newInvItem.stock) || 0;
+        if (stockValue < 0) {
+            alert('El stock inicial no puede ser negativo.');
+            return;
+        }
         await addItem({ 
             ...newInvItem, 
-            stock: Number(newInvItem.stock), 
+            stock: stockValue, 
             price: Number(newInvItem.price) 
         });
         setNewInvItem({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
@@ -306,7 +312,10 @@ export default function InventoryView() {
                                                             defaultValue={parseFloat(Number(item.stock).toFixed(4))}
                                                             disabled={isGuest}
                                                             title={isGuest ? guestTooltip : undefined}
-                                                            onBlur={(e) => updateItem(item.id, { stock: parseFloat(Number(e.target.value).toFixed(4)) })}
+                                                            onBlur={(e) => {
+                                                                const val = Math.max(0, parseFloat(Number(e.target.value).toFixed(4)) || 0);
+                                                                updateItem(item.id, { stock: val });
+                                                            }}
                                                             className={`w-full max-w-[100px] p-2 border ${low ? 'border-red-500/50 focus:ring-red-500' : 'border-line focus:ring-blue-500'} rounded-lg text-center outline-none font-medium bg-surface focus:bg-panel ${low ? 'text-red-600' : 'text-content'} transition-all disabled:opacity-75 disabled:cursor-not-allowed`}
                                                         />
                                                         <input
@@ -354,6 +363,50 @@ export default function InventoryView() {
                     </div>
                 );
             })}
+
+            {/* Guía de Cuidado de Insumos */}
+            <div className="mt-12 bg-panel rounded-[2.5rem] border border-line shadow-sm overflow-hidden animate-fadeIn">
+                <div className="bg-gradient-to-r from-blue-500/10 to-emerald-500/10 dark:from-blue-500/5 dark:to-emerald-500/5 px-8 py-10 border-b border-line">
+                    <h3 className="text-2xl font-black text-content flex items-center gap-3 tracking-tighter uppercase italic">
+                        <ListChecks className="text-blue-500" size={28} /> Guía de Cuidado de Insumos
+                    </h3>
+                    <p className="text-muted font-medium mt-2 max-w-2xl">Protege tus ingredientes para mantener el perfil de sabor y la frescura en cada lote.</p>
+                </div>
+                
+                <div className="p-8 grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="bg-surface p-6 rounded-3xl border border-line shadow-sm hover:border-amber-400/50 transition-all group">
+                        <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+                            <Wheat className="text-amber-500" size={24} />
+                        </div>
+                        <h4 className="font-black text-content mb-2">{INGREDIENT_CARE_TIPS.malts.title}</h4>
+                        <p className="text-xs text-muted leading-relaxed font-bold">{INGREDIENT_CARE_TIPS.malts.tip}</p>
+                    </div>
+
+                    <div className="bg-surface p-6 rounded-3xl border border-line shadow-sm hover:border-green-400/50 transition-all group">
+                        <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+                            <Leaf className="text-green-500" size={24} />
+                        </div>
+                        <h4 className="font-black text-content mb-2">{INGREDIENT_CARE_TIPS.hops.title}</h4>
+                        <p className="text-xs text-muted leading-relaxed font-bold">{INGREDIENT_CARE_TIPS.hops.tip}</p>
+                    </div>
+
+                    <div className="bg-surface p-6 rounded-3xl border border-line shadow-sm hover:border-blue-400/50 transition-all group">
+                        <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+                            <Droplets className="text-blue-500" size={24} />
+                        </div>
+                        <h4 className="font-black text-content mb-2">{INGREDIENT_CARE_TIPS.yeast.title}</h4>
+                        <p className="text-xs text-muted leading-relaxed font-bold">{INGREDIENT_CARE_TIPS.yeast.tip}</p>
+                    </div>
+
+                    <div className="bg-surface p-6 rounded-3xl border border-line shadow-sm hover:border-purple-400/50 transition-all group">
+                        <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+                            <Beaker className="text-purple-500" size={24} />
+                        </div>
+                        <h4 className="font-black text-content mb-2">{INGREDIENT_CARE_TIPS.additives.title}</h4>
+                        <p className="text-xs text-muted leading-relaxed font-bold">{INGREDIENT_CARE_TIPS.additives.tip}</p>
+                    </div>
+                </div>
+            </div>
 
             {/* Modal de Check-in */}
             {checkInList && (
@@ -404,7 +457,7 @@ function CheckInModal({ list, onClose, onConfirm }) {
                                     <input 
                                         type="number"
                                         value={quantities[idx]}
-                                        onChange={(e) => setQuantities({ ...quantities, [idx]: Number(e.target.value) })}
+                                        onChange={(e) => setQuantities({ ...quantities, [idx]: Math.max(0, Number(e.target.value) || 0) })}
                                         className="w-24 p-2 text-center border border-line rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold bg-panel"
                                     />
                                     <span className="absolute -right-6 top-1/2 -translate-y-1/2 text-xs font-bold text-muted">{item.unit}</span>

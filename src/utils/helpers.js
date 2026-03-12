@@ -166,6 +166,28 @@ export const EQUIPMENT_GLOSSARY = {
 };
 
 /**
+ * Recomendaciones de cuidado y almacenamiento para insumos.
+ */
+export const INGREDIENT_CARE_TIPS = {
+  malts: {
+    title: "Maltas y Granos",
+    tip: "Almacenar en un lugar seco, fresco (ideal < 20°C) y protegido de la luz solar directa. Mantener en recipientes herméticos para evitar insectos y humedad."
+  },
+  hops: {
+    title: "Lúpulos",
+    tip: "Conservar SIEMPRE en congelador (-18°C) o freezer. El oxígeno es su mayor enemigo; asegúrate de que el empaque esté sellado al vacío o sin aire."
+  },
+  yeast: {
+    title: "Levaduras",
+    tip: "Mantener refrigeradas (4°C) en todo momento. Antes de usar, verificar siempre la fecha de caducidad. No congelar si es levadura seca."
+  },
+  additives: {
+    title: "Sales y Aditivos",
+    tip: "Guardar en sus envases originales bien cerrados en un ambiente seco. Algunos son higroscópicos (absorben humedad) y pueden apelmazarse."
+  }
+};
+
+/**
  * Sanitiza una receta antes de ser guardada en Firestore o persistencia local.
  * Elimina campos legacy (time), asegura tipos numéricos y limpia valores nulos/indefinidos.
  * 

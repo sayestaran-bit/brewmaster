@@ -192,16 +192,35 @@ export default function RecipeListView() {
         if (window.confirm('Esto agregará las recetas base y algunos insumos por defecto. Las que ya existan se actualizarán. ¿Continuar?')) {
             setIsUpdatingBase(true);
             try {
-                // Inyectar Recetas con IDs estables (Idempotente)
+                // Helper for name matching
+                const normalizeName = (name) => (name || '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+                // 1. Inyectar Recetas (Evitar duplicados por nombre)
                 for (const recipe of initialRecipes) {
-                    const { id, ...recipeData } = recipe;
-                    await addRecipe(recipeData, id); 
+                    const normalizedNewName = normalizeName(recipe.name);
+                    const exists = safeRecipes.some(r => normalizeName(r.name) === normalizedNewName);
+                    
+                    if (!exists) {
+                        const { id, ...recipeData } = recipe;
+                        await addRecipe(recipeData, id); 
+                    }
                 }
 
-                // Inyectar Inventario con IDs estables (Idempotente)
+                // 2. Inyectar Inventario (Evitar duplicados y forzar stock 0 si no es anónimo)
                 for (const item of initialInventory) {
-                    const { id, ...itemData } = item;
-                    await addItem({ ...itemData, stock: Number(itemData.stock), price: Number(itemData.price) }, id);
+                    const normalizedNewName = normalizeName(item.name);
+                    const exists = inventory.some(i => normalizeName(i.name) === normalizedNewName);
+
+                    if (!exists) {
+                        const { id, ...itemData } = item;
+                        const finalStock = (currentUser && !currentUser.isAnonymous) ? 0 : Number(itemData.stock);
+                        
+                        await addItem({ 
+                            ...itemData, 
+                            stock: finalStock, 
+                            price: Number(itemData.price) 
+                        }, id);
+                    }
                 }
                 
                 alert('¡Catálogo base actualizado con éxito!');

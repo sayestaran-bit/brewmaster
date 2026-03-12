@@ -182,6 +182,16 @@ export default function RecipeDetailView() {
                         stepId: 'mashing',
                         isDynamic: true // Flag para UI
                     }));
+                    
+                    // Deduplicación inteligente de sales: filtrar del array original las que tienen el mismo nombre que las dinámicas
+                    const dynamicNames = dynamicSalts.map(ds => ds.name.toLowerCase().trim());
+                    others = others.filter(o => {
+                        if (o.category === 'Sales Minerales' && dynamicNames.includes(o.name.toLowerCase().trim())) {
+                            return false; // Eliminar la manual si existe una dinámica equivalente
+                        }
+                        return true;
+                    });
+
                     others = [...others, ...dynamicSalts];
                 }
             }

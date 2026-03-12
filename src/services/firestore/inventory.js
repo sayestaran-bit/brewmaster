@@ -49,7 +49,7 @@ export function onInventorySnapshot(uid, onData, onError) {
 export async function addInventoryItem(uid, itemData, customId = null) {
     const data = {
         ...itemData,
-        stock: Number(itemData.stock) || 0,
+        stock: Math.max(0, Number(itemData.stock) || 0),
         price: Number(itemData.price) || 0,
         updatedAt: serverTimestamp(),
     };
@@ -460,10 +460,11 @@ export async function convertPurchaseToStock(uid, listId, confirmedItems) {
     const listRef = shoppingListDocRef(uid, listId);
     
     confirmedItems.forEach(item => {
-        if (item.inventoryId) {
+        const amountToAdd = Number(item.amount) || 0;
+        if (item.inventoryId && amountToAdd > 0) {
             const itemRef = inventoryDocRef(uid, item.inventoryId);
             batch.update(itemRef, {
-                stock: increment(Number(item.amount) || 0),
+                stock: increment(amountToAdd),
                 updatedAt: serverTimestamp()
             });
         }
