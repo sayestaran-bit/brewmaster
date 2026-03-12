@@ -80,6 +80,18 @@ export const RECIPE_HIERARCHY = {
 };
 
 /**
+ * Perfiles de agua ideales por estilo (mg/L o ppm).
+ * Fuente: BeerSmith / John Palmer (How to Brew).
+ */
+export const WATER_PROFILES = {
+  'Hazy IPA': { Ca: 120, Mg: 10, SO4: 75, Cl: 150, Na: 15, HCO3: 0 },
+  'Double & Triple Hazy IPA': { Ca: 150, Mg: 15, SO4: 100, Cl: 200, Na: 20, HCO3: 0 },
+  'Lager (Clásica/Pilsner)': { Ca: 50, Mg: 5, SO4: 50, Cl: 50, Na: 5, HCO3: 15 },
+  'Stout': { Ca: 70, Mg: 10, SO4: 50, Cl: 50, Na: 35, HCO3: 180 },
+  'Balanced': { Ca: 50, Mg: 10, SO4: 50, Cl: 50, Na: 0, HCO3: 0 }
+};
+
+/**
  * Motor de Estilos Visuales para categorías de Recetas
  */
 export const getThemeForCategory = (category = '') => {
@@ -296,17 +308,17 @@ export const sanitizeRecipeForSaving = (recipe) => {
   const sanitizeProfile = (p) => {
     if (!p || typeof p !== 'object') return null;
     return {
-      Ca: Number(p.Ca || 0),
-      Mg: Number(p.Mg || 0),
-      SO4: Number(p.SO4 || 0),
-      Cl: Number(p.Cl || 0),
-      Na: Number(p.Na || 0),
-      HCO3: Number(p.HCO3 || 0)
+      Ca: Math.max(0, Number(p.Ca || 0)),
+      Mg: Math.max(0, Number(p.Mg || 0)),
+      SO4: Math.max(0, Number(p.SO4 || 0)),
+      Cl: Math.max(0, Number(p.Cl || 0)),
+      Na: Math.max(0, Number(p.Na || 0)),
+      HCO3: Math.max(0, Number(p.HCO3 || 0))
     };
   };
 
-  cleanRecipe.waterProfile = sanitizeProfile(cleanRecipe.waterProfile) || { Ca: 100, Mg: 10, SO4: 100, Cl: 100, HCO3: 50 };
-  cleanRecipe.tapWaterProfile = sanitizeProfile(cleanRecipe.tapWaterProfile) || { Ca: 20, Mg: 5, SO4: 20, Cl: 20, HCO3: 20 };
+  cleanRecipe.waterProfile = sanitizeProfile(cleanRecipe.waterProfile) || { ...WATER_PROFILES.Balanced };
+  cleanRecipe.tapWaterProfile = sanitizeProfile(cleanRecipe.tapWaterProfile) || { Ca: 0, Mg: 0, SO4: 0, Cl: 0, Na: 0, HCO3: 0 };
 
   // Limpieza y ordenamiento de Historial (modifications)
   if (Array.isArray(cleanRecipe.modifications)) {
@@ -345,8 +357,8 @@ export const initialRecipes = [
     abv: 6.5,
     ibu: 42,
     colorSRM: 5,
-    waterProfile: { Ca: 120, Mg: 15, SO4: 75, Cl: 200, Na: 0, HCO3: 50 },
-    tapWaterProfile: { Ca: 10, Mg: 2, SO4: 10, Cl: 15, Na: 0, HCO3: 50 },
+    waterProfile: { ...WATER_PROFILES['Hazy IPA'] },
+    tapWaterProfile: { Ca: 0, Mg: 0, SO4: 0, Cl: 0, Na: 0, HCO3: 0 },
     ingredients: {
       malts: [
         { name: "Malta Pilsen", amount: 4.5, unit: "kg", phase: "cooking", stepId: 'mashing', additionTime: 0, additionTimeUnit: 'm' },
@@ -402,8 +414,8 @@ export const initialRecipes = [
     abv: 8.2,
     ibu: 55,
     colorSRM: 6,
-    waterProfile: { Ca: 130, Mg: 15, SO4: 80, Cl: 220, Na: 0, HCO3: 50 },
-    tapWaterProfile: { Ca: 10, Mg: 2, SO4: 10, Cl: 15, Na: 0, HCO3: 50 },
+    waterProfile: { ...WATER_PROFILES['Double & Triple Hazy IPA'] },
+    tapWaterProfile: { Ca: 0, Mg: 0, SO4: 0, Cl: 0, Na: 0, HCO3: 0 },
     ingredients: {
       malts: [
         { name: "Malta Pilsen", amount: 6.0, unit: 'kg', phase: "cooking", stepId: 'mashing', additionTime: 0, additionTimeUnit: 'm' },
@@ -458,8 +470,8 @@ export const initialRecipes = [
     abv: 10.5,
     ibu: 65,
     colorSRM: 7,
-    waterProfile: { Ca: 140, Mg: 15, SO4: 100, Cl: 250, Na: 0, HCO3: 50 },
-    tapWaterProfile: { Ca: 10, Mg: 2, SO4: 10, Cl: 15, Na: 0, HCO3: 50 },
+    waterProfile: { ...WATER_PROFILES['Double & Triple Hazy IPA'] },
+    tapWaterProfile: { Ca: 0, Mg: 0, SO4: 0, Cl: 0, Na: 0, HCO3: 0 },
     ingredients: {
       malts: [
         { name: "Malta Pale Ale", amount: 8.0, unit: 'kg', phase: "cooking", stepId: 'mashing', additionTime: 0, additionTimeUnit: 'm' },
@@ -516,8 +528,8 @@ export const initialRecipes = [
     abv: 5.5,
     ibu: 32,
     colorSRM: 38,
-    waterProfile: { Ca: 110, Mg: 15, SO4: 40, Cl: 160, Na: 0, HCO3: 150 },
-    tapWaterProfile: { Ca: 10, Mg: 2, SO4: 10, Cl: 15, Na: 0, HCO3: 50 },
+    waterProfile: { ...WATER_PROFILES.Stout },
+    tapWaterProfile: { Ca: 0, Mg: 0, SO4: 0, Cl: 0, Na: 0, HCO3: 0 },
     ingredients: {
       malts: [
         { name: "Malta Pale Ale", amount: 4.0, unit: 'kg', phase: "cooking", stepId: 'mashing', additionTime: 0, additionTimeUnit: 'm' },
@@ -567,8 +579,8 @@ export const initialRecipes = [
     abv: 5.0,
     ibu: 28,
     colorSRM: 4,
-    waterProfile: { Ca: 20, Mg: 5, SO4: 20, Cl: 20, Na: 0, HCO3: 20 },
-    tapWaterProfile: { Ca: 10, Mg: 2, SO4: 10, Cl: 15, Na: 0, HCO3: 50 },
+    waterProfile: { ...WATER_PROFILES['Lager (Clásica/Pilsner)'] },
+    tapWaterProfile: { Ca: 0, Mg: 0, SO4: 0, Cl: 0, Na: 0, HCO3: 0 },
     ingredients: {
       malts: [
         { name: 'Malta Pilsen', amount: 4.5, unit: 'kg', phase: "cooking", stepId: 'mashing', additionTime: 0, additionTimeUnit: 'm' },
@@ -620,8 +632,8 @@ export const initialRecipes = [
     abv: 5.6,
     ibu: 32,
     colorSRM: 14,
-    waterProfile: { Ca: 80, Mg: 10, SO4: 150, Cl: 50, Na: 0, HCO3: 50 },
-    tapWaterProfile: { Ca: 10, Mg: 2, SO4: 10, Cl: 15, Na: 0, HCO3: 50 },
+    waterProfile: { ...WATER_PROFILES.Balanced },
+    tapWaterProfile: { Ca: 0, Mg: 0, SO4: 0, Cl: 0, Na: 0, HCO3: 0 },
     ingredients: {
       malts: [
         { name: 'Malta Pale Ale', amount: 4.0, unit: 'kg', phase: "cooking", stepId: 'mashing', additionTime: 0, additionTimeUnit: 'm' },
@@ -695,10 +707,14 @@ export const initialInventory = [
   { id: 'inv-s2', category: 'Sales Minerales', name: 'Sulfato de Calcio (CaSO4)', stock: 500, unit: 'g', price: 10 },
   { id: 'inv-s3', category: 'Sales Minerales', name: 'Ácido Láctico (80%)', stock: 250, unit: 'ml', price: 20 },
   { id: 'inv-s4', category: 'Sales Minerales', name: 'Nutriente de Levadura', stock: 100, unit: 'g', price: 50 },
+  { id: 'inv-s5', category: 'Sales Minerales', name: 'Sulfato de Magnesio (MgSO4)', stock: 500, unit: 'g', price: 15 },
+  { id: 'inv-s6', category: 'Sales Minerales', name: 'Cloruro de Magnesio (MgCl2)', stock: 500, unit: 'g', price: 15 },
+  { id: 'inv-s7', category: 'Sales Minerales', name: 'Bicarbonato de Sodio (NaHCO3)', stock: 500, unit: 'g', price: 10 },
+  { id: 'inv-s8', category: 'Sales Minerales', name: 'Cloruro de Sodio (NaCl)', stock: 500, unit: 'g', price: 5 },
 
   // ADITIVOS
   { id: 'inv-a1', category: 'Aditivos', name: 'Irish Moss', stock: 100, unit: 'g', price: 50 }
 ];
 
 export const defaultPrices = { malta: 2000, lupulo: 60, levadura: 5000 };
-export const baseWater = { Ca: 10, Mg: 2, SO4: 10, Cl: 15, Na: 0, HCO3: 50 };
+export const baseWater = { Ca: 0, Mg: 0, SO4: 0, Cl: 0, Na: 0, HCO3: 0 };

@@ -155,19 +155,21 @@ export const getTimeMultiplier = (unit) => {
 };
 /**
  * Aportes iónicos por gramo de sal en 1 litro de agua (ppm o mg/L).
- * Valores estándar para químicos grado alimenticio (hidratados cuando corresponde).
+ * Valores de precisión química para optimización WLS.
  */
 export const MINERAL_SALTS = {
-    'Cloruro de Calcio (CaCl2)': { Ca: 272, Cl: 483, Mg: 0, SO4: 0, Na: 0, HCO3: 0 },
-    'Sulfato de Calcio (CaSO4)': { Ca: 232, SO4: 558, Mg: 0, Cl: 0, Na: 0, HCO3: 0 },
-    'Sulfato de Magnesio (MgSO4)': { Mg: 99, SO4: 390, Ca: 0, Cl: 0, Na: 0, HCO3: 0 },
-    'Bicarbonato de Sodio (NaHCO3)': { Na: 273, HCO3: 726, Ca: 0, Mg: 0, SO4: 0, Cl: 0 },
-    'Cloruro de Sodio (NaCl)': { Na: 393, Cl: 607, Ca: 0, Mg: 0, SO4: 0, HCO3: 0 },
+    'Sulfato de Calcio (CaSO4)': { Ca: 232.8, SO4: 557.7, Mg: 0, Cl: 0, Na: 0, HCO3: 0 },
+    'Cloruro de Calcio (CaCl2)': { Ca: 272.6, Cl: 482.3, Mg: 0, SO4: 0, Na: 0, HCO3: 0 },
+    'Sulfato de Magnesio (MgSO4)': { Mg: 98.6, SO4: 389.6, Ca: 0, Cl: 0, Na: 0, HCO3: 0 },
+    'Bicarbonato de Sodio (NaHCO3)': { Na: 273.8, HCO3: 726.2, Ca: 0, Mg: 0, SO4: 0, Cl: 0 },
+    'Cloruro de Sodio (NaCl)': { Na: 393.4, Cl: 606.6, Ca: 0, SO4: 0, Mg: 0, HCO3: 0 },
     'Cloruro de Magnesio (MgCl2)': { Mg: 119, Cl: 349, Ca: 0, SO4: 0, Na: 0, HCO3: 0 }
 };
 
 /**
- * Calcula las adiciones de sales necesarias para alcanzar un perfil objetivo.
+ * Calcula las adiciones de sales mediante el método de Mínimos Cuadrados Ponderados (WLS).
+ * Optimiza la mezcla para minimizar la desviación iónica priorizando sabores críticos.
+ * 
  * @param {object} target - Perfil objetivo { Ca, Mg, SO4, Cl, Na, HCO3 }
  * @param {object} tap - Perfil de red { Ca, Mg, SO4, Cl, Na, HCO3 }
  * @param {number} volume - Volumen de agua en litros
@@ -177,73 +179,85 @@ export const calculateRequiredSalts = (target, tap, volume) => {
     if (!target || !tap || !volume || volume <= 0) return null;
 
     const ions = ['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'];
+    const weights = { Cl: 2.0, SO4: 2.0, Ca: 1.5, Mg: 1.0, Na: 1.0, HCO3: 1.0 };
     
-    // Sanitizar entradas para asegurar números positivos
-    const t = {};
-    const b = {};
+    // Sanitizar y escalar objetivos a la masa total necesaria (mg)
+    const T = {}; // Target mg
+    const current = {}; // Current mg
     ions.forEach(ion => {
-        t[ion] = Math.max(0, Number(target[ion]) || 0);
-        b[ion] = Math.max(0, Number(tap[ion]) || 0);
+        T[ion] = (Math.max(0, Number(target[ion]) || 0)) * volume;
+        current[ion] = (Math.max(0, Number(tap[ion]) || 0)) * volume;
     });
 
-    // Diferencia necesaria en ppm
-    const diff = {};
+    const saltNames = Object.keys(MINERAL_SALTS);
+    const x = {}; // Gramos de cada sal
+    saltNames.forEach(s => x[s] = 0);
+
+    // Algoritmo: Descenso de Coordenadas Iterativo (Coordinate Descent)
+    // Buscamos el x_k >= 0 que minimiza Z = sum( W_i * (Current_i - Target_i)^2 )
+    const maxIterations = 200; // Incrementado para mayor precisión
+    
+    for (let iter = 0; iter < maxIterations; iter++) {
+        let changed = false;
+        saltNames.forEach(s => {
+            let bestDelta = 0;
+            let minLoss = Infinity;
+
+            // Espacio de búsqueda adaptativo para la sal actual
+            // Probamos desde ajustes gruesos a muy finos
+            const steps = [10.0, 5.0, 1.0, 0.1, 0.01, -0.01, -0.1, -1.0, -5.0, -10.0];
+            
+            steps.forEach(delta => {
+                const nextX = Math.max(0, x[s] + delta);
+                const actualDelta = nextX - x[s];
+                if (actualDelta === 0 && delta !== 0) return;
+                
+                let loss = 0;
+                ions.forEach(ion => {
+                    const contribution = (MINERAL_SALTS[s][ion] * actualDelta);
+                    const diff = (current[ion] + contribution) - T[ion];
+                    loss += weights[ion] * Math.pow(diff, 2);
+                });
+
+                if (loss < minLoss) {
+                    minLoss = loss;
+                    bestDelta = actualDelta;
+                }
+            });
+
+            // Aplicar el mejor ajuste encontrado para esta sal
+            if (Math.abs(bestDelta) > 0.0001) {
+                x[s] += bestDelta;
+                ions.forEach(ion => {
+                    current[ion] += MINERAL_SALTS[s][ion] * bestDelta;
+                });
+                changed = true;
+            }
+        });
+        
+        // Criterio de parada temprana si no hay mejoras significativas
+        if (!changed) break;
+    }
+
+    const residualError = {};
+    const finalProfile = {};
     ions.forEach(ion => {
-        diff[ion] = Math.max(0, t[ion] - b[ion]);
+        const targetPpm = T[ion] / volume;
+        const finalPpm = current[ion] / volume;
+        finalProfile[ion] = Math.max(0, Number(finalPpm.toFixed(2)));
+        residualError[ion] = Number((targetPpm - finalPpm).toFixed(2));
     });
-
-    const additions = {};
-    const current = { ...b };
-
-    // Estrategia secuencial
-    // 1. Priorizar Cloro mediante CaCl2
-    if (diff.Cl > 0) {
-        const grams = (diff.Cl / MINERAL_SALTS['Cloruro de Calcio (CaCl2)'].Cl) * volume;
-        additions['Cloruro de Calcio (CaCl2)'] = grams;
-        ions.forEach(ion => {
-            current[ion] += (MINERAL_SALTS['Cloruro de Calcio (CaCl2)'][ion] * grams) / volume;
-        });
-    }
-
-    // 2. Priorizar Sulfatos
-    const remainingSO4 = Math.max(0, t.SO4 - current.SO4);
-    const remainingCa = Math.max(0, t.Ca - current.Ca);
-
-    if (remainingSO4 > 0) {
-        // Si falta calcio, preferimos CaSO4
-        if (remainingCa > 5) { // Margen de error
-            const grams = (remainingSO4 / MINERAL_SALTS['Sulfato de Calcio (CaSO4)'].SO4) * volume;
-            additions['Sulfato de Calcio (CaSO4)'] = (additions['Sulfato de Calcio (CaSO4)'] || 0) + grams;
-            ions.forEach(ion => {
-                current[ion] += (MINERAL_SALTS['Sulfato de Calcio (CaSO4)'][ion] * grams) / volume;
-            });
-        } else {
-            // Si ya tenemos suficiente Ca, usamos MgSO4
-            const grams = (remainingSO4 / MINERAL_SALTS['Sulfato de Magnesio (MgSO4)'].SO4) * volume;
-            additions['Sulfato de Magnesio (MgSO4)'] = grams;
-            ions.forEach(ion => {
-                current[ion] += (MINERAL_SALTS['Sulfato de Magnesio (MgSO4)'][ion] * grams) / volume;
-            });
-        }
-    }
-
-    // 3. Ajustar Sodio / Bicarbonato si es necesario subir pH/Na
-    const remainingNa = Math.max(0, t.Na - current.Na);
-    if (remainingNa > 0) {
-        const grams = (remainingNa / MINERAL_SALTS['Bicarbonato de Sodio (NaHCO3)'].Na) * volume;
-        additions['Bicarbonato de Sodio (NaHCO3)'] = grams;
-        ions.forEach(ion => {
-            current[ion] += (MINERAL_SALTS['Bicarbonato de Sodio (NaHCO3)'][ion] * grams) / volume;
-        });
-    }
 
     return {
-        salts: Object.entries(additions).map(([name, amount]) => ({
-            name,
-            amount: Number(amount.toFixed(2)),
-            unit: 'g'
-        })),
-        finalProfile: current
+        salts: Object.entries(x)
+            .filter(([_, amount]) => amount > 0.01)
+            .map(([name, amount]) => ({
+                name,
+                amount: Number(amount.toFixed(2)),
+                unit: 'g'
+            })),
+        residualError,
+        finalProfile
     };
 };
 /**

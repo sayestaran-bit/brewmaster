@@ -1,7 +1,7 @@
 // /src/components/views/RecipeDetailView.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit3, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X, Trash2, Save, Printer, History, Calendar, ChevronRight, Lock, Settings, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Edit3, Check, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X, Trash2, Save, Printer, History, Calendar, ChevronRight, Lock, Settings, AlertTriangle } from 'lucide-react';
 import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
 import { formatCurrency, getFormattedDate } from '../../utils/formatters';
 import { getEffectivePhase, getSafeAdditionTime, calculateRequiredSalts, MINERAL_SALTS } from '../../utils/recipeUtils';
@@ -887,54 +887,125 @@ export default function RecipeDetailView() {
 
                         {scaledRecipe.waterCalc && scaledRecipe.waterCalc.salts && (
                             <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-8 md:p-12 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-xl relative overflow-hidden">
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 text-amber-500 pointer-events-none">
+                                    <Sparkles size={200} />
+                                </div>
+                                
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 relative z-10">
                                     <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl md:text-4xl flex items-center gap-3">
                                         <Scale size={40} className="text-amber-600" /> Adición de Sales
                                     </h4>
-                                    <span className="bg-amber-600 text-white px-6 py-3 rounded-2xl text-lg font-black shadow-md">
-                                        Para {((Number(scaledRecipe.ingredients.water.strike) + Number(scaledRecipe.ingredients.water.sparge))).toFixed(1)} L (Total)
+                                    <span className="bg-amber-600 text-white px-6 py-3 rounded-2xl text-lg font-black shadow-md flex items-center gap-2">
+                                        <Droplets size={20} /> Para {((Number(scaledRecipe.ingredients.water.strike) + Number(scaledRecipe.ingredients.water.sparge))).toFixed(1)} L (Total)
                                     </span>
                                 </div>
 
-                                <p className="text-xl text-amber-800 dark:text-slate-300 font-medium mb-10">
-                                    Mezcla estas cantidades exactas en el agua <span className="font-black underline">antes</span> de agregar la malta.
-                                </p>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
-                                    {scaledRecipe.waterCalc.salts.map((salt, idx) => (
-                                        <div key={idx} className="bg-panel p-6 md:p-8 rounded-3xl border border-amber-100 dark:border-slate-700 text-center shadow-md relative overflow-hidden transition-all duration-500 hover:scale-105">
-                                            <div className={`absolute top-0 left-0 w-full h-2 ${
-                                                salt.name.includes('Calcio') ? 'bg-blue-400' : 
-                                                salt.name.includes('Magnesio') ? 'bg-green-400' : 
-                                                salt.name.includes('Sodio') ? 'bg-purple-400' : 'bg-amber-400'
-                                            }`}></div>
-                                            <span className="block font-black text-content text-5xl mb-3 tabular-nums transition-all duration-500">
-                                                {salt.amount}g
-                                            </span>
-                                            <span className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider block">{salt.name}</span>
-                                        </div>
-                                    ))}
+                                {/* Banner "Paso Cero" */}
+                                <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 rounded-2xl text-white mb-10 shadow-lg shadow-amber-500/20 flex items-center gap-5 relative z-10 border border-white/20 animate-pulse-slow">
+                                    <div className="bg-white/20 p-3 rounded-xl backdrop-blur-md">
+                                        <Info size={32} />
+                                    </div>
+                                    <div>
+                                        <h5 className="font-black text-xl uppercase tracking-tighter">PASO CERO: Preparación del Agua</h5>
+                                        <p className="font-medium opacity-90 leading-tight">Mezcla las sales indicadas a continuación <span className="underline font-black">AL INICIO</span> de la maceración para asegurar el pH y la extracción enzimática óptima.</p>
+                                    </div>
                                 </div>
 
-                                <div className="bg-white dark:bg-slate-950 p-8 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner">
-                                    <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest mb-6 text-center">Perfil Final Estimado vs Objetivo</h5>
-                                    <div className="flex justify-around text-2xl font-black flex-wrap gap-8">
-                                        {['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].map(ion => {
-                                            const final = scaledRecipe.waterCalc.finalProfile[ion];
-                                            const target = scaledRecipe.waterProfile[ion];
-                                            const error = Math.abs(final - target);
-                                            const deviationPercent = target > 0 ? (error / target) * 100 : 0;
-                                            const isCritical = deviationPercent > 20 && error > 10;
-                                            const statusColor = error < 5 ? 'text-green-500' : error < 15 ? 'text-amber-500' : 'text-red-500';
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10 relative z-10">
+                                    {scaledRecipe.waterCalc.salts.map((salt, idx) => {
+                                        const isCalcium = salt.name.toLowerCase().includes('calcio');
+                                        const isMagnesium = salt.name.toLowerCase().includes('magnesio');
+                                        const isSodium = salt.name.toLowerCase().includes('sodio');
+                                        
+                                        return (
+                                            <div key={idx} className="bg-panel p-6 md:p-8 rounded-3xl border border-line text-center shadow-md relative overflow-hidden transition-all duration-500 hover:scale-105 group">
+                                                <div className={`absolute top-0 left-0 w-full h-2 transition-all group-hover:h-3 ${
+                                                    isCalcium ? 'bg-blue-400' : 
+                                                    isMagnesium ? 'bg-green-400' : 
+                                                    isSodium ? 'bg-purple-400' : 'bg-amber-400'
+                                                }`}></div>
+                                                <div className="absolute -right-2 -top-2 opacity-5 scale-150 rotate-12 group-hover:scale-[2] group-hover:rotate-0 transition-all duration-700">
+                                                    <Sparkles size={80} />
+                                                </div>
+                                                <span className="block font-black text-content text-5xl mb-3 tabular-nums transition-all duration-500">
+                                                    {salt.amount}g
+                                                </span>
+                                                <span className="text-xs md:text-sm font-black text-muted uppercase tracking-widest block bg-surface/50 py-2 rounded-xl border border-line/50">{salt.name}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="bg-white dark:bg-slate-950 p-8 md:p-10 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner relative z-10">
+                                    <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                                        <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest text-center md:text-left">Perfil Final Estimado vs Objetivo</h5>
+                                        
+                                        {/* Sulfate/Chloride Ratio Indicator */}
+                                        {(() => {
+                                            const so4 = scaledRecipe.waterCalc.finalProfile.SO4;
+                                            const cl = scaledRecipe.waterCalc.finalProfile.Cl;
+                                            const ratio = cl > 0 ? (so4 / cl).toFixed(2) : so4.toFixed(2);
+                                            let label = "Equilibrado";
+                                            let color = "text-amber-500";
+                                            let position = "50%";
+
+                                            if (ratio > 2) { label = "Muy Amarga / Seca"; color = "text-red-500"; position = "90%"; }
+                                            else if (ratio > 1.3) { label = "Amargor Resaltado"; color = "text-orange-500"; position = "70%"; }
+                                            else if (ratio < 0.5) { label = "Cuerpo Pleno / Sedosa"; color = "text-blue-500"; position = "10%"; }
+                                            else if (ratio < 0.77) { label = "Malteado / Dulzor"; color = "text-cyan-500"; position = "30%"; }
 
                                             return (
-                                                <div key={ion} className="flex flex-col items-center">
-                                                    <span className="text-muted text-[10px] uppercase tracking-widest mb-1 font-black">{ion}</span>
-                                                    <span className={`${statusColor} text-3xl tabular-nums flex items-center gap-1`}>
-                                                        {Math.round(final)}
-                                                        {isCritical && <Info size={14} className="text-red-500 animate-pulse" title="Desviación mayor al 20%" />}
-                                                    </span>
-                                                    <span className="text-[10px] text-muted-foreground opacity-50 font-bold">Obj: {target}</span>
+                                                <div className="bg-surface p-3 px-6 rounded-2xl border border-line flex flex-col items-center min-w-[200px]">
+                                                    <span className="text-[10px] font-black text-muted uppercase tracking-tighter mb-1">Ratio SO4 / Cl</span>
+                                                    <div className="w-full h-1.5 bg-line rounded-full mb-2 relative overflow-hidden">
+                                                        <div className={`absolute top-0 h-full w-2 ${color.replace('text', 'bg')} transition-all duration-1000`} style={{ left: `calc(${position} - 4px)` }}></div>
+                                                    </div>
+                                                    <div className="flex justify-between w-full text-[8px] font-black text-muted-foreground opacity-50 uppercase mb-1">
+                                                        <span>Malty</span>
+                                                        <span>Bitter</span>
+                                                    </div>
+                                                    <span className={`${color} font-black text-xs uppercase`}>{label} ({ratio})</span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
+                                        {['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].map(ion => {
+                                            const final = Math.round(scaledRecipe.waterCalc.finalProfile[ion]);
+                                            const target = scaledRecipe.waterProfile[ion];
+                                            const error = Math.abs(final - target);
+                                            const isPerfect = error <= 5;
+                                            const isWarning = error > 15;
+                                            
+                                            return (
+                                                <div key={ion} className="flex flex-col items-center group relative">
+                                                    <span className="text-muted text-[10px] uppercase tracking-widest mb-2 font-black group-hover:text-amber-500 transition-colors">{ion}</span>
+                                                    <div className={`relative flex items-center justify-center w-20 h-20 md:w-24 md:h-24 rounded-full border-4 transition-all duration-500 ${
+                                                        isPerfect ? 'border-emerald-500 bg-emerald-500/5' : 
+                                                        isWarning ? 'border-red-500/30 bg-red-500/5' : 'border-line bg-surface'
+                                                    }`}>
+                                                        <span className={`text-2xl md:text-3xl font-black tabular-nums ${
+                                                            isPerfect ? 'text-emerald-600' : 
+                                                            isWarning ? 'text-red-500' : 'text-content'
+                                                        }`}>
+                                                            {final}
+                                                        </span>
+                                                        
+                                                        {isPerfect && (
+                                                            <div className="absolute -top-2 -right-2 bg-emerald-500 text-white p-1 rounded-full shadow-lg border-2 border-white dark:border-slate-900 animate-bounce-subtle">
+                                                                <Check size={12} />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="mt-3 flex flex-col items-center">
+                                                        <span className="text-[10px] text-muted-foreground font-black uppercase opacity-60">Objetivo</span>
+                                                        <span className="text-xs font-bold text-content">{target} ppm</span>
+                                                    </div>
+                                                    
+                                                    {isPerfect && (
+                                                        <span className="absolute -bottom-6 text-[8px] font-black text-emerald-500 uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">¡CLAVADO! Precision Hit</span>
+                                                    )}
                                                 </div>
                                             );
                                         })}
@@ -943,20 +1014,20 @@ export default function RecipeDetailView() {
                                     {/* Alerta de Desviación Crítica */}
                                     {(() => {
                                         const criticalIons = ['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].filter(ion => {
-                                            const error = Math.abs(scaledRecipe.waterCalc.finalProfile[ion] - scaledRecipe.waterProfile[ion]);
+                                            const error = Math.abs(scaledRecipe.waterCalc.finalProfile[ion] - (scaledRecipe.waterProfile[ion] || 0));
                                             const target = scaledRecipe.waterProfile[ion];
-                                            return target > 0 && (error / target) * 100 > 20 && error > 10;
+                                            return target > 0 && (error / target) * 100 > 25 && error > 15;
                                         });
 
                                         if (criticalIons.length > 0) {
                                             return (
-                                                <div className="mt-8 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-4 animate-bounce-subtle">
-                                                    <div className="bg-red-500 text-white p-2 rounded-xl shadow-lg"><Info size={20} /></div>
+                                                <div className="mt-12 p-5 bg-red-500/10 border border-red-500/30 rounded-3xl flex items-center gap-5 animate-pulse-slow">
+                                                    <div className="bg-red-500 text-white p-3 rounded-2xl shadow-lg ring-4 ring-red-500/20"><AlertTriangle size={24} /></div>
                                                     <div className="text-left">
-                                                        <h6 className="font-black text-red-600 dark:text-red-400 text-sm uppercase">¡Aviso de Saturación Mineral!</h6>
-                                                        <p className="text-xs font-medium text-red-500/80">
-                                                            Los iones de <span className="font-black">{criticalIons.join(', ')}</span> se desvían más de un 20%. 
-                                                            Esto ocurre si tu agua base ya supera el objetivo o las sales añadidas saturan el perfil.
+                                                        <h6 className="font-black text-red-600 dark:text-red-400 text-lg uppercase tracking-tighter">Saturación Mineral Crítica</h6>
+                                                        <p className="text-sm font-medium text-red-500/80">
+                                                            Los iones <span className="font-black">{criticalIons.join(', ')}</span> se desvían drásticamente. 
+                                                            Esto suele ocurrir cuando el agua base ya es muy dura o las sales requeridas saturan el perfil.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -965,8 +1036,9 @@ export default function RecipeDetailView() {
                                         return null;
                                     })()}
                                 </div>
-                                <p className="text-sm text-muted mt-6 text-center italic font-medium">
-                                    * El motor de cálculo ajusta las sales dinámicamente según tu perfil base. El error residual se debe a que las sales aportan iones en pares vinculados.
+                                <p className="text-center text-xs text-muted/60 mt-8 italic font-bold relative z-10">
+                                    * El motor de cálculo optimiza las sales para minimizar el error cuadrático medio. 
+                                    Los desviaciones menores son normales debido al acoplamiento iónico.
                                 </p>
                             </div>
                         )}

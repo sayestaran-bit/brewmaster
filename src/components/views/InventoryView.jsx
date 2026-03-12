@@ -264,7 +264,7 @@ export default function InventoryView() {
                 return (
                     <div key={category} className="bg-panel rounded-2xl shadow-sm border border-line overflow-hidden mb-8">
                         <div className="bg-black/5 dark:bg-white/5 px-6 py-5 border-b border-line font-black text-content text-lg flex items-center gap-2">
-                            {catIcon} {category}s
+                            {catIcon} {category.endsWith('s') ? category : `${category}s`}
                         </div>
                         <div className="p-0 overflow-x-auto">
                             <table className="w-full text-left text-sm whitespace-nowrap">
@@ -309,9 +309,13 @@ export default function InventoryView() {
                                                     <div className="flex items-center gap-2">
                                                         <input
                                                             type="number"
-                                                            defaultValue={parseFloat(Number(item.stock).toFixed(4))}
+                                                            value={item.stock}
                                                             disabled={isGuest}
                                                             title={isGuest ? guestTooltip : undefined}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                updateItem(item.id, { stock: val });
+                                                            }}
                                                             onBlur={(e) => {
                                                                 const val = Math.max(0, parseFloat(Number(e.target.value).toFixed(4)) || 0);
                                                                 updateItem(item.id, { stock: val });
