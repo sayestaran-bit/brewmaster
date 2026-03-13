@@ -3,9 +3,11 @@ import React, { useState } from 'react';
 import { Settings, Plus, Trash2, Save, Info, Thermometer, Droplets, FlaskConical, Scale, Maximize2, Loader2, AlertTriangle, CheckCircle2, Star, HelpCircle } from 'lucide-react';
 import { useEquipment } from '../../hooks/useEquipment';
 import { EQUIPMENT_GLOSSARY } from '../../utils/helpers';
+import { useToast } from '../../context/ToastContext';
 
 export default function EquipmentSettings() {
     const { equipment, loading, addProfile, updateProfile, deleteProfile, setAsDefault } = useEquipment();
+    const { addToast } = useToast();
     const [editingId, setEditingId] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -32,7 +34,7 @@ export default function EquipmentSettings() {
 
     const handleSave = async (e) => {
         e.preventDefault();
-        if (!formData.name) return alert("Por favor, ingresa un nombre para el equipo.");
+        if (!formData.name) return addToast("Por favor, ingresa un nombre para el equipo.", "warning");
         
         setIsSaving(true);
         try {
@@ -41,10 +43,11 @@ export default function EquipmentSettings() {
             } else {
                 await updateProfile(editingId, formData);
             }
+            addToast(editingId === 'new' ? "Perfil creado con éxito." : "Cambios guardados correctamente.", "success");
             handleCancel();
         } catch (err) {
             console.error("Error saving profile:", err);
-            alert("Error al guardar el perfil.");
+            addToast("Error al guardar el perfil.", "error");
         } finally {
             setIsSaving(false);
         }
@@ -54,9 +57,10 @@ export default function EquipmentSettings() {
         if (window.confirm("¿Estás seguro de que deseas eliminar este perfil?")) {
             try {
                 await deleteProfile(id);
+                addToast("Perfil eliminado correctamente.", "success");
             } catch (err) {
                 console.error("Error deleting profile:", err);
-                alert("Error al eliminar el perfil.");
+                addToast("Error al eliminar el perfil.", "error");
             }
         }
     };
@@ -65,9 +69,10 @@ export default function EquipmentSettings() {
         try {
             setIsSaving(true);
             await setAsDefault(id);
+            addToast("Equipo predeterminado actualizado.", "info");
         } catch (err) {
             console.error("Error setting default profile:", err);
-            alert("Error al establecer el equipo predeterminado.");
+            addToast("Error al establecer el equipo predeterminado.", "error");
         } finally {
             setIsSaving(false);
         }
@@ -139,72 +144,72 @@ export default function EquipmentSettings() {
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-muted uppercase mb-2 tracking-widest flex items-center gap-1.5">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-black text-muted uppercase mb-2 tracking-widest flex items-center gap-1.5 h-4">
                                             <Thermometer size={12} className="text-red-500" /> Eva. (L/hr)
                                             <Tooltip label="Tasa de Evaporación" field="evaporationRate" />
                                         </label>
                                         <input 
                                             type="number" step="0.1"
-                                            className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold outline-none focus:ring-2 focus:ring-amber-500/50"
+                                            className="w-full p-4 border border-line rounded-2xl bg-surface text-content font-black text-center outline-none focus:ring-4 focus:ring-amber-500/10 transition-all shadow-inner"
                                             value={formData.evaporationRate}
                                             onChange={e => setFormData({...formData, evaporationRate: parseFloat(e.target.value) || 0})}
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-muted uppercase mb-2 tracking-widest flex items-center gap-1.5">
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-black text-muted uppercase mb-2 tracking-widest flex items-center gap-1.5 h-4">
                                             <Droplets size={12} className="text-blue-500" /> Pérdida Olla (L)
                                             <Tooltip label="Pérdida en fondo" field="trubLoss" />
                                         </label>
                                         <input 
                                             type="number" step="0.1"
-                                            className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold outline-none focus:ring-2 focus:ring-amber-500/50"
+                                            className="w-full p-4 border border-line rounded-2xl bg-surface text-content font-black text-center outline-none focus:ring-4 focus:ring-amber-500/10 transition-all shadow-inner"
                                             value={formData.trubLoss}
                                             onChange={e => setFormData({...formData, trubLoss: parseFloat(e.target.value) || 0})}
                                         />
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-muted uppercase mb-2 tracking-widest flex items-center gap-1.5">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-black text-muted uppercase mb-2 tracking-widest flex items-center gap-1.5 h-4">
                                             <FlaskConical size={12} className="text-purple-500" /> Rel. Agua/Grano
                                             <Tooltip label="Mash Ratio" field="mashRatio" />
                                         </label>
                                         <input 
                                             type="number" step="0.1"
-                                            className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold outline-none focus:ring-2 focus:ring-amber-500/50"
+                                            className="w-full p-4 border border-line rounded-2xl bg-surface text-content font-black text-center outline-none focus:ring-4 focus:ring-amber-500/10 transition-all shadow-inner"
                                             value={formData.mashRatio}
                                             onChange={e => setFormData({...formData, mashRatio: parseFloat(e.target.value) || 0})}
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-muted uppercase mb-2 tracking-widest flex items-center gap-1.5">
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-black text-muted uppercase mb-2 tracking-widest flex items-center gap-1.5 h-4">
                                             <Scale size={12} className="text-amber-600" /> Abs. Grano (L/kg)
                                             <Tooltip label="Absorción" field="grainAbsorption" />
                                         </label>
                                         <input 
                                             type="number" step="0.1"
-                                            className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold outline-none focus:ring-2 focus:ring-amber-500/50"
+                                            className="w-full p-4 border border-line rounded-2xl bg-surface text-content font-black text-center outline-none focus:ring-4 focus:ring-amber-500/10 transition-all shadow-inner"
                                             value={formData.grainAbsorption}
                                             onChange={e => setFormData({...formData, grainAbsorption: parseFloat(e.target.value) || 0})}
                                         />
                                     </div>
                                 </div>
 
-                                <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
-                                    <label className="block text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase mb-2 tracking-widest flex items-center gap-1.5">
-                                        <Maximize2 size={12} /> Capacidad Total Olla (L)
+                                <div className="p-6 bg-amber-500/5 border border-amber-500/10 rounded-[2rem] shadow-inner">
+                                    <label className="block text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase mb-4 tracking-[0.2em] flex items-center justify-center gap-2">
+                                        <Maximize2 size={14} /> Capacidad Total Olla (L)
                                         <Tooltip label="Volumen Total" field="totalVolume" />
                                     </label>
                                     <input 
                                         type="number"
-                                        className="w-full p-4 border border-line rounded-xl bg-surface text-content font-black text-2xl text-center outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+                                        className="w-full p-4 border border-line rounded-2xl bg-surface text-content font-black text-4xl text-center outline-none focus:ring-4 focus:ring-amber-500/20 transition-all tabular-nums"
                                         value={formData.totalVolume}
                                         onChange={e => setFormData({...formData, totalVolume: parseFloat(e.target.value) || 0})}
                                     />
-                                    <p className="text-[9px] text-muted font-bold mt-2 text-center uppercase">Crucial para alertas de desbordamiento</p>
+                                    <p className="text-[10px] text-muted font-bold mt-4 text-center uppercase tracking-widest opacity-60">Seguridad contra desbordamiento</p>
                                 </div>
 
                                 <div className="flex gap-3 pt-2">

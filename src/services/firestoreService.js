@@ -2,8 +2,44 @@
 // Capa centralizada de acceso a Firestore.
 // Todas las funciones usan async/await con manejo de errores estricto.
 
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, collection, query, where, getDocs, writeBatch, Timestamp } from 'firebase/firestore';
 import { db, collectionPrefix } from './firebase';
+
+/**
+ * Purga entradas del historial más antiguas que N días para liberar espacio.
+ * Útil para evitar exceder cuotas de almacenamiento en el cliente (IndexedDB).
+ * 
+ * @param {string} userId - UID del usuario
+ * @param {number} [days=30] - Límite de días de antigüedad
+ * @returns {Promise<{ success: boolean, purgedCount?: number, error?: string }>}
+ */
+export async function purgeOldHistory(userId, days = 30) {
+    if (!userId) return { success: false, error: 'userId es requerido' };
+
+    try {
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - days);
+        const thresholdTimestamp = Timestamp.fromDate(threshold);
+
+        const historyRef = collection(db, 'users', userId, 'history');
+        const q = query(historyRef, where('timestamp', '<', thresholdTimestamp));
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+            return { success: true, purgedCount: 0 };
+        }
+
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+
+        console.log(`🧹 firestoreService: Purgados ${snap.size} registros del historial (> ${days} días).`);
+        return { success: true, purgedCount: snap.size };
+    } catch (err) {
+        console.error('❌ firestoreService.purgeOldHistory Error:', err.message);
+        return { success: false, error: err.message };
+    }
+}
 
 /**
  * Construye la referencia al documento principal de datos del usuario.

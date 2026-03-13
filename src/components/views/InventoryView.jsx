@@ -20,7 +20,7 @@ export default function InventoryView() {
     const { currentUser } = useAuth();
     const isGuest = false; // Deshabilitado temporalmente para pruebas locales: currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
-    const { recipes } = useRecipes();
+    const { recipes, loading: recipesLoading } = useRecipes();
     const { 
         inventory, 
         shoppingLists, 
@@ -124,35 +124,35 @@ export default function InventoryView() {
 
             {/* Planificación de Compras Section */}
             {shoppingLists.some(l => l.status !== 'purchased') && (
-                <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/50 rounded-2xl p-6 mb-8 animate-fadeIn">
-                    <div className="flex justify-between items-center mb-4">
+                <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/50 rounded-[var(--radius-3xl)] p-6 md:p-8 mb-8 animate-fadeIn">
+                    <div className="flex justify-between items-center mb-6">
                         <h3 className="text-sm font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest flex items-center gap-2">
-                            <ListChecks size={18} /> Borradores de Compras ({shoppingLists.filter(l => l.status !== 'purchased').length})
+                            <ListChecks size={20} /> Borradores de Compras ({shoppingLists.filter(l => l.status !== 'purchased').length})
                         </h3>
                     </div>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {shoppingLists.filter(l => l.status !== 'purchased').map(list => (
-                            <div key={list.id} className="bg-panel p-4 rounded-xl border border-line shadow-sm hover:border-blue-400 transition-all group">
-                                <div className="flex justify-between items-start mb-2">
+                            <div key={list.id} className="bg-panel p-5 rounded-[var(--radius-2xl)] border border-line shadow-sm hover:border-blue-400 transition-all group">
+                                <div className="flex justify-between items-start mb-3">
                                     <span className="text-[10px] font-black text-muted uppercase tracking-tighter">
                                         {list.updatedAt ? new Date(list.updatedAt?.seconds * 1000 || list.updatedAt).toLocaleDateString() : 'Pendiente'}
                                     </span>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button 
                                             onClick={() => deleteShoppingList(list.id)} 
-                                            className="p-1 text-red-500 hover:bg-red-50 rounded-md"
+                                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                         >
-                                            <Trash2 size={14} />
+                                            <Trash2 size={16} />
                                         </button>
                                     </div>
                                 </div>
-                                <div className="text-sm font-bold text-content mb-3">
+                                <div className="text-sm font-bold text-content mb-4">
                                     {list.items?.length || 0} ítems | Est: <span className="text-emerald-600 font-black">{formatCurrency(list.totalEstCost || 0)}</span>
                                 </div>
                                 <Button 
-                                    size="xs" 
+                                    size="sm" 
                                     variant="primary" 
-                                    className="w-full text-[10px] uppercase font-black"
+                                    className="w-full text-[10px] uppercase font-black tracking-widest"
                                     onClick={() => setCheckInList(list)}
                                 >
                                     Realizar Check-in
@@ -168,14 +168,15 @@ export default function InventoryView() {
                 onClose={() => setIsShoppingListOpen(false)}
                 recipes={recipes || []}
                 inventory={inventory || []}
+                loading={recipesLoading}
             />
 
             {showInvForm && (
-                <div className="bg-panel p-6 rounded-2xl shadow-sm border border-line flex flex-wrap gap-4 items-end mb-8 animate-fadeIn">
-                    <div className="w-full md:w-1/5">
-                        <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Categoría</label>
+                <div className="bg-panel p-6 md:p-8 rounded-[var(--radius-3xl)] shadow-sm border border-line flex flex-wrap gap-6 items-end mb-8 animate-fadeIn">
+                    <div className="w-full md:w-[18%]">
+                        <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2.5">Categoría</label>
                         <select 
-                            className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" 
+                            className="w-full p-3.5 border border-line rounded-[var(--radius-xl)] outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content font-bold transition-all cursor-pointer" 
                             value={newInvItem.category} 
                             onChange={e => setNewInvItem({ 
                                 ...newInvItem, 
@@ -190,64 +191,87 @@ export default function InventoryView() {
                             <option value="Aditivos">Aditivos</option>
                         </select>
                     </div>
-                    <div className="w-full md:w-2/5">
-                        <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Insumo</label>
+                    <div className="w-full md:flex-1">
+                        <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2.5">Nombre del Insumo</label>
                         <input 
                             type="text" 
-                            className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" 
+                            className="w-full p-3.5 border border-line rounded-[var(--radius-xl)] outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content font-bold transition-all" 
                             placeholder="Ej: Malta Caramelo" 
                             value={newInvItem.name} 
                             onChange={e => setNewInvItem({ ...newInvItem, name: e.target.value })} 
                         />
                     </div>
-                    <div className="w-full md:w-1/5 flex gap-2">
+                    <div className="w-full md:w-[180px] flex gap-3">
                         <div className="w-1/2">
-                            <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Stock</label>
+                            <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2.5">Stock</label>
                             <input 
                                 type="number" 
-                                className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-center bg-surface text-content" 
+                                className="w-full p-3.5 border border-line rounded-[var(--radius-xl)] outline-none focus:ring-2 focus:ring-blue-500 text-center bg-surface text-content font-black transition-all" 
                                 value={newInvItem.stock} 
                                 onChange={e => setNewInvItem({ ...newInvItem, stock: e.target.value })} 
                             />
                         </div>
                         <div className="w-1/2">
-                            <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Unidad</label>
+                            <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2.5">Unidad</label>
                             <input 
                                 type="text" 
-                                className="w-full p-3 border border-line rounded-xl outline-none bg-surface text-center text-muted/50 font-bold cursor-not-allowed disabled:bg-surface" 
+                                className="w-full p-3.5 border border-line rounded-[var(--radius-xl)] outline-none bg-surface/50 text-center text-muted/50 font-black cursor-not-allowed" 
                                 value={newInvItem.unit} 
                                 disabled 
                             />
                         </div>
                     </div>
-                    <div className="w-full md:w-1/5">
-                        <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Precio Unit.</label>
+                    <div className="w-full md:w-[150px]">
+                        <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2.5">Precio Unit.</label>
                         <div className="relative">
-                            <span className="absolute left-3 top-3 text-muted">$</span>
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted font-bold">$</span>
                             <input 
                                 type="number" 
-                                className="w-full p-3 pl-8 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content" 
+                                className="w-full p-3.5 pl-8 border border-line rounded-[var(--radius-xl)] outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content font-bold transition-all" 
                                 value={newInvItem.price} 
                                 onChange={e => setNewInvItem({ ...newInvItem, price: e.target.value })} 
                             />
                         </div>
                     </div>
 
-                    <div className="w-full md:flex-1">
-                        <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Descripción (Opcional)</label>
-                        <textarea
-                            className="w-full p-3 border border-line rounded-xl outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content resize-none flex-1"
-                            rows="2"
-                            placeholder="Añade notas sobre el perfil de sabor, origen o uso..."
+                    <div className="w-full flex-1">
+                        <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2.5">Descripción (Opcional)</label>
+                        <input
+                            className="w-full p-3.5 border border-line rounded-[var(--radius-xl)] outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content font-medium transition-all"
+                            placeholder="Notas sobre el perfil de sabor..."
                             value={newInvItem.description || ''}
                             onChange={e => setNewInvItem({ ...newInvItem, description: e.target.value })}
                         />
                     </div>
 
-                    <div className="w-full md:w-auto flex justify-end mt-2 md:mt-0">
+                    <div className="w-full md:w-[140px]">
+                        <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2.5">Umbral Alerta</label>
+                        <div className="relative">
+                            <input 
+                                type="number" 
+                                className="w-full p-3.5 border border-line rounded-[var(--radius-xl)] outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content font-bold text-center transition-all" 
+                                placeholder="Auto"
+                                value={newInvItem.minThreshold} 
+                                onChange={e => setNewInvItem({ ...newInvItem, minThreshold: e.target.value })} 
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted font-black uppercase">{newInvItem.unit}</span>
+                        </div>
+                    </div>
+
+                    <div className="w-full md:w-[180px]">
+                        <label className="block text-[10px] font-black text-muted uppercase tracking-widest mb-2.5">Vencimiento</label>
+                        <input 
+                            type="date" 
+                            className="w-full p-3.5 border border-line rounded-[var(--radius-xl)] outline-none focus:ring-2 focus:ring-blue-500 bg-surface text-content font-bold transition-all" 
+                            value={newInvItem.expiryDate} 
+                            onChange={e => setNewInvItem({ ...newInvItem, expiryDate: e.target.value })} 
+                        />
+                    </div>
+
+                    <div className="w-full md:w-auto flex justify-end">
                         <button 
                             onClick={handleAddInvItem} 
-                            className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl flex justify-center items-center h-[50px] px-8 transition-colors shadow-sm"
+                            className="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-[var(--radius-xl)] flex justify-center items-center h-[52px] px-8 transition-all shadow-lg shadow-emerald-500/10 hover:-translate-y-1"
                         >
                             <Save size={20} className="mr-2" /> Guardar Insumo
                         </button>
@@ -262,8 +286,8 @@ export default function InventoryView() {
                 if (categoryItems.length === 0) return null;
 
                 return (
-                    <div key={category} className="bg-panel rounded-2xl shadow-sm border border-line overflow-hidden mb-8">
-                        <div className="bg-black/5 dark:bg-white/5 px-6 py-5 border-b border-line font-black text-content text-lg flex items-center gap-2">
+                    <div key={category} className="bg-panel rounded-[var(--radius-3xl)] shadow-sm border border-line overflow-hidden mb-8">
+                        <div className="bg-black/5 dark:bg-white/5 px-8 py-6 border-b border-line font-black text-content text-xl flex items-center gap-3">
                             {catIcon} {category.endsWith('s') ? category : `${category}s`}
                         </div>
                         <div className="p-0 overflow-x-auto">

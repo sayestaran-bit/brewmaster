@@ -4,7 +4,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, getIdToken as firebaseGetIdToken } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
 // --- VALIDACIÓN DE CONFIGURACIÓN ---
 // Verificamos que las variables de entorno críticas existan al inicio.
@@ -41,7 +41,12 @@ const app = initializeApp(firebaseConfig);
 
 // --- EXPORTACIONES ---
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+        cacheSizeBytes: 40 * 1024 * 1024 // 40MB
+    })
+});
 
 // Sanitizamos el appId para usarlo como colección base
 export const collectionPrefix = firebaseConfig.appId

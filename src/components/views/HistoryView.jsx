@@ -2,28 +2,31 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { History, ArrowLeft, CalendarClock, Trash2, Beer, Droplets, Star, Search, Filter, Settings } from 'lucide-react';
-import { useHistory } from '../../hooks/useHistory';
+import { useHistoryContext } from '../../context/HistoryContext';
 import { formatCurrency, standardizeDate } from '../../utils/formatters';
 import { Activity, Download } from 'lucide-react'; 
+import { useToast } from '../../context/ToastContext';
 import * as XLSX from 'xlsx';
 
 export default function HistoryView() {
     const navigate = useNavigate();
-    const { history, deleteEntry, updateTasting } = useHistory();
+    const { addToast } = useToast();
+    const { history, stats, deleteEntry, updateTasting } = useHistoryContext();
 
     const [tastingFormId, setTastingFormId] = useState(null);
     const [tastingData, setTastingData] = useState({ rating: 0, notes: '' });
     const [expandedBatchId, setExpandedBatchId] = useState(null);
+
 
     const deleteHistoryItem = async (id) => {
         if (window.confirm("¿Seguro que deseas eliminar el historial de este lote? Esta acción no devolverá insumos al inventario.")) {
             try {
                 console.log("HistoryView: Deleting entry", id);
                 await deleteEntry(id);
-                alert("¡Entrada eliminada exitosamente!");
+                addToast("¡Entrada eliminada exitosamente!", "success");
             } catch (err) {
                 console.error("Error deleting history item:", err);
-                alert("No se pudo eliminar el registro del historial: " + err.message);
+                addToast("No se pudo eliminar el registro del historial.", "error");
             }
         }
     };
@@ -34,10 +37,10 @@ export default function HistoryView() {
             console.log("HistoryView: Saving tasting for ID", tastingFormId, tastingData);
             await updateTasting(tastingFormId, tastingData);
             setTastingFormId(null);
-            alert("¡Evaluación guardada exitosamente!");
+            addToast("¡Evaluación guardada exitosamente!", "success");
         } catch (err) {
             console.error("Error saving tasting:", err);
-            alert("Error al guardar la evaluación: " + err.message);
+            addToast("Error al guardar la evaluación.", "error");
         }
     };
 
@@ -120,7 +123,7 @@ export default function HistoryView() {
 
         } catch (err) {
             console.error("Error exporting to Excel:", err);
-            alert("Error al generar el reporte Excel.");
+            addToast("Error al generar el reporte Excel.", "error");
         }
     };
 
@@ -141,38 +144,7 @@ export default function HistoryView() {
         return true;
     });
 
-    // Analíticas Rápidas
-    const analytics = useMemo(() => {
-        if (history.length === 0) return null;
-        const completed = history.filter(h => h.status === 'Completada');
-        const abandoned = history.filter(h => h.status === 'Abandonada');
 
-        let totalDeviation = 0;
-        let deviationCount = 0;
-
-        history.forEach(h => {
-            ['cooking', 'fermenting', 'bottling'].forEach(p => {
-                const metrics = h[`${p}_metrics`] || (p === 'cooking' ? h.stepsMetrics : null);
-                if (metrics) {
-                    Object.values(metrics).forEach(m => {
-                        if (m.actual && m.planned) {
-                            totalDeviation += (m.actual / m.planned);
-                            deviationCount++;
-                        }
-                    });
-                }
-            });
-        });
-
-        const avgEfficiency = deviationCount > 0 ? (totalDeviation / deviationCount) * 100 : 100;
-
-        return {
-            completedCount: completed.length,
-            abandonedCount: abandoned.length,
-            avgEfficiency: Math.round(avgEfficiency),
-            successRate: Math.round((completed.length / history.length) * 100)
-        };
-    }, [history]);
 
     return (
         <div className="space-y-8 animate-fadeIn">
@@ -215,28 +187,28 @@ export default function HistoryView() {
                 </div>
             </div>
 
-            {analytics && (
+            {stats && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-slideDown">
                     <div className="bg-panel p-5 rounded-2xl border border-line shadow-sm">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Efectividad</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Costo Promedio (L)</span>
                         <div className="flex items-baseline gap-1">
-                            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{analytics.successRate}%</span>
+                            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(stats.avgCostPerLiter)}</span>
                         </div>
                     </div>
                     <div className="bg-panel p-5 rounded-2xl border border-line shadow-sm">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Eficiencia de Tiempos</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Eficiencia Promedio</span>
                         <div className="flex items-baseline gap-1">
-                            <span className={`text-2xl font-black ${analytics.avgEfficiency > 110 ? 'text-amber-500' : 'text-blue-500'}`}>{analytics.avgEfficiency}%</span>
-                            <span className="text-[10px] text-muted font-bold">vs meta</span>
+                            <span className={`text-2xl font-black text-blue-500`}>{stats.avgEfficiency}%</span>
+                            <span className="text-[10px] text-muted font-bold">brewhouse</span>
                         </div>
                     </div>
                     <div className="bg-panel p-5 rounded-2xl border border-line shadow-sm">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Lotes Completados</span>
-                        <span className="text-2xl font-black text-content">{analytics.completedCount}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Total Elaborado</span>
+                        <span className="text-2xl font-black text-content">{stats.totalVolume} L</span>
                     </div>
                     <div className="bg-panel p-5 rounded-2xl border border-line shadow-sm">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Lotes Abandonados</span>
-                        <span className="text-2xl font-black text-red-500">{analytics.abandonedCount}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-muted block mb-1">Lotes Totales</span>
+                        <span className="text-2xl font-black text-content">{stats.batchCount}</span>
                     </div>
                 </div>
             )}
@@ -260,12 +232,6 @@ export default function HistoryView() {
                                 <Trash2 size={20} />
                             </button>
 
-                            {h.status === 'Abandonada' && (
-                                <div className="absolute top-0 right-0 lg:right-1/2 lg:translate-x-1/2 bg-red-500 text-white font-black text-xs px-4 py-1 rounded-bl-xl lg:rounded-b-xl lg:rounded-bl-none uppercase tracking-widest shadow-sm">
-                                    Lote Abandonado
-                                </div>
-                            )}
-
                             <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mt-2">
                                 <div className="flex items-start gap-5 w-full lg:w-3/5">
                                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl text-blue-600 dark:text-blue-400 hidden sm:block mt-1 border border-blue-100 dark:border-blue-800">
@@ -279,23 +245,10 @@ export default function HistoryView() {
                                             <p className="text-[10px] uppercase font-black tracking-widest text-muted mt-0.5">{h.recipeName}</p>
                                         )}
                                         <div className="flex flex-wrap gap-2 mb-4 mt-3">
-                                            <span className="bg-gray-100 dark:bg-slate-800 border border-line px-3 py-1.5 rounded-lg text-sm text-slate-600 dark:text-slate-300 font-bold flex items-center gap-1.5"><CalendarClock size={16} /> 🔥 Cocción: {standardizeDate(h.dateBrewed || h.date)}</span>
-                                            {h.dateBottled && (
-                                                <span className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-sm text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1.5">🍾 Embotellado: {standardizeDate(h.dateBottled)}</span>
-                                            )}
-                                            {h.metrics?.daysInFermentation != null && (
-                                                <span className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5">
-                                                    <Activity size={16} /> Fermentación: {h.metrics.daysInFermentation} días
-                                                </span>
-                                            )}
-                                            <span className="bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5"><Droplets size={16} /> {h.volume || 0} L</span>
-                                            {h.equipmentName && (
-                                                <span className="bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-500 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5 shadow-sm">
-                                                    <Settings size={16} className="text-amber-500" /> {h.equipmentName}
-                                                </span>
-                                            )}
-                                            <span className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5">💰 Total: {formatCurrency(h.totalCost)}</span>
-                                            <span className="bg-emerald-100 dark:bg-emerald-800/50 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5 text-xs uppercase tracking-wider">🏷️ x Litro: {formatCurrency((Number(h.totalCost) || 0) / (Number(h.volume) || 1))}</span>
+                                            <span className="bg-gray-100 dark:bg-slate-800 border border-line px-3 py-1.5 rounded-lg text-sm text-slate-600 dark:text-slate-300 font-bold flex items-center gap-1.5"><CalendarClock size={16} /> {standardizeDate(h.dateBrewed || h.date)}</span>
+                                            <span className="bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5"><Droplets size={16} /> {h.finalVolume || h.volume || 0} L</span>
+                                            <span className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5">⚡ {h.efficiency || 0}% Eficiencia</span>
+                                            <span className="bg-emerald-100 dark:bg-emerald-800/50 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 px-3 py-1.5 rounded-lg text-sm font-black flex items-center gap-1.5">💰 {formatCurrency((Number(h.totalCost) || 0) / (Number(h.finalVolume || h.volume) || 1))}/L</span>
                                         </div>
 
                                         <div className="flex gap-6 text-sm text-muted font-bold border-t border-line pt-4 mt-2">
@@ -303,6 +256,7 @@ export default function HistoryView() {
                                             <span className="flex items-center gap-1">🏁 DF: <span className="text-content">{h.fg || '-'}</span></span>
                                             <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded">🍻 ABV: {h.abv || '-'}%</span>
                                         </div>
+
                                     </div>
                                 </div>
 

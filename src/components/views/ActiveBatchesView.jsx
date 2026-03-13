@@ -5,6 +5,7 @@ import { Hourglass, ArrowLeft, Beaker, CalendarClock, CalendarPlus, Activity, Tr
 import { useActiveBatches } from '../../hooks/useActiveBatches';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
+import { useToast } from '../../context/ToastContext';
 import { standardizeDate, getFormattedDate, formatTime } from '../../utils/formatters';
 import { getThemeForCategory } from '../../utils/helpers';
 
@@ -77,6 +78,7 @@ function ElapsedTimer({ startTime, label, colorClass = "text-muted" }) {
 
 export default function ActiveBatchesView() {
     const navigate = useNavigate();
+    const { addToast } = useToast();
     const { batches: activeBatches, completeBatch, discardBatch, transitionBatchPhase, updateBatchField, updateProgress } = useActiveBatches();
     const { recipes } = useRecipes();
     const { deductBatch } = useInventory();
@@ -97,7 +99,7 @@ export default function ActiveBatchesView() {
     const handleStartBottling = async (batch) => {
         const recipe = recipes.find(r => r.id === batch.recipeId);
         if (!recipe) {
-            alert("No se encontró la receta original para descontar insumos de embotellado.");
+            addToast("No se encontró la receta original para descontar insumos.", "error");
             return;
         }
 
@@ -116,7 +118,7 @@ export default function ActiveBatchesView() {
                 // transitionBatchPhase is redundant now but kept for consistency if needed, 
                 // but direct updateBatchField is more precise here.
             } catch (error) {
-                alert("Hubo un error descontando insumos: " + error.message);
+                addToast("Hubo un error descontando insumos.", "error");
             }
         }
     };
@@ -143,11 +145,11 @@ export default function ActiveBatchesView() {
                     }
                 };
                 await completeBatch(batch.id, newHistoryItem);
-                alert("¡Lote enviado al historial!");
+                addToast("¡Lote enviado al historial!", "success");
                 navigate('/history');
             } catch (error) {
                 console.error("❌ Error al completar lote:", error);
-                alert("Error al completar lote: " + (error.message || error));
+                addToast("Error al completar lote.", "error");
             }
         }
     };
@@ -303,10 +305,10 @@ export default function ActiveBatchesView() {
                                             status: 'Abandonada'
                                         };
                                         await discardBatch(batch.id, historyEntry);
-                                        alert("Lote abandonado.");
+                                        addToast("Lote abandonado.", "info");
                                     } catch (err) {
                                         console.error("Error al abandonar lote:", err);
-                                        alert("No se pudo abandonar el lote: " + err.message);
+                                        addToast("No se pudo abandonar el lote.", "error");
                                     }
                                 }
                             }}

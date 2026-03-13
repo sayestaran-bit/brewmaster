@@ -32,9 +32,9 @@ export const calculateWater = ({ targetVolume, boilTime, totalGrains, equipment 
         grainAbsorption = 1.0
     } = activeProfile || {};
 
-    const boilHours = (Number(boilTime) || 60) / 60;
-    const grains = Number(totalGrains) || 0;
-    const target = Number(targetVolume) || 20;
+    const boilHours = (Math.max(1, Number(boilTime) || 60)) / 60;
+    const grains = Math.max(0, Number(totalGrains) || 0);
+    const target = Math.max(0.1, Number(targetVolume) || 20);
 
     // 1. Volumen Pre-Hervor (V_pb)
     // Lo que debe haber en la olla antes de encender el fuego

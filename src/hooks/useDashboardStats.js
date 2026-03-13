@@ -62,6 +62,11 @@ export function useDashboardStats(history, searchTerm = '', statusFilter = 'all'
             ? Math.round(batchesWithFerm.reduce((sum, h) => sum + h.metrics.daysInFermentation, 0) / batchesWithFerm.length)
             : 0;
 
+        const batchesWithEff = filteredHistory.filter(h => h.efficiency > 0);
+        const avgEfficiency = batchesWithEff.length > 0
+            ? (batchesWithEff.reduce((sum, h) => sum + h.efficiency, 0) / batchesWithEff.length).toFixed(1)
+            : 0;
+
         // Volume by beer style for bar chart
         const styleCount = filteredHistory.reduce((acc, h) => {
             const cat = h.category || 'Otros';
@@ -134,12 +139,45 @@ export function useDashboardStats(history, searchTerm = '', statusFilter = 'all'
                 .slice(0, 3);
         });
 
+        // Eficiencia Histórica (Últimos 10 lotes con eficiencia > 0)
+        const efficiencyHistory = [...safeHistory]
+            .filter(h => h.efficiency > 0)
+            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+            .slice(-10)
+            .map(h => ({
+                name: (h.customName || h.recipeName || 'Lote').substring(0, 12),
+                efficiency: Number(h.efficiency)
+            }));
+
+        // Datos de Costo por Estilo (Comparativa de los estilos top)
+        const styleStats = filteredHistory.reduce((acc, h) => {
+            const cat = h.category || 'Otros';
+            if (!acc[cat]) acc[cat] = { totalCost: 0, totalVol: 0 };
+            acc[cat].totalCost += (Number(h.totalCost) || 0);
+            acc[cat].totalVol += (Number(h.volume) || 0);
+            return acc;
+        }, {});
+
+        const styleCostData = Object.entries(styleStats)
+            .map(([styleName, stats]) => ({
+                name: styleName.substring(0, 10),
+                avgCost: stats.totalVol > 0 ? Number((stats.totalCost / stats.totalVol).toFixed(0)) : 0
+            }))
+            .sort((a, b) => b.avgCost - a.avgCost)
+            .slice(0, 5);
+
+        // Distribución de Estilos para PieChart
+        const styleDistribution = Object.entries(styleCount)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+
         return {
             totalLiters,
             totalCost,
             totalBatches,
             avgCostPerLiter,
             avgABV,
+            avgEfficiency,
             avgFermentationDays,
             topStyles,
             maxStyleVolume,
@@ -147,6 +185,9 @@ export function useDashboardStats(history, searchTerm = '', statusFilter = 'all'
             topIngredients,
             filteredHistory,
             availableStyles,
+            efficiencyHistory,
+            styleCostData,
+            styleDistribution
         };
     }, [history, searchTerm, statusFilter, recipes, periodFilter, styleFilter]);
 }

@@ -14,29 +14,70 @@ const LOW_STOCK_THRESHOLDS = {
 };
 
 /**
- * Detects low-stock items from the inventory.
+ * Detects low-stock and expired items from the inventory.
  * @param {Array} inventory - Raw inventory array from AppContext
- * @returns {{ lowStockItems: Array, hasAlerts: boolean, alertCount: number }}
+ * @returns {{ lowStockItems: Array, expiredItems: Array, suggestedPurchaseItems: Array, hasAlerts: boolean, alertCount: number }}
  */
 export function useInventoryAlerts(inventory) {
+    const isExpired = (item) => {
+        if (!item.expiryDate) return false;
+        // El input 'date' del navegador usa YYYY-MM-DD
+        const [y, m, d] = item.expiryDate.split('-').map(Number);
+        const expiryDateLocal = new Date(y, m - 1, d); 
+        
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        
+        // Es vencido si la fecha local de vencimiento es estrictamente menor a hoy
+        return expiryDateLocal < today;
+    };
+
     const isLowStock = (item) => {
-        const threshold = LOW_STOCK_THRESHOLDS[item.category];
-        if (!threshold) return false;
-        return Number(item.stock) < threshold.value;
+        if (isExpired(item)) return false; // El vencimiento tiene prioridad sobre el stock bajo
+
+        // 1. Usar umbral personalizado si existe
+        if (item.minThreshold !== undefined && item.minThreshold !== null && item.minThreshold !== '') {
+            return Number(item.stock) < Number(item.minThreshold);
+        }
+
+        // 2. Fallback a umbrales globales por categoría
+        const globalThreshold = LOW_STOCK_THRESHOLDS[item.category];
+        if (!globalThreshold) return false;
+        
+        return Number(item.stock) < globalThreshold.value;
+    };
+
+    const getStockStatus = (item) => {
+        if (isExpired(item)) return 'expired';
+        if (isLowStock(item)) return 'low';
+        return 'optimal';
     };
 
     return useMemo(() => {
         const safeInventory = Array.isArray(inventory) ? inventory : [];
 
-        const lowStockItems = safeInventory
-            .filter(isLowStock)
-            .sort((a, b) => Number(a.stock) - Number(b.stock));
+        const expiredItems = safeInventory.filter(isExpired);
+        const lowStockItems = safeInventory.filter(isLowStock);
+        
+        // Sugerencias de compra: Ítems que están bajos o vencidos (y por ende necesitan reposición)
+        const suggestedPurchaseItems = safeInventory
+            .filter(item => isLowStock(item) || isExpired(item))
+            .sort((a, b) => {
+                // Prioridad a los vencidos, luego por stock relativo al umbral
+                if (isExpired(a) && !isExpired(b)) return -1;
+                if (!isExpired(a) && isExpired(b)) return 1;
+                return Number(a.stock) - Number(b.stock);
+            });
 
         return {
             lowStockItems,
-            hasAlerts: lowStockItems.length > 0,
-            alertCount: lowStockItems.length,
-            isLowStock
+            expiredItems,
+            suggestedPurchaseItems,
+            hasAlerts: suggestedPurchaseItems.length > 0,
+            alertCount: suggestedPurchaseItems.length,
+            isLowStock,
+            isExpired,
+            getStockStatus
         };
     }, [inventory]);
 }

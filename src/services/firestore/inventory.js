@@ -7,7 +7,7 @@
 import {
     collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
     onSnapshot, query, orderBy, runTransaction, serverTimestamp, getDoc, getDocs,
-    writeBatch, increment
+    writeBatch, increment, deleteField
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getIngredientKey } from '../../utils/recipeUtils';
@@ -51,6 +51,8 @@ export async function addInventoryItem(uid, itemData, customId = null) {
         ...itemData,
         stock: Math.max(0, Number(itemData.stock) || 0),
         price: Number(itemData.price) || 0,
+        minThreshold: itemData.minThreshold !== undefined ? Number(itemData.minThreshold) : null,
+        expiryDate: itemData.expiryDate || null, // ISO string
         updatedAt: serverTimestamp(),
     };
 
@@ -210,52 +212,60 @@ export async function deductBatchFromInventory(uid, recipe, targetVolume, curren
         console.warn(`[Inventario] Stock insuficiente para ${shortages.length} insumo(s). Se ajustarán a cero y se continuará el proceso.`);
     }
 
-    return await runTransaction(db, async (transaction) => {
-        // PASADA 1: Todas las lecturas primero
-        const snapshots = new Map();
-        for (const d of deductions) {
-            const snap = await transaction.get(d.ref);
-            if (snap.exists()) {
-                const path = d.ref.path;
-                if (snapshots.has(path)) {
-                    // Si ya existe este documento en el mapa, sumamos la cantidad a descontar
-                    const existing = snapshots.get(path);
-                    existing.amountToDeduct += d.amount;
-                } else {
-                    snapshots.set(path, {
-                        ref: d.ref,
-                        docData: snap.data(),
-                        amountToDeduct: d.amount,
-                        name: d.name,
-                        category: d.category,
-                        price: d.price
-                    });
+    try {
+        return await runTransaction(db, async (transaction) => {
+            // PASADA 1: Todas las lecturas primero
+            const snapshots = new Map();
+            for (const d of deductions) {
+                const snap = await transaction.get(d.ref);
+                if (snap.exists()) {
+                    const path = d.ref.path;
+                    if (snapshots.has(path)) {
+                        // Si ya existe este documento en el mapa, sumamos la cantidad a descontar
+                        const existing = snapshots.get(path);
+                        existing.amountToDeduct += d.amount;
+                    } else {
+                        snapshots.set(path, {
+                            ref: d.ref,
+                            docData: snap.data(),
+                            amountToDeduct: d.amount,
+                            name: d.name,
+                            category: d.category,
+                            price: d.price
+                        });
+                    }
                 }
             }
+
+            const actuals = [];
+
+            // PASADA 2: Todas las escrituras después
+            for (const [path, data] of snapshots.entries()) {
+                const currentStock = Number(data.docData.stock) || 0;
+                const actualDeducted = Math.min(currentStock, data.amountToDeduct);
+                const newStock = Math.max(0, currentStock - data.amountToDeduct);
+
+                transaction.update(data.ref, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
+
+                actuals.push({
+                    name: data.name,
+                    category: data.category,
+                    requested: data.amountToDeduct,
+                    actualDeducted: actualDeducted,
+                    cost: actualDeducted * data.price,
+                    isPartial: actualDeducted < data.amountToDeduct
+                });
+            }
+
+            return actuals;
+        });
+    } catch (error) {
+        if (error.code === 'quota-exceeded' || error.message?.includes('quota')) {
+            console.error('⚠️ [Inventario] Error de Cuota Firestore: No se pudo completar la transacción por falta de espacio.');
+            throw new Error('Lo sentimos, no hay espacio suficiente en el almacenamiento local para sincronizar los cambios de inventario. Intenta limpiar el historial o liberar espacio en tu navegador.');
         }
-
-        const actuals = [];
-
-        // PASADA 2: Todas las escrituras después
-        for (const [path, data] of snapshots.entries()) {
-            const currentStock = Number(data.docData.stock) || 0;
-            const actualDeducted = Math.min(currentStock, data.amountToDeduct);
-            const newStock = Math.max(0, currentStock - data.amountToDeduct);
-
-            transaction.update(data.ref, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
-
-            actuals.push({
-                name: data.name,
-                category: data.category,
-                requested: data.amountToDeduct,
-                actualDeducted: actualDeducted,
-                cost: actualDeducted * data.price,
-                isPartial: actualDeducted < data.amountToDeduct
-            });
-        }
-
-        return actuals;
-    });
+        throw error;
+    }
 }
 
 /**
@@ -273,66 +283,78 @@ export async function toggleIngredientConsumption(uid, batchId, ingredient, isCo
     // Sanitize key (unified: Includes stage/time for uniqueness) using central utility
     const ingredientKey = getIngredientKey(ingredient);
 
-    return await runTransaction(db, async (transaction) => {
-        console.log(`[Inventario] Iniciando transacción para ${ingredient.name}...`);
-        // 1. Get Batch
-        const batchSnap = await transaction.get(batchRef);
-        if (!batchSnap.exists()) throw new Error("Batch not found");
-        const batchData = batchSnap.data();
+    try {
+        return await runTransaction(db, async (transaction) => {
+            console.log(`[Inventario] Iniciando transacción para ${ingredient.name}...`);
+            // 1. Get Batch
+            const batchSnap = await transaction.get(batchRef);
+            if (!batchSnap.exists()) throw new Error("Batch not found");
+            const batchData = batchSnap.data();
 
-        // 2. Find relevant inventory item from passed currentInventory
-        const invItem = currentInventory.find(i =>
-            i.category === (ingredient.category || 'Malta') &&
-            (i.name || '').toLowerCase().trim().includes(searchName)
-        );
+            // 2. Find relevant inventory item from passed currentInventory
+            const invItem = currentInventory.find(i =>
+                i.category === (ingredient.category || 'Malta') &&
+                (i.name || '').toLowerCase().trim().includes(searchName)
+            );
 
-        if (!invItem) {
-            console.error(`[Inventario] Insumo no encontrado en catálogo: ${ingredient.name}`);
-            throw new Error(`Stock item not found: ${ingredient.name}`);
+            if (!invItem) {
+                console.error(`[Inventario] Insumo no encontrado en catálogo: ${ingredient.name}`);
+                throw new Error(`Stock item not found: ${ingredient.name}`);
+            }
+            
+            const invDocRef = doc(db, 'users', uid, 'inventory', invItem.id);
+            console.log(`[Inventario] Leyendo stock actual de: ${invItem.id}...`);
+            const currentInvSnap = await transaction.get(invDocRef);
+            const currentStock = Number(currentInvSnap.data().stock) || 0;
+            console.log(`[Inventario] Stock actual: ${currentStock}. A ${isConsumed ? 'descontar' : 'restaurar'}: ${amountToToggle}`);
+
+            const consumed = batchData.consumedIngredients || {};
+            const alreadyConsumed = !!consumed[ingredientKey];
+            const currentCost = Number(batchData.totalCost) || 0;
+            const itemPrice = Number(invItem.price) || 0;
+            const toggleCost = amountToToggle * itemPrice;
+
+            // Technical Idempotency Check:
+            // If we want to MARK as consumed but it's ALREADY consumed, or
+            // if we want to UNMARK but it's NOT in the record, we do nothing.
+            if (isConsumed === alreadyConsumed) {
+                console.log(`[Inventario] Operación omitida por idempotencia: ${ingredient.name} ya está en estado ${isConsumed ? 'consumido' : 'pendiente'}.`);
+                return;
+            }
+
+            if (isConsumed) {
+                // Deduct from stock
+                const newStock = Math.max(0, currentStock - amountToToggle);
+                transaction.update(invDocRef, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
+
+                // Add to batch record
+                transaction.update(batchRef, {
+                    [`consumedIngredients.${ingredientKey}`]: {
+                        id: invItem.id,
+                        amount: amountToToggle,
+                        timestamp: Date.now()
+                    },
+                    totalCost: Number((currentCost + toggleCost).toFixed(2))
+                });
+            } else {
+                // Restore to stock
+                const newStock = currentStock + amountToToggle;
+                transaction.update(invDocRef, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
+
+                // Remove from batch record (Atomic delete in nested object)
+                transaction.update(batchRef, {
+                    [`consumedIngredients.${ingredientKey}`]: deleteField(), 
+                    totalCost: Number(Math.max(0, currentCost - toggleCost).toFixed(2))
+                });
+            }
+        });
+    } catch (error) {
+        if (error.code === 'quota-exceeded' || error.message?.includes('quota')) {
+            console.error('⚠️ [Inventario] Error de Cuota Firestore: No se pudo actualizar el consumo.');
+            throw new Error('No se pudo actualizar el consumo del ingrediente debido a una falta de espacio en el almacenamiento local.');
         }
-        
-        const invDocRef = doc(db, 'users', uid, 'inventory', invItem.id);
-        console.log(`[Inventario] Leyendo stock actual de: ${invItem.id}...`);
-        const currentInvSnap = await transaction.get(invDocRef);
-        const currentStock = Number(currentInvSnap.data().stock) || 0;
-        console.log(`[Inventario] Stock actual: ${currentStock}. A ${isConsumed ? 'descontar' : 'restaurar'}: ${amountToToggle}`);
-
-        const consumed = batchData.consumedIngredients || {};
-        const currentCost = Number(batchData.totalCost) || 0;
-        const itemPrice = Number(invItem.price) || 0;
-        const toggleCost = amountToToggle * itemPrice;
-
-        if (isConsumed) {
-            // Deduct from stock
-            const newStock = Math.max(0, currentStock - amountToToggle);
-            transaction.update(invDocRef, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
-
-            // Add to batch record
-            transaction.update(batchRef, {
-                [`consumedIngredients.${ingredientKey}`]: {
-                    name: ingredient.name,
-                    category: ingredient.category,
-                    amount: amountToToggle,
-                    cost: toggleCost,
-                    timestamp: Date.now()
-                },
-                totalCost: Number((currentCost + toggleCost).toFixed(2))
-            });
-        } else {
-            // Restore to stock
-            const newStock = currentStock + amountToToggle;
-            transaction.update(invDocRef, { stock: parseFloat(newStock.toFixed(4)), updatedAt: serverTimestamp() });
-
-            // Remove from batch record
-            const updatedConsumed = { ...consumed };
-            delete updatedConsumed[ingredientKey];
-
-            transaction.update(batchRef, {
-                consumedIngredients: updatedConsumed,
-                totalCost: Number(Math.max(0, currentCost - toggleCost).toFixed(2))
-            });
-        }
-    });
+        throw error;
+    }
 }
 /**
  * Actualiza un ítem del inventario y sincroniza los cambios con todas las recetas.

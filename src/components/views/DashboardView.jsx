@@ -3,15 +3,16 @@ import React from 'react';
 import {
     Plus, Droplets, Banknote, CalendarClock, Thermometer,
     BarChart3, PieChart, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown,
-    Beer, BookOpen, Activity, Search, Filter, Play, X, Package, Loader2
+    Beer, BookOpen, Activity, Search, Filter, Play, X, Package, Loader2, ListChecks, Box
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { formatCurrency, standardizeDate, getFormattedDate } from '../../utils/formatters';
 import { getThemeForCategory } from '../../utils/helpers';
-import { useHistory } from '../../hooks/useHistory';
+import { useHistoryContext } from '../../context/HistoryContext';
 import { useActiveBatches } from '../../hooks/useActiveBatches';
 import { useInventory } from '../../hooks/useInventory';
+import { useToast } from '../../context/ToastContext';
 import { useDashboardStats } from '../../hooks/useDashboardStats';
 import { useInventoryAlerts } from '../../hooks/useInventoryAlerts';
 import { useRecipes } from '../../hooks/useRecipes';
@@ -19,13 +20,15 @@ import StatCard from '../ui/StatCard';
 import Card from '../ui/Card';
 import EmptyState from '../ui/EmptyState';
 import Button from '../ui/Button';
+import { EfficiencyChart, CostBarChart, StylePieChart } from '../dashboard/AnalyticsCharts';
 
 export default function DashboardView() {
     const navigate = useNavigate();
-    const { history } = useHistory();
+    const { addToast } = useToast();
+    const { recipes } = useRecipes();
+    const { history } = useHistoryContext();
     const { batches: activeBatches, startBatch } = useActiveBatches();
     const { inventory } = useInventory();
-    const { recipes } = useRecipes();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -69,78 +72,81 @@ export default function DashboardView() {
             const batchId = await startBatch(newBatchItem);
             navigate(`/brew/${batchId}?phase=cooking`);
         } catch (error) {
-            alert("Error al iniciar el lote: " + error.message);
+            addToast("Error al iniciar el lote.", "error");
             setIsStartingBrew(false);
         }
     };
 
     const {
         totalLiters, totalCost, totalBatches, avgFermentationDays,
-        avgCostPerLiter, avgABV, topStyles, maxStyleVolume, recentHistory, topIngredients, availableStyles
+        avgCostPerLiter, avgABV, avgEfficiency, topStyles, maxStyleVolume, 
+        recentHistory, topIngredients, availableStyles,
+        efficiencyHistory, styleCostData, styleDistribution
     } = useDashboardStats(history, searchTerm, statusFilter, recipes, periodFilter, styleFilter);
 
-    const { lowStockItems } = useInventoryAlerts(inventory);
+
+    const { suggestedPurchaseItems, getStockStatus } = useInventoryAlerts(inventory);
 
     return (
         <div className="space-y-6 animate-fadeIn">
 
             {/* ── Quick Actions & Filters ───────────────────── */}
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="flex flex-col lg:flex-row gap-6 justify-between items-center bg-panel p-6 md:p-8 rounded-[var(--radius-3xl)] border border-line shadow-sm">
                 <Button
                     variant="primary"
                     size="lg"
                     onClick={() => setShowBrewModal(true)}
-                    className="w-full md:w-auto md:min-w-[250px] bg-amber-500 hover:bg-amber-600 border-amber-500 text-white font-black hover:-translate-y-1 shadow-xl shadow-amber-500/20"
+                    className="w-full lg:w-auto lg:min-w-[280px] bg-amber-500 hover:bg-amber-600 border-amber-500 text-white font-black hover:-translate-y-1 shadow-xl shadow-amber-500/20 h-[60px] text-lg rounded-[var(--radius-2xl)]"
                 >
-                    <Play size={20} className="fill-white" /> ¡Cocinar Lote!
+                    <Play size={24} className="fill-white" /> ¡Cocinar Lote!
                 </Button>
 
-                <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full lg:w-auto lg:flex-1 justify-end items-center">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full lg:w-auto lg:flex-1 justify-end items-center">
                     {/* Filtro Periodo */}
-                    <div className="relative w-full sm:w-auto min-w-[140px]">
-                        <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                    <div className="relative w-full sm:w-auto min-w-[160px]">
+                        <CalendarClock className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
                         <select
-                            className="w-full bg-panel text-content border border-line rounded-xl pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition-colors font-bold appearance-none cursor-pointer"
+                            className="w-full bg-surface text-content border border-line rounded-[var(--radius-xl)] pl-11 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all font-bold appearance-none cursor-pointer"
                             value={periodFilter}
                             onChange={(e) => setPeriodFilter(e.target.value)}
                         >
                             <option value="1m">Último Mes</option>
-                            <option value="3m">Últimos 3 Meses</option>
-                            <option value="6m">Últimos 6 Meses</option>
-                            <option value="1y">Último Año</option>
-                            <option value="all">Histórico Completo</option>
+                            <option value="3m">3 Meses</option>
+                            <option value="6m">6 Meses</option>
+                            <option value="1y">1 Año</option>
+                            <option value="all">Histórico</option>
                         </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={14} />
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={14} />
                     </div>
 
                     {/* Filtro Estilo */}
-                    <div className="relative w-full sm:w-auto min-w-[150px]">
-                        <Beer className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                    <div className="relative w-full sm:w-auto min-w-[180px]">
+                        <Beer className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
                         <select
-                            className="w-full bg-panel text-content border border-line rounded-xl pl-9 pr-8 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition-colors font-bold appearance-none cursor-pointer truncate"
+                            className="w-full bg-surface text-content border border-line rounded-[var(--radius-xl)] pl-11 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all font-bold appearance-none cursor-pointer truncate"
                             value={styleFilter}
                             onChange={(e) => setStyleFilter(e.target.value)}
                         >
-                            <option value="all">Todos los Estilos</option>
+                            <option value="all">Estilos: Todos</option>
                             {availableStyles && availableStyles.map(s => (
                                 <option key={s} value={s}>{s}</option>
                             ))}
                         </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={14} />
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={14} />
                     </div>
 
                     {/* Filtro Estado */}
-                    <div className="flex bg-panel border border-line rounded-xl overflow-hidden shadow-sm h-10 w-full sm:w-auto">
+                    <div className="flex bg-surface border border-line rounded-[var(--radius-xl)] overflow-hidden shadow-sm h-[46px] w-full sm:w-auto p-1">
                         {['all', 'completed', 'abandoned'].map(status => (
                             <button
                                 key={status}
                                 onClick={() => setStatusFilter(status)}
-                                className={`flex-1 sm:px-4 py-2 text-xs font-bold transition-colors ${statusFilter === status
-                                    ? 'bg-amber-500 text-white'
+                                className={`flex-1 sm:px-4 py-2 text-[10px] uppercase tracking-widest font-black transition-all rounded-lg ${statusFilter === status
+                                    ? 'bg-amber-500 text-white shadow-sm'
                                     : 'text-muted hover:bg-black/5 dark:hover:bg-white/5 hover:text-content'
                                     }`}
                             >
-                                {status === 'all' ? 'Todos' : status === 'completed' ? 'Completados' : 'Abandonados'}
+                                {status === 'all' ? 'Ver Todo' : status === 'completed' ? 'Éxito' : 'Baja'}
                             </button>
                         ))}
                     </div>
@@ -204,54 +210,51 @@ export default function DashboardView() {
                 />
                 <StatCard
                     icon={Activity}
-                    label="Días Promedio Fermento"
-                    value={avgFermentationDays || '-'}
-                    unit={avgFermentationDays ? "días" : ""}
+                    label="Eficiencia Promedio"
+                    value={avgEfficiency}
+                    unit="%"
                     gradient="from-amber-400 to-amber-500 dark:from-amber-600 dark:to-amber-800"
                     animateDelay={5}
                 />
             </div>
+
 
             {/* ── Charts + Alerts Row ───────────────────────── */}
             <div className="grid lg:grid-cols-3 gap-6">
 
                 {/* Contenedor Izquierdo: Gráficos y KPIs */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Bar chart: Production by style */}
-                    <Card animate>
+                    {/* Efficiency AreaChart */}
+                    <div className="saas-container h-full">
                         <h3 className="font-black text-content mb-6 flex items-center gap-2">
-                            <BarChart3 size={20} className="text-blue-500" /> Top Estilos (Volumen)
+                            <Activity size={20} className="text-amber-500" /> Rendimiento de Macerado (%)
                         </h3>
-
-                        {topStyles.length === 0 ? (
+                        {efficiencyHistory.length < 2 ? (
                             <EmptyState
-                                icon={Beer}
-                                title="Sin datos aún"
-                                description="Cocina tu primer lote para ver estadísticas de estilos."
+                                icon={Activity}
+                                title="Faltan datos de eficiencia"
+                                description="Completa al menos 2 lotes con datos de densidad para ver tu curva de rendimiento."
                             />
                         ) : (
-                            <div className="space-y-5">
-                                {topStyles.map(([style, vol], idx) => {
-                                    const percentage = Math.max(5, (vol / maxStyleVolume) * 100);
-                                    const theme = getThemeForCategory(style);
-                                    return (
-                                        <div key={idx} className="group">
-                                            <div className="flex justify-between text-sm font-bold mb-1.5">
-                                                <span className="text-content">{style}</span>
-                                                <span className={theme.text}>{vol} L</span>
-                                            </div>
-                                            <div className="w-full bg-black/5 dark:bg-white/5 h-3 rounded-full overflow-hidden shadow-inner">
-                                                <div
-                                                    className="h-full rounded-full transition-all duration-1000 ease-out"
-                                                    style={{ width: `${percentage}%`, backgroundColor: theme.colorBase }}
-                                                />
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                            <EfficiencyChart data={efficiencyHistory} />
                         )}
-                    </Card>
+                    </div>
+
+                    {/* Cost per Liter BarChart */}
+                    <div className="saas-container">
+                        <h3 className="font-black text-content mb-6 flex items-center gap-2">
+                            <Banknote size={20} className="text-emerald-500" /> Comparativa de Costos por Estilo ($/L)
+                        </h3>
+                        {styleCostData.length === 0 ? (
+                            <EmptyState
+                                icon={Banknote}
+                                title="Sin datos de costos"
+                                description="Cocina lotes para ver la comparativa de costos entre estilos."
+                            />
+                        ) : (
+                            <CostBarChart data={styleCostData} />
+                        )}
+                    </div>
 
                     {/* Top Ingredients KPI */}
                     <Card animate>
@@ -291,62 +294,93 @@ export default function DashboardView() {
                 {/* Right column: Investment + Stock Alerts */}
                 <div className="space-y-6 flex flex-col">
 
-                    {/* Investment Total */}
-                    <div className="bg-panel p-8 rounded-3xl border border-line shadow-sm flex flex-col justify-between relative overflow-hidden group">
+                    {/* Style Distribution PieChart */}
+                    <div className="bg-panel p-6 rounded-3xl border border-line shadow-sm flex flex-col relative overflow-hidden group flex-1">
                         <div className="absolute -right-10 -bottom-10 opacity-5 dark:opacity-10 group-hover:scale-110 transition-transform duration-1000">
-                            <PieChart size={250} className="text-emerald-500" />
+                            <PieChart size={250} className="text-amber-500" />
                         </div>
-                        <div className="relative z-10">
-                            <h3 className="font-black text-content text-xl mb-2 flex items-center gap-2">
-                                <Banknote size={24} className="text-emerald-500" /> Inversión Acumulada
+                        <div className="relative z-10 mb-6">
+                            <h3 className="font-black text-content text-xl mb-1 flex items-center gap-2">
+                                <PieChart size={24} className="text-amber-500" /> Mix de Estilos
                             </h3>
-                            <p className="text-muted text-sm font-medium">
-                                Suma de costos de insumos en los últimos 6 meses.
+                            <p className="text-muted text-xs font-medium">
+                                Distribución de volumen por categoría.
                             </p>
                         </div>
-                        <div className="mt-6 text-center bg-black/5 dark:bg-white/5 p-6 rounded-2xl border border-line backdrop-blur-md relative z-10 transition-colors">
-                            <span className="block text-4xl md:text-5xl font-black text-emerald-600 dark:text-emerald-400 mb-2 tracking-tighter">
-                                {formatCurrency(totalCost)}
-                            </span>
-                            <span className="text-emerald-700/70 dark:text-emerald-500/70 text-[10px] font-black uppercase tracking-[0.3em]">CLP Histórico</span>
+                        <div className="flex-1 flex items-center justify-center min-h-[250px]">
+                            {styleDistribution.length === 0 ? (
+                                <p className="text-muted text-xs italic">Sin datos de volumen.</p>
+                            ) : (
+                                <StylePieChart data={styleDistribution} />
+                            )}
                         </div>
                     </div>
 
-                    {/* Stock Alerts */}
+                    {/* Suggested Shopping List Widget */}
                     <Card className="flex-1">
-                        <h3 className="font-black text-content mb-5 flex items-center gap-2">
-                            <AlertTriangle size={20} className="text-red-500" /> Alertas de Stock
-                        </h3>
-                        {lowStockItems.length === 0 ? (
-                            <div className="bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-2xl text-center border border-emerald-100 dark:border-emerald-900/30">
+                        <div className="flex justify-between items-center mb-5">
+                            <h3 className="font-black text-content flex items-center gap-2">
+                                <ListChecks size={20} className="text-blue-500" /> Compras Sugeridas
+                            </h3>
+                            {suggestedPurchaseItems.length > 0 && (
+                                <span className="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
+                                    {suggestedPurchaseItems.length} Críticos
+                                </span>
+                            )}
+                        </div>
+                        
+                        {suggestedPurchaseItems.length === 0 ? (
+                            <div className="bg-emerald-50 dark:bg-emerald-900/10 p-5 rounded-2xl text-center border border-emerald-100 dark:border-emerald-900/30">
                                 <CheckCircle2 size={24} className="mx-auto text-emerald-500 mb-2" />
-                                <p className="text-sm text-emerald-700 dark:text-emerald-400 font-bold">Insumos suficientes</p>
+                                <p className="text-sm text-emerald-700 dark:text-emerald-400 font-bold">Insumos al día</p>
+                                <p className="text-[10px] text-emerald-600/60 mt-1 uppercase font-black uppercase tracking-wider">Stock y Vencimientos OK</p>
                             </div>
                         ) : (
-                            <ul className="space-y-2.5">
-                                {lowStockItems.slice(0, 4).map(item => (
-                                    <li
-                                        key={item.id}
-                                        className="flex justify-between items-center p-3 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                    >
-                                        <div className="overflow-hidden pr-2">
-                                            <span className="font-bold text-content block truncate text-sm">{item.name}</span>
-                                            <span className="text-[10px] uppercase font-black tracking-wider text-muted">{item.category}</span>
-                                        </div>
-                                        <span className="font-black text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded-md text-xs shrink-0 whitespace-nowrap">
-                                            {parseFloat(Number(item.stock).toFixed(2))} {item.unit}
-                                        </span>
-                                    </li>
-                                ))}
-                                {lowStockItems.length > 4 && (
-                                    <button
-                                        onClick={() => navigate('/inventory')}
-                                        className="w-full text-center text-xs font-bold text-red-500 hover:text-red-600 pt-2 flex justify-center items-center gap-1 transition-colors"
-                                    >
-                                        Ver {lowStockItems.length - 4} alertas más <ChevronRight size={14} />
-                                    </button>
-                                )}
-                            </ul>
+                            <div className="space-y-3">
+                                <ul className="space-y-2">
+                                    {suggestedPurchaseItems.slice(0, 5).map(item => {
+                                        const status = getStockStatus(item);
+                                        const isExpired = status === 'expired';
+                                        
+                                        return (
+                                            <li
+                                                key={item.id}
+                                                className={`flex justify-between items-center p-3 rounded-xl border transition-all hover:translate-x-1 ${
+                                                    isExpired 
+                                                        ? 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30' 
+                                                        : 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30'
+                                                }`}
+                                            >
+                                                <div className="overflow-hidden pr-2">
+                                                    <span className={`font-bold block truncate text-sm ${isExpired ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                                                        {item.name}
+                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[9px] uppercase font-black tracking-widest text-muted">{item.category}</span>
+                                                        {isExpired && (
+                                                            <span className="text-[9px] font-black text-red-500 uppercase italic">Vencido</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <span className={`font-black text-sm block ${isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+                                                        {parseFloat(Number(item.stock).toFixed(2))} {item.unit}
+                                                    </span>
+                                                    <span className="text-[9px] font-bold text-muted uppercase">Stock Actual</span>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                                <Button 
+                                    variant="outline" 
+                                    size="xs" 
+                                    className="w-full text-[10px] font-black uppercase tracking-widest border-line group"
+                                    onClick={() => navigate('/inventory')}
+                                >
+                                    Gestionar Inventario <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                                </Button>
+                            </div>
                         )}
                     </Card>
                 </div>

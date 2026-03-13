@@ -63,6 +63,41 @@ export const getIngredientKey = (ing) => {
 };
 
 /**
+ * Compacta una lista de notas o un string largo de historial para evitar el crecimiento excesivo
+ * del documento de Firestore. Une los elementos con saltos de línea y trunca si excede el límite.
+ * 
+ * @param {string|string[]} notes - Las notas actuales o previas.
+ * @param {string|string[]} [newNotes] - Nuevas notas a añadir (opcional).
+ * @param {number} [maxChars=1024] - Límite máximo de caracteres.
+ * @returns {string} - El string compactado y/o truncado.
+ */
+export const compactHistoryNotes = (notes, newNotes = null, maxChars = 1024) => {
+    if (!notes && !newNotes) return "";
+    
+    let combined = [];
+    const process = (n) => {
+        if (!n) return;
+        if (Array.isArray(n)) combined.push(...n);
+        else combined.push(n);
+    };
+
+    process(notes);
+    process(newNotes);
+
+    let baseText = combined.filter(Boolean).join("\n").trim();
+    
+    if (baseText.length <= maxChars) return baseText;
+    
+    const truncated = baseText.substring(0, maxChars - 3);
+    const lastNewline = truncated.lastIndexOf("\n");
+    
+    if (lastNewline > maxChars * 0.75) {
+        return truncated.substring(0, lastNewline) + "...";
+    }
+    return truncated + "...";
+};
+
+/**
  * Constante que define las 9 etapas estandarizadas del proceso de elaboración profesional.
  */
 export const BREWING_STAGES = [
@@ -158,94 +193,131 @@ export const getTimeMultiplier = (unit) => {
  * Valores de precisión química para optimización WLS.
  */
 export const MINERAL_SALTS = {
-    'Sulfato de Calcio (CaSO4)': { Ca: 232.8, SO4: 557.7, Mg: 0, Cl: 0, Na: 0, HCO3: 0 },
-    'Cloruro de Calcio (CaCl2)': { Ca: 272.6, Cl: 482.3, Mg: 0, SO4: 0, Na: 0, HCO3: 0 },
-    'Sulfato de Magnesio (MgSO4)': { Mg: 98.6, SO4: 389.6, Ca: 0, Cl: 0, Na: 0, HCO3: 0 },
-    'Bicarbonato de Sodio (NaHCO3)': { Na: 273.8, HCO3: 726.2, Ca: 0, Mg: 0, SO4: 0, Cl: 0 },
-    'Cloruro de Sodio (NaCl)': { Na: 393.4, Cl: 606.6, Ca: 0, SO4: 0, Mg: 0, HCO3: 0 },
-    'Cloruro de Magnesio (MgCl2)': { Mg: 119, Cl: 349, Ca: 0, SO4: 0, Na: 0, HCO3: 0 }
+  'Sulfato de Calcio (CaSO4)': { Ca: 232.8, SO4: 557.7, Cl: 0, Mg: 0, Na: 0, HCO3: 0 },
+  'Cloruro de Calcio (CaCl2)': { Ca: 272.6, Cl: 482.3, SO4: 0, Mg: 0, Na: 0, HCO3: 0 },
+  'Sulfato de Magnesio (MgSO4)': { Mg: 98.6, SO4: 389.7, Ca: 0, Cl: 0, Na: 0, HCO3: 0 },
+  'Cloruro de Sodio (NaCl)': { Na: 393.4, Cl: 606.6, Ca: 0, Mg: 0, SO4: 0, HCO3: 0 },
+  'Bicarbonato de Sodio (NaHCO3)': { Na: 273.7, HCO3: 726.3, Ca: 0, Mg: 0, SO4: 0, Cl: 0 },
+  'Cloruro de Magnesio (MgCl2)': { Mg: 119.5, Cl: 348.8, Ca: 0, Na: 0, SO4: 0, HCO3: 0 }
+};
+
+/**
+ * Configuración de pesos iónicos y estilos para el motor de optimización.
+ */
+export const WATER_STYLE_CONFIG = {
+  'Hazy IPA': {
+    idealRatio: 0.5,
+    labels: { malty: "Sedosa / Jugosa", bitter: "Amargor Seco" },
+    ignoredWarnings: ['Ca'],
+    weights: { Cl: 4.0, Ca: 4.0, SO4: 3.0, Mg: 1.5, Na: 1.5, HCO3: 1.0 }
+  },
+  'Double & Triple Hazy IPA': {
+    idealRatio: 0.5,
+    labels: { malty: "Cuerpo Robusto", bitter: "Focalizado" },
+    ignoredWarnings: ['Ca'],
+    weights: { Cl: 4.0, Ca: 4.0, SO4: 3.0, Mg: 1.5, Na: 1.5, HCO3: 1.0 }
+  },
+  'Lager (Clásica/Pilsner)': {
+    idealRatio: 1.0,
+    labels: { malty: "Limpia / Maltosa", bitter: "Crocante / Refrescante" },
+    ignoredWarnings: [],
+    weights: { Cl: 3.0, Ca: 3.0, SO4: 3.0, Mg: 1.5, Na: 1.5, HCO3: 1.0 }
+  },
+  'Stout': {
+    idealRatio: 0.7,
+    labels: { malty: "Aterciopelada", bitter: "Torrefacta" },
+    ignoredWarnings: [],
+    weights: { Cl: 4.0, Ca: 4.0, HCO3: 4.0, SO4: 3.0, Mg: 1.5, Na: 0.5 }
+  },
+  'Balanced': {
+    idealRatio: 1.0,
+    labels: { malty: "Equilibrada (Malta)", bitter: "Equilibrada (Lúpulo)" },
+    ignoredWarnings: [],
+    weights: { Cl: 3.0, Ca: 3.0, SO4: 3.0, Mg: 1.5, Na: 1.5, HCO3: 1.0 }
+  }
 };
 
 /**
  * Calcula las adiciones de sales mediante el método de Mínimos Cuadrados Ponderados (WLS).
  * Optimiza la mezcla para minimizar la desviación iónica priorizando sabores críticos.
  * 
- * @param {object} target - Perfil objetivo { Ca, Mg, SO4, Cl, Na, HCO3 }
- * @param {object} tap - Perfil de red { Ca, Mg, SO4, Cl, Na, HCO3 }
- * @param {number} volume - Volumen de agua en litros
- * @returns {object} - { salts, residualError, finalProfile }
+ * @param {Object} target - Perfil objetivo (ppm)
+ * @param {Object} tap - Perfil del agua de base (ppm)
+ * @param {number} volume - Volumen total de agua (L)
+ * @param {string} category - Estilo de la cerveza para pesos dinámicos
+ * @returns {Object} { salts: Array, residualError: Object, finalProfile: Object }
  */
-export const calculateRequiredSalts = (target, tap, volume) => {
-    if (!target || !tap || !volume || volume <= 0) return null;
+export const calculateRequiredSalts = (target, tap, volume, category = 'Balanced') => {
+    if (!target || !tap || !volume || isNaN(volume) || volume <= 0) return null;
 
     const ions = ['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'];
-    const weights = { Cl: 2.0, SO4: 2.0, Ca: 1.5, Mg: 1.0, Na: 1.0, HCO3: 1.0 };
     
-    // Sanitizar y escalar objetivos a la masa total necesaria (mg)
-    const T = {}; // Target mg
-    const current = {}; // Current mg
+    // Pesos dinámicos desde la configuración de estilo
+    const styleConfig = WATER_STYLE_CONFIG[category] || WATER_STYLE_CONFIG['Balanced'];
+    const weights = styleConfig.weights;
+    
+    // T[ion] = Objetivo en mg totales (Perfil deseado * Volumen Total)
+    const T = {}; 
     ions.forEach(ion => {
         T[ion] = (Math.max(0, Number(target[ion]) || 0)) * volume;
-        current[ion] = (Math.max(0, Number(tap[ion]) || 0)) * volume;
     });
 
     const saltNames = Object.keys(MINERAL_SALTS);
     const x = {}; // Gramos de cada sal
     saltNames.forEach(s => x[s] = 0);
 
-    // Algoritmo: Descenso de Coordenadas Iterativo (Coordinate Descent)
-    // Buscamos el x_k >= 0 que minimiza Z = sum( W_i * (Current_i - Target_i)^2 )
-    const maxIterations = 200; // Incrementado para mayor precisión
+    // Coordinate Descent Analítico (Resolución de Alta Precisión)
+    // Minimizamos Z = sum( W_i * (Current_i - Target_i)^2 )
+    // Derivada wrt x_s: sum( 2 * W_i * (Current_i - Target_i) * C_{i,s} ) = 0
+    const maxIterations = 100; // Convergencia rápida garantizada
     
     for (let iter = 0; iter < maxIterations; iter++) {
         let changed = false;
+        
         saltNames.forEach(s => {
-            let bestDelta = 0;
-            let minLoss = Infinity;
-
-            // Espacio de búsqueda adaptativo para la sal actual
-            // Probamos desde ajustes gruesos a muy finos
-            const steps = [10.0, 5.0, 1.0, 0.1, 0.01, -0.01, -0.1, -1.0, -5.0, -10.0];
+            let numerator = 0;
+            let denominator = 0;
             
-            steps.forEach(delta => {
-                const nextX = Math.max(0, x[s] + delta);
-                const actualDelta = nextX - x[s];
-                if (actualDelta === 0 && delta !== 0) return;
+            ions.forEach(ion => {
+                const W = weights[ion];
+                const C = MINERAL_SALTS[s][ion];
+                if (C === 0) return;
                 
-                let loss = 0;
-                ions.forEach(ion => {
-                    const contribution = (MINERAL_SALTS[s][ion] * actualDelta);
-                    const diff = (current[ion] + contribution) - T[ion];
-                    loss += weights[ion] * Math.pow(diff, 2);
+                // Error actual excluyendo la sal 's'
+                let currentMgWithoutS = (Math.max(0, Number(tap[ion]) || 0)) * volume;
+                saltNames.forEach(sn => {
+                    if (sn !== s) currentMgWithoutS += MINERAL_SALTS[sn][ion] * x[sn];
                 });
-
-                if (loss < minLoss) {
-                    minLoss = loss;
-                    bestDelta = actualDelta;
-                }
+                
+                // Analítico: x_s = -sum(W_i * ErrorWithoutS_i * C_{i,s}) / sum(W_i * C_{i,s}^2)
+                numerator += W * (currentMgWithoutS - T[ion]) * C;
+                denominator += W * Math.pow(C, 2);
             });
 
-            // Aplicar el mejor ajuste encontrado para esta sal
-            if (Math.abs(bestDelta) > 0.0001) {
-                x[s] += bestDelta;
-                ions.forEach(ion => {
-                    current[ion] += MINERAL_SALTS[s][ion] * bestDelta;
-                });
-                changed = true;
+            if (denominator > 0) {
+                const optimalX = Math.max(0, -numerator / denominator);
+                if (Math.abs(optimalX - x[s]) > 0.001) {
+                    x[s] = optimalX;
+                    changed = true;
+                }
             }
         });
         
-        // Criterio de parada temprana si no hay mejoras significativas
         if (!changed) break;
     }
 
-    const residualError = {};
     const finalProfile = {};
+    const residualError = {};
     ions.forEach(ion => {
-        const targetPpm = T[ion] / volume;
-        const finalPpm = current[ion] / volume;
-        finalProfile[ion] = Math.max(0, Number(finalPpm.toFixed(2)));
-        residualError[ion] = Number((targetPpm - finalPpm).toFixed(2));
+        let finalMg = (Math.max(0, Number(tap[ion]) || 0)) * volume;
+        saltNames.forEach(s => {
+            finalMg += MINERAL_SALTS[s][ion] * x[s];
+        });
+        
+        const finalPpm = volume > 0 ? (finalMg / volume) : 0;
+        // Mantenemos 1 decimal para precisión técnica en perfiles exigentes
+        finalProfile[ion] = Math.max(0, Number(finalPpm.toFixed(1)));
+        residualError[ion] = Number((target[ion] - finalPpm).toFixed(1));
     });
 
     return {
@@ -301,7 +373,35 @@ export const calculateWaterVolumes = (recipeParams, equipmentParams) => {
         totalWater: Number(totalWater.toFixed(2)),
         strikeWater: Number(strikeWater.toFixed(2)),
         spargeWater: Number(spargeWater.toFixed(2)),
+        postBoilVolume: Number(preBoilVolume.toFixed(2)), // Alias para claridad en historial
         preBoilVolume: Number(preBoilVolume.toFixed(2)),
         warnings
     };
 };
+
+/**
+ * Calcula la eficiencia de maceración/equipo.
+ * @param {number} og - Gravedad Inicial real (ej: 1.050)
+ * @param {number} volume - Volumen real recolectado (L)
+ * @param {Array} malts - Lista de maltas con sus pesos (kg)
+ * @returns {number} - Eficiencia en porcentaje (0-100)
+ */
+export const calculateEfficiency = (og, volume, malts) => {
+    if (!og || !volume || isNaN(volume) || volume <= 0 || !malts || malts.length === 0) return 0;
+
+    const gravityPoints = (og - 1) * 1000;
+    const actualPoints = gravityPoints * volume;
+
+    // Potential points: ~300 GP/kg (estándar conservador para maltas base/adjuntos)
+    const potentialPoints = malts.reduce((sum, m) => {
+        const weight = Number(m.amount) || 0;
+        return sum + (weight * 300);
+    }, 0);
+
+    if (potentialPoints === 0) return 0;
+    
+    const efficiency = (actualPoints / potentialPoints) * 100;
+    return Number(Math.min(100, Math.max(0, efficiency)).toFixed(1));
+};
+
+

@@ -3,12 +3,13 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Beaker, Info, Play, Pause, Save, SkipForward, ArrowLeft, AlertTriangle, Activity, Package, Trash2, CheckCircle2, Sparkles, Wheat, Leaf } from 'lucide-react';
 import { formatCurrency, standardizeDate, formatTime, getFormattedDate } from '../../utils/formatters';
 import { calculateRecipeCost, calculateActualDeductedCost } from '../../utils/costCalculator';
-import { getEffectivePhase, getIngredientKey, BREWING_STAGES, TIME_UNITS, getSafeAdditionTime, getTimeMultiplier, isCountdownStage } from '../../utils/recipeUtils';
+import { getEffectivePhase, getIngredientKey, BREWING_STAGES, TIME_UNITS, getSafeAdditionTime, getTimeMultiplier, isCountdownStage, compactHistoryNotes, calculateEfficiency } from '../../utils/recipeUtils';
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
 import { useActiveBatches } from '../../hooks/useActiveBatches';
 import { useEquipment } from '../../hooks/useEquipment';
-import { Settings } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
+import { Settings, Loader2 as LoaderIcon } from 'lucide-react';
 
 function ElapsedTimer({ startTime, label, colorClass = "text-slate-400" }) {
     const [elapsed, setElapsed] = useState(0);
@@ -54,6 +55,7 @@ export default function BrewSessionView() {
     const { inventory, deductBatch, toggleIngredient } = useInventory();
     const { batches, startBatch, transitionBatchPhase, completeBatch, updateBatchField, updateProgress } = useActiveBatches();
     const { equipment } = useEquipment();
+    const { addToast } = useToast();
 
     const currentPhase = searchParams.get('phase') || 'cooking';
 
@@ -70,7 +72,10 @@ export default function BrewSessionView() {
         isRunning: false
     });
     const [productionNotes, setProductionNotes] = useState('');
-    const [modalConfig, setModalConfig] = useState(null); // { title, message, onConfirm, danger }
+    const [modalConfig, setModalConfig] = useState(null); // { title, message, onConfirm, danger, inputs }
+    const [modalInputValues, setModalInputValues] = useState({});
+    const [isProcessingIngredient, setIsProcessingIngredient] = useState({});
+
 
     const lockRunningRef = useRef(null);
 
@@ -316,7 +321,7 @@ export default function BrewSessionView() {
             } catch (err) {
                 console.error("Error al pausar/reanudar:", err);
                 lockRunningRef.current = null;
-                alert("No se pudo sincronizar el cambio con la base de datos.");
+                addToast("No se pudo sincronizar el cambio con la base de datos.", "error");
             }
             setBrewState(prev => ({ ...prev, isRunning: newRunning }));
         }
@@ -324,14 +329,19 @@ export default function BrewSessionView() {
 
     const handleToggleIngredient = async (ingredient, isConsumed) => {
         if (!batch) {
-            alert("Inicia el proceso (Play) primero para registrar el consumo de insumos.");
+            addToast("Inicia el proceso (Play) primero para registrar el consumo.", "warning");
             return;
         }
+        const key = getIngredientKey(ingredient);
+        setIsProcessingIngredient(prev => ({ ...prev, [key]: true }));
         try {
             await toggleIngredient(batch.id, ingredient, isConsumed, targetVolume, recipe.targetVolume);
+            addToast(isConsumed ? `${ingredient.name} marcado como añadido.` : `${ingredient.name} desmarcado.`, "success");
         } catch (err) {
             console.error("Error toggling ingredient:", err);
-            alert("Error al actualizar inventario: " + err.message);
+            addToast("Error al actualizar inventario.", "error");
+        } finally {
+            setIsProcessingIngredient(prev => ({ ...prev, [key]: false }));
         }
     };
 
@@ -357,9 +367,17 @@ export default function BrewSessionView() {
             if (currentPhase === 'cooking') {
                 setModalConfig({
                     title: "Terminar Día de Cocción",
-                    message: `¿Terminaste el día de cocción para ${recipe.name}? Esto descontará insumos del inventario y el lote pasará a fase de Fermentación.`,
-                    onConfirm: async () => {
+                    message: "Ingresa los datos finales obtenidos en la olla para calcular la eficiencia del equipo:",
+                    inputs: [
+                        { key: 'actualOG', label: 'Densidad Inicial (OG) Real', type: 'number', defaultValue: batch.og || recipe.og, step: '0.001', icon: <Activity size={16} /> },
+                        { key: 'postBoilVolume', label: 'Volumen Final en Olla (L)', type: 'number', defaultValue: batch.volume, step: '0.1', icon: <Beaker size={16} /> }
+                    ],
+                    onConfirm: async (vals) => {
                         try {
+                            const realOG = Number(vals.actualOG) || batch.og || recipe.og;
+                            const realVol = Number(vals.postBoilVolume) || batch.volume;
+                            const efficiency = calculateEfficiency(realOG, realVol, recipe.ingredients.malts);
+
                             const actualDeductions = await deductBatch(
                                 recipe,
                                 targetVolume,
@@ -367,13 +385,17 @@ export default function BrewSessionView() {
                                 batch?.consumedIngredients || {}
                             );
                             const { addedCost, warnings } = calculateActualDeductedCost(actualDeductions);
+                            
                             const updateData = {
+                                og: realOG,
+                                volume: realVol,
+                                efficiency: efficiency,
                                 status: 'Fermentando',
                                 phase: 'fermenting',
                                 currentStep: 0,
                                 'phaseTimestamps.fermentationStart': now,
                                 totalCost: (batch?.totalCost || 0) + (addedCost || 0),
-                                historyNotes: warnings,
+                                historyNotes: compactHistoryNotes(warnings),
                                 'timer.isRunning': false,
                                 'timer.targetEndTime': null,
                                 'timer.pausedAt': null,
@@ -382,22 +404,27 @@ export default function BrewSessionView() {
                             if (batch) await updateBatchField(batch.id, updateData);
                             setModalConfig({
                                 title: "¡Cocción Exitosa!",
-                                message: "El lote ha pasado a fermentación correctamente.",
+                                message: `Eficiencia calculada: ${efficiency}%. El lote ha pasado a fermentación correctamente.`,
                                 onConfirm: () => navigate('/active')
                             });
                         } catch (error) {
                             console.error("Error al terminar cocción:", error);
-                            alert("Error: " + error.message);
+                            addToast("Error: " + error.message, "error");
                         }
                     }
                 });
+
             } else if (currentPhase === 'fermenting') {
                 if (!batch) return;
                 setModalConfig({
                     title: "Pasar a Envasado",
-                    message: `¿Deseas iniciar la fase de acondicionamiento/embotellado de ${recipe.name}?`,
-                    onConfirm: async () => {
+                    message: `¿Deseas iniciar la fase de acondicionamiento de ${recipe.name}? Ingresa la densidad final medida:`,
+                    inputs: [
+                        { key: 'actualFG', label: 'Densidad Final (FG) Real', type: 'number', defaultValue: batch.fg || recipe.fg, step: '0.001', icon: <Activity size={16} /> }
+                    ],
+                    onConfirm: async (vals) => {
                         try {
+                            const realFG = Number(vals.actualFG) || batch.fg || recipe.fg;
                             const phasesToDeduct = ['bottling'];
                             if (!batch.deductedHops) phasesToDeduct.push('fermenting_hops');
                             const actualDeductions = await deductBatch(
@@ -408,15 +435,16 @@ export default function BrewSessionView() {
                             );
                             const { addedCost, warnings } = calculateActualDeductedCost(actualDeductions);
                             await updateBatchField(batch.id, {
+                                fg: realFG,
                                 totalCost: (batch.totalCost || 0) + addedCost,
-                                historyNotes: [...(batch.historyNotes || []), ...warnings],
+                                historyNotes: compactHistoryNotes(batch.historyNotes, warnings),
                                 currentStep: 0,
                                 timeLeft: 0
                             });
                             await transitionBatchPhase(batch.id, 'bottling');
                             navigate('/active');
                         } catch (error) {
-                            alert("Error: " + error.message);
+                            addToast("Error: " + error.message, "error");
                         }
                     }
                 });
@@ -424,15 +452,20 @@ export default function BrewSessionView() {
                 if (!batch) return;
                 setModalConfig({
                     title: "Finalizar Lote",
-                    message: `¿El lote está acondicionado y listo para consumo? Se moverá al historial definitivo.`,
-                    onConfirm: async () => {
+                    message: "¿El lote está listo para consumo? Confirma el volumen final envasado:",
+                    inputs: [
+                        { key: 'finalVolume', label: 'Volumen Final Envasado (L)', type: 'number', defaultValue: batch.volume, step: '0.1', icon: <Package size={16} /> }
+                    ],
+                    onConfirm: async (vals) => {
                         try {
+                            const realFinalVol = Number(vals.finalVolume) || batch.volume;
                             const startTs = getMillis(batch.timestamp || batch.startDate || batch.date);
                             const daysElapsedTotal = Math.floor((now - startTs) / 86400000);
                             const newHistoryItem = {
                                 ...batch,
+                                finalVolume: realFinalVol,
                                 dateBottled: getFormattedDate(),
-                                notes: `Completada en ${daysElapsedTotal} días.\n` + (batch.historyNotes?.join('\n') || ''),
+                                notes: `Completada en ${daysElapsedTotal} días.\n` + (typeof batch.historyNotes === 'string' ? batch.historyNotes : (batch.historyNotes?.join('\n') || '')),
                                 productionNotes: productionNotes,
                                 status: 'Completada'
                             };
@@ -444,10 +477,11 @@ export default function BrewSessionView() {
                             });
                         } catch (error) {
                             console.error("Error al completar lote:", error);
-                            alert("Error: " + error);
+                            addToast("Error al completar lote.", "error");
                         }
                     }
                 });
+
             }
         } else {
             const nextIdx = safeStepIdx + 1;
@@ -508,7 +542,7 @@ export default function BrewSessionView() {
                     navigate('/history');
                 } catch (error) {
                     console.error("Error al abandonar lote:", error);
-                    alert("Error al abandonar lote: " + error);
+                    addToast("Error al abandonar lote.", "error");
                 }
             }
         });
@@ -692,14 +726,14 @@ export default function BrewSessionView() {
                 <div>
                     <h2 className="text-2xl md:text-3xl font-black flex items-center gap-3 text-amber-500 mb-2">
                         {labels.icon} {labels.title} <span className="text-white">{batch?.customName || recipe.name}</span>
-                        <div className="flex gap-2 ml-4">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">
+                        <div className="flex flex-wrap gap-2 ml-4">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-800 px-3 py-1 rounded-lg border border-slate-700 whitespace-nowrap">
                                 {recipe.family || 'Ale'}
                             </span>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-800 px-3 py-1 rounded-lg border border-slate-700 whitespace-nowrap">
                                 {recipe.style || 'IPA'}
                             </span>
-                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest bg-slate-700 px-3 py-1 rounded-lg border border-slate-600">
+                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest bg-slate-700 px-3 py-1 rounded-lg border border-slate-600 whitespace-nowrap">
                                 {recipe.subStyle || recipe.category}
                             </span>
                         </div>
@@ -881,11 +915,11 @@ export default function BrewSessionView() {
                                             return (
                                                 <div
                                                     key={idx}
-                                                    onClick={() => handleToggleIngredient(ing, !isConsumed)}
-                                                    className={`flex flex-col p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden ${isConsumed
+                                                    onClick={() => !isProcessingIngredient[key] && handleToggleIngredient(ing, !isConsumed)}
+                                                    className={`flex flex-col p-4 rounded-xl border transition-all cursor-pointer group relative overflow-hidden min-h-[130px] ${isConsumed
                                                         ? 'bg-emerald-500/20 border-emerald-500/50 shadow-inner scale-[0.98]'
                                                         : 'bg-slate-700/50 border-emerald-500/30 hover:border-emerald-400 shadow-md translate-y-[-2px]'
-                                                        }`}
+                                                        } ${isProcessingIngredient[key] ? 'opacity-50 cursor-wait' : ''}`}
                                                 >
                                                     {!isConsumed && (
                                                         <div className={`absolute top-0 right-0 ${isMineral ? 'bg-blue-500' : 'bg-emerald-500'} w-2 h-full`}></div>
@@ -914,10 +948,12 @@ export default function BrewSessionView() {
                                                     </div>
 
                                                     <div className="flex items-center justify-between pl-9 mt-1">
-                                                        <p className={`text-[10px] ${isConsumed ? 'text-emerald-600' : 'text-slate-400'} font-medium uppercase tracking-tighter`}>
+                                                        <p className={`text-[10px] ${isConsumed ? 'text-emerald-600' : 'text-slate-400'} font-black uppercase tracking-tighter`}>
                                                             {ing.category} • {scaledAmount} {ing.unit || (ing.category === 'Malta' ? 'kg' : 'g')}
                                                         </p>
-                                                        {isConsumed && (
+                                                        {isProcessingIngredient[key] ? (
+                                                            <LoaderIcon size={14} className="animate-spin text-emerald-500" />
+                                                        ) : isConsumed && (
                                                             <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Añadido</span>
                                                         )}
                                                     </div>
@@ -973,21 +1009,64 @@ export default function BrewSessionView() {
                             {modalConfig.danger ? <Trash2 size={32} /> : <AlertTriangle size={32} />}
                         </div>
                         <h3 className="text-2xl font-black text-content mb-3">{modalConfig.title}</h3>
-                        <p className="text-muted font-medium mb-8 leading-relaxed">
+                        <p className="text-muted font-medium mb-6 leading-relaxed">
                             {modalConfig.message}
                         </p>
+
+                        {/* ── SECCIÓN DE INPUTS DINÁMICOS ─────────────── */}
+                        {modalConfig.inputs && (
+                            <div className="space-y-4 mb-8 bg-black/5 dark:bg-white/5 p-6 rounded-2xl border border-line">
+                                {modalConfig.inputs.map((input) => (
+                                    <div key={input.key} className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-muted flex items-center gap-2">
+                                            {input.icon} {input.label}
+                                        </label>
+                                        <input
+                                            type={input.type || 'text'}
+                                            defaultValue={input.defaultValue}
+                                            step={input.step}
+                                            min={input.min}
+                                            max={input.max}
+                                            onChange={(e) => {
+                                                setModalInputValues(prev => ({
+                                                    ...prev,
+                                                    [input.key]: e.target.value
+                                                }));
+                                            }}
+                                            className="w-full bg-surface border border-line rounded-xl px-4 py-3 text-content font-bold focus:ring-2 focus:ring-amber-500/50 outline-none transition-all"
+                                            autoFocus={input.autoFocus}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         <div className="flex gap-3">
                             <button
-                                onClick={() => setModalConfig(null)}
+                                onClick={() => {
+                                    setModalConfig(null);
+                                    setModalInputValues({});
+                                }}
                                 className="flex-1 bg-surface hover:bg-black/5 dark:hover:bg-white/5 text-content font-bold py-4 rounded-xl border border-line transition-all"
                             >
                                 Cancelar
                             </button>
                             <button
-                                onClick={() => {
+                                onClick={async () => {
                                     const callback = modalConfig.onConfirm;
+                                    // Preparamos los valores: si no se cambió el input, usamos el defaultValue
+                                    const finalValues = {};
+                                    if (modalConfig.inputs) {
+                                        modalConfig.inputs.forEach(input => {
+                                            finalValues[input.key] = modalInputValues[input.key] !== undefined 
+                                                ? modalInputValues[input.key] 
+                                                : input.defaultValue;
+                                        });
+                                    }
+
                                     setModalConfig(null);
-                                    if (callback) callback();
+                                    setModalInputValues({});
+                                    if (callback) await callback(finalValues);
                                 }}
                                 className={`flex-1 text-white font-black py-4 rounded-xl shadow-lg transition-all hover:-translate-y-1 ${modalConfig.danger ? 'bg-red-500 hover:bg-red-600' : 'bg-amber-500 hover:bg-amber-600'}`}
                             >
@@ -997,6 +1076,7 @@ export default function BrewSessionView() {
                     </div>
                 </div>
             )}
+
         </div>
     );
 }

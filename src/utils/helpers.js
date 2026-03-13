@@ -91,6 +91,9 @@ export const WATER_PROFILES = {
   'Balanced': { Ca: 50, Mg: 10, SO4: 50, Cl: 50, Na: 0, HCO3: 0 }
 };
 
+// WATER_STYLE_CONFIG se movió a recipeUtils.js para centralizar la lógica técnica del motor de agua
+export { WATER_STYLE_CONFIG } from './recipeUtils';
+
 /**
  * Motor de Estilos Visuales para categorías de Recetas
  */

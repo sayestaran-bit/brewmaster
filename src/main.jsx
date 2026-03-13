@@ -8,14 +8,20 @@ import App from './App.jsx'
 // Context Providers
 import { AuthProvider } from './context/AuthContext'
 import { AppProvider } from './context/AppContext'
+import { ToastProvider } from './context/ToastContext'
+import { HistoryProvider } from './context/HistoryContext'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <AppProvider>
-          <App />
-        </AppProvider>
+        <HistoryProvider>
+          <AppProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </AppProvider>
+        </HistoryProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

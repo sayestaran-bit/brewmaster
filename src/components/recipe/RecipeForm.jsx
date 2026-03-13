@@ -14,7 +14,9 @@ import { generateRecipeDiff } from '../../utils/recipeDiff';
 import { sanitizeRecipeForSaving } from '../../utils/helpers';
 import { calculateWater } from '../../utils/brewMath';
 import { useAuth } from '../../context/AuthContext';
-import { Lock, Settings } from 'lucide-react';
+import { Lock, Settings, FileSearch } from 'lucide-react';
+import { processRecipeFile } from '../../utils/importRecipe';
+import { useToast } from '../../context/ToastContext';
 
 export default function RecipeForm() {
     const { id } = useParams();
@@ -23,6 +25,7 @@ export default function RecipeForm() {
     const isGuest = false; // Deshabilitado temporalmente para pruebas locales: currentUser?.isAnonymous;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
     const { recipes, addRecipe, updateRecipe } = useRecipes();
+    const { addToast } = useToast();
     const { inventory, addItem } = useInventory();
     const { equipment } = useEquipment();
 
@@ -46,6 +49,7 @@ export default function RecipeForm() {
         equipmentId: '',
         waterProfile: { Ca: 100, Mg: 10, SO4: 100, Cl: 100, HCO3: 50 },
         tapWaterProfile: { Ca: 20, Mg: 5, SO4: 20, Cl: 20, HCO3: 20 },
+        isPublic: false,
         skippedStages: [], // IDs of stages to skip
         modifications: [], steps: [], tips: []
     };
@@ -93,6 +97,7 @@ export default function RecipeForm() {
                     sparge: found.ingredients?.water?.sparge || 15,
                     waterProfile: found.waterProfile || { Ca: 100, Mg: 10, SO4: 100, Cl: 100, HCO3: 50 },
                     tapWaterProfile: found.tapWaterProfile || { Ca: 20, Mg: 5, SO4: 20, Cl: 20, HCO3: 20 },
+                    isPublic: found.isPublic || false,
                     skippedStages: Array.isArray(found.skippedStages) ? Array.from(new Set(found.skippedStages)) : [],
                     modifications: found.modifications || [],
                     steps: (found.steps || []).length > 0
@@ -227,8 +232,29 @@ export default function RecipeForm() {
         }
     };
 
+    const handleImportFile = async (file) => {
+        try {
+            const imported = await processRecipeFile(file);
+            
+            // Normalize imported data to ensure it fits the form state
+            const normalized = {
+                ...defaultEmptyState,
+                ...imported,
+                malts: (imported.malts || []).length > 0 ? imported.malts : [{ name: '', amount: 0 }],
+                hops: (imported.hops || []).length > 0 ? imported.hops : [{ name: '', amount: 0, time: '', unit: 'g', use: 'Hervor', phase: 'cooking' }],
+                steps: imported.steps || defaultEmptyState.steps
+            };
+
+            setFormData(prev => ({ ...prev, ...normalized }));
+            addToast("Archivo importado correctamente. Revisa los pasos técnicos.", "success");
+        } catch (err) {
+            console.error("Error al importar archivo:", err);
+            addToast("Error al importar: " + err.message, "error");
+        }
+    };
+
     const handleAIGenerate = async () => {
-        if (!iaPrompt.trim()) return alert("Por favor, describe la cerveza que deseas generar.");
+        if (!iaPrompt.trim()) return addToast("Por favor, describe la cerveza que deseas generar.", "info");
         setIsGeneratingIA(true);
         try {
             const systemInstruction = `Eres un Maestro Cervecero experto. Genera una receta de cerveza funcional y profesional.
@@ -290,14 +316,14 @@ export default function RecipeForm() {
 
         } catch (err) {
             console.error("Error al conectar con IA:", err);
-            alert(`Error con la IA: ${err.message}`);
+            addToast("Error con la IA al generar la receta.", "error");
         } finally {
             setIsGeneratingIA(false);
         }
     };
 
     const handleSave = async () => {
-        if (!formData.name) return alert("Ponle un nombre a tu receta");
+        if (!formData.name) return addToast("Ponle un nombre a tu receta.", "warning");
         if (isSaving) return;
 
         setIsSaving(true);
@@ -373,6 +399,7 @@ export default function RecipeForm() {
             tips: formData.tips.filter(t => t.title !== ''),
             fermentationDays: formData.fermentationDays || '14D',
             equipmentId: formData.equipmentId || '',
+            isPublic: !!formData.isPublic,
             skippedStages: Array.from(new Set(formData.skippedStages || [])),
             modifications: [...(formData.modifications || [])]
         };
@@ -387,7 +414,7 @@ export default function RecipeForm() {
 
         // 2. UX: Evitar entradas vacías en el historial si no hay cambios reales
         if (isEditing && !hasChanges) {
-            alert("No se detectaron cambios técnicos relevantes para guardar.");
+            addToast("No se detectaron cambios técnicos relevantes para guardar.", "info");
             setIsSaving(false);
             return;
         }
@@ -415,7 +442,7 @@ export default function RecipeForm() {
         }
     } catch (error) {
         console.error("Error guardando receta:", error);
-        alert(`No se pudo guardar la receta: ${error.message}`);
+        addToast("No se pudo guardar la receta.", "error");
     } finally {
         setIsSaving(false);
     }
@@ -472,22 +499,22 @@ export default function RecipeForm() {
                 <button onClick={handleCancel} className="text-muted hover:text-red-500 font-bold transition-colors">Cancelar</button>
             </div>
 
-            {/* Step Indicator */}
-            <div className="hidden md:flex justify-between mb-8 gap-2">
+            {/* Step Indicator - Premium Refinement */}
+            <div className="hidden md:flex justify-between mb-10 gap-4">
                 {steps.map((s) => (
                     <div
                         key={s.id}
-                        className={`flex-1 flex items-center gap-2 p-3 rounded-xl border transition-all ${activeStep === s.id ? 'bg-amber-500/10 border-amber-500 text-amber-500' :
-                            activeStep > s.id ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' :
-                                'bg-surface border-line text-muted opacity-50'
+                        className={`flex-1 flex items-center gap-3 p-4 rounded-2xl border transition-all duration-300 ${activeStep === s.id ? 'bg-amber-500/10 border-amber-500 shadow-md shadow-amber-500/5 text-amber-500 translate-y-[-2px]' :
+                            activeStep > s.id ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-500' :
+                                'bg-surface border-line text-muted opacity-60'
                             }`}
                     >
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${activeStep === s.id ? 'bg-amber-500 text-white' :
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black transition-all ${activeStep === s.id ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30' :
                             activeStep > s.id ? 'bg-emerald-500 text-white' : 'bg-line text-muted'
                             }`}>
-                            {activeStep > s.id ? <CheckCircle2 size={14} /> : s.id}
+                            {activeStep > s.id ? <CheckCircle2 size={16} /> : s.id}
                         </div>
-                        <span className="text-xs font-black uppercase tracking-tighter">{s.title}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">{s.title}</span>
                     </div>
                 ))}
             </div>
@@ -514,26 +541,36 @@ export default function RecipeForm() {
                         {!isEditing && (
                             <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 p-6 rounded-2xl border border-amber-200 dark:border-amber-800/30 mb-6 shadow-sm">
                                 <label className="block text-sm font-black text-amber-800 dark:text-amber-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                    <Sparkles size={20} /> Generador IA
+                                    <Sparkles size={20} /> Generador IA & Importar
                                 </label>
                                 <div className="flex flex-col md:flex-row gap-3">
                                     <input type="text" placeholder="Ej: Una IPA muy lupulada..." className="flex-1 p-4 border border-line rounded-xl outline-none focus:ring-2 focus:ring-amber-500 bg-surface text-content" value={iaPrompt} onChange={e => setIaPrompt(e.target.value)} disabled={isGeneratingIA || isGuest} />
                                     <button onClick={handleAIGenerate} disabled={isGeneratingIA || isGuest} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black px-6 py-4 rounded-xl flex items-center justify-center gap-2 transition-all min-w-[200px]">
                                         {isGeneratingIA ? <Loader2 className="animate-spin" size={20} /> : <Wand2 size={20} />} {isGeneratingIA ? 'Generando...' : 'IA Generate'}
                                     </button>
+                                    <label className="flex items-center justify-center gap-2 px-6 py-4 bg-surface border-2 border-dashed border-line rounded-xl cursor-pointer hover:border-amber-500 hover:text-amber-500 transition-all text-sm font-black uppercase">
+                                        <Plus size={20} /> Importar XML/JSON
+                                        <input type="file" accept=".xml,.json,.beerxml" className="hidden" onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            if (file) handleImportFile(file);
+                                        }} />
+                                    </label>
                                 </div>
                             </div>
                         )}
 
-                        <div className="grid md:grid-cols-1 gap-4">
-                            <div><label className="block text-xs font-bold text-muted uppercase mb-1">Nombre de la Receta</label><input type="text" placeholder="Ej: Mi Hazy IPA Galáctica" className="w-full p-4 border border-line rounded-xl bg-surface text-content outline-none focus:ring-2 focus:ring-amber-500 font-black text-lg" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div>
+                        <div className="grid md:grid-cols-1 gap-6">
+                            <div className="flex flex-col gap-3">
+                                <label className="block text-[10px] font-black text-muted uppercase tracking-[0.2em]">Nombre de la Receta</label>
+                                <input type="text" placeholder="Ej: Mi Hazy IPA Galáctica" className="w-full p-5 border border-line rounded-2xl bg-surface text-content outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 font-black text-xl transition-all shadow-inner" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                            </div>
                         </div>
 
-                        <div className="grid md:grid-cols-3 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-muted uppercase mb-1">Familia</label>
+                        <div className="grid md:grid-cols-3 gap-6">
+                            <div className="flex flex-col gap-3">
+                                <label className="block text-[10px] font-black text-muted uppercase tracking-[0.2em]">Familia</label>
                                 <select 
-                                    className="w-full p-4 border border-line rounded-xl bg-surface text-content outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                                    className="w-full p-5 border border-line rounded-2xl bg-surface text-content outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 font-bold transition-all shadow-inner appearance-none cursor-pointer"
                                     value={formData.family} 
                                     onChange={e => setFormData({ ...formData, family: e.target.value })}
                                 >
@@ -542,42 +579,50 @@ export default function RecipeForm() {
                                     <option value="Mixta">Mixta / Espontánea</option>
                                 </select>
                             </div>
-                            <div><label className="block text-xs font-bold text-muted uppercase mb-1">Estilo Base</label><input type="text" placeholder="Ej: IPA" className="w-full p-4 border border-line rounded-xl bg-surface text-content outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={formData.style} onChange={e => setFormData({ ...formData, style: e.target.value })} /></div>
-                            <div><label className="block text-xs font-bold text-muted uppercase mb-1">Sub-Estilo</label><input type="text" placeholder="Ej: Hazy IPA" className="w-full p-4 border border-line rounded-xl bg-surface text-content outline-none focus:ring-2 focus:ring-amber-500 font-bold" value={formData.subStyle} onChange={e => setFormData({ ...formData, subStyle: e.target.value })} /></div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-muted uppercase mb-1">Descripción / Historia (Opcional)</label>
-                            <textarea rows="3" className="w-full p-4 border border-line rounded-xl bg-surface text-content outline-none focus:ring-2 focus:ring-amber-500 resize-none" value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea>
-                        </div>
-                        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-                            <div><label className="block text-[10px] font-bold text-muted uppercase">Vol (L)</label><input type="number" className="w-full p-3 border border-line rounded-xl bg-surface text-content" value={formData.targetVolume} onChange={e => setFormData({ ...formData, targetVolume: e.target.value })} /></div>
-                            <div><label className="block text-[10px] font-bold text-muted uppercase">ABV (%)</label><input type="number" step="0.1" className="w-full p-3 border border-line rounded-xl bg-surface text-content" value={formData.abv} onChange={e => setFormData({ ...formData, abv: e.target.value })} /></div>
-                            <div><label className="block text-[10px] font-bold text-muted uppercase">D. Orig.</label><input type="number" step="0.001" className="w-full p-3 border border-line rounded-xl bg-surface text-content" value={formData.og} onChange={e => setFormData({ ...formData, og: e.target.value })} /></div>
-                            <div><label className="block text-[10px] font-bold text-muted uppercase">D. Final</label><input type="number" step="0.001" className="w-full p-3 border border-line rounded-xl bg-surface text-content" value={formData.fg} onChange={e => setFormData({ ...formData, fg: e.target.value })} /></div>
-                            <div><label className="block text-[10px] font-bold text-orange-500 uppercase">IBU</label><input type="number" className="w-full p-3 border border-line rounded-xl bg-surface text-content" value={formData.ibu} onChange={e => setFormData({ ...formData, ibu: e.target.value })} /></div>
-                            <div><label className="block text-[10px] font-bold text-amber-500 uppercase">SRM</label><input type="number" className="w-full p-3 border border-line rounded-xl bg-surface text-content" value={formData.colorSRM} onChange={e => setFormData({ ...formData, colorSRM: e.target.value })} /></div>
+                            <div className="flex flex-col gap-3">
+                                <label className="block text-[10px] font-black text-muted uppercase tracking-[0.2em]">Estilo Base</label>
+                                <input type="text" placeholder="Ej: IPA" className="w-full p-5 border border-line rounded-2xl bg-surface text-content outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 font-bold transition-all shadow-inner" value={formData.style} onChange={e => setFormData({ ...formData, style: e.target.value })} />
+                            </div>
+                            <div className="flex flex-col gap-3">
+                                <label className="block text-[10px] font-black text-muted uppercase tracking-[0.2em]">Sub-Estilo</label>
+                                <input type="text" placeholder="Ej: Hazy IPA" className="w-full p-5 border border-line rounded-2xl bg-surface text-content outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 font-bold transition-all shadow-inner" value={formData.subStyle} onChange={e => setFormData({ ...formData, subStyle: e.target.value })} />
+                            </div>
                         </div>
 
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="border border-blue-100 dark:border-blue-900/30 p-5 rounded-2xl bg-blue-50/20 dark:bg-blue-900/5">
-                                <h4 className="font-black text-xs text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Droplets size={16} /> Agua Base (Red / Destilada)</h4>
-                                <div className="grid grid-cols-5 gap-2 md:gap-4">
+                        <div className="flex flex-col gap-3">
+                            <label className="block text-[10px] font-black text-muted uppercase tracking-[0.2em]">Descripción o Reseña Histórica</label>
+                            <textarea rows="3" placeholder="Describe la inspiración detrás de esta creación..." className="w-full p-5 border border-line rounded-2xl bg-surface text-content outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 resize-none transition-all leading-relaxed font-medium shadow-inner" value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 bg-surface/50 p-6 rounded-[2.5rem] border border-line shadow-inner">
+                            <div className="flex flex-col gap-2.5"><label className="block text-[10px] font-black text-muted uppercase text-center tracking-widest">Vol (L)</label><input type="number" className="w-full p-4 border border-line rounded-xl bg-panel text-content text-center font-black text-lg focus:ring-2 focus:ring-blue-500/30 outline-none" value={formData.targetVolume} onChange={e => setFormData({ ...formData, targetVolume: e.target.value })} /></div>
+                            <div className="flex flex-col gap-2.5"><label className="block text-[10px] font-black text-muted uppercase text-center tracking-widest">ABV (%)</label><input type="number" step="0.1" className="w-full p-4 border border-line rounded-xl bg-panel text-content text-center font-black text-lg focus:ring-2 focus:ring-emerald-500/30 outline-none" value={formData.abv} onChange={e => setFormData({ ...formData, abv: e.target.value })} /></div>
+                            <div className="flex flex-col gap-2.5"><label className="block text-[10px] font-black text-muted uppercase text-center tracking-widest">D. Orig.</label><input type="number" step="0.001" className="w-full p-4 border border-line rounded-xl bg-panel text-content text-center font-black text-lg focus:ring-2 focus:ring-blue-500/30 outline-none" value={formData.og} onChange={e => setFormData({ ...formData, og: e.target.value })} /></div>
+                            <div className="flex flex-col gap-2.5"><label className="block text-[10px] font-black text-muted uppercase text-center tracking-widest">D. Final</label><input type="number" step="0.001" className="w-full p-4 border border-line rounded-xl bg-panel text-content text-center font-black text-lg focus:ring-2 focus:ring-blue-500/30 outline-none" value={formData.fg} onChange={e => setFormData({ ...formData, fg: e.target.value })} /></div>
+                            <div className="flex flex-col gap-2.5"><label className="block text-[10px] font-black text-orange-500 uppercase text-center tracking-widest">IBU</label><input type="number" className="w-full p-4 border border-line rounded-xl bg-panel text-content text-center font-black text-lg focus:ring-2 focus:ring-orange-500/30 outline-none" value={formData.ibu} onChange={e => setFormData({ ...formData, ibu: e.target.value })} /></div>
+                            <div className="flex flex-col gap-2.5"><label className="block text-[10px] font-black text-amber-500 uppercase text-center tracking-widest">SRM</label><input type="number" className="w-full p-4 border border-line rounded-xl bg-panel text-content text-center font-black text-lg focus:ring-2 focus:ring-amber-500/30 outline-none" value={formData.colorSRM} onChange={e => setFormData({ ...formData, colorSRM: e.target.value })} /></div>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-8">
+                            <div className="border border-line p-6 rounded-2xl bg-surface/30">
+                                <h4 className="font-black text-xs text-blue-500 uppercase tracking-widest mb-6 flex items-center gap-2"><Droplets size={16} /> Agua Base (Red / Destilada)</h4>
+                                <div className="grid grid-cols-5 gap-3">
                                     {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
-                                        <div key={ion}>
-                                            <label className="block text-[10px] font-bold text-muted uppercase mb-1 text-center">{ion}</label>
-                                            <input type="number" className="w-full p-2 border border-line rounded-xl bg-surface text-content text-center text-xs" value={formData.tapWaterProfile?.[ion] || 0} onChange={e => setFormData({ ...formData, tapWaterProfile: { ...formData.tapWaterProfile, [ion]: e.target.value } })} />
+                                        <div key={ion} className="flex flex-col gap-2">
+                                            <label className="block text-[10px] font-bold text-muted uppercase text-center">{ion}</label>
+                                            <input type="number" className="w-full p-2 border border-line rounded-xl bg-surface text-content text-center text-xs font-bold" value={formData.tapWaterProfile?.[ion] || 0} onChange={e => setFormData({ ...formData, tapWaterProfile: { ...formData.tapWaterProfile, [ion]: e.target.value } })} />
                                         </div>
                                     ))}
                                 </div>
                             </div>
 
-                            <div className="border border-amber-100 dark:border-amber-900/30 p-5 rounded-2xl bg-amber-50/20 dark:bg-amber-900/5">
-                                <h4 className="font-black text-xs text-amber-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles size={16} /> Perfil Objetivo (Deseado)</h4>
-                                <div className="grid grid-cols-5 gap-2 md:gap-4">
+                            <div className="border border-line p-6 rounded-2xl bg-surface/30">
+                                <h4 className="font-black text-xs text-amber-500 uppercase tracking-widest mb-6 flex items-center gap-2"><Sparkles size={16} /> Perfil Objetivo (Deseado)</h4>
+                                <div className="grid grid-cols-5 gap-3">
                                     {['Ca', 'Mg', 'SO4', 'Cl', 'HCO3'].map(ion => (
-                                        <div key={ion}>
-                                            <label className="block text-[10px] font-bold text-muted uppercase mb-1 text-center">{ion}</label>
-                                            <input type="number" className="w-full p-2 border border-line rounded-xl bg-surface text-content text-center text-xs" value={formData.waterProfile?.[ion] || 0} onChange={e => setFormData({ ...formData, waterProfile: { ...formData.waterProfile, [ion]: e.target.value } })} />
+                                        <div key={ion} className="flex flex-col gap-2">
+                                            <label className="block text-[10px] font-bold text-muted uppercase text-center">{ion}</label>
+                                            <input type="number" className="w-full p-2 border border-line rounded-xl bg-surface text-content text-center text-xs font-bold" value={formData.waterProfile?.[ion] || 0} onChange={e => setFormData({ ...formData, waterProfile: { ...formData.waterProfile, [ion]: e.target.value } })} />
                                         </div>
                                     ))}
                                 </div>
@@ -637,24 +682,27 @@ export default function RecipeForm() {
                             </div>
                         )}
 
-                        <div className="bg-blue-900/10 p-4 rounded-2xl border border-blue-500/20 space-y-4">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-blue-500/20 p-2 rounded-lg text-blue-400"><Droplets size={20} /></div>
+                        <div className="bg-panel p-6 rounded-2xl border border-line space-y-6">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-blue-500/10 p-3 rounded-xl text-blue-500 shadow-sm"><Droplets size={24} /></div>
                                     <div>
-                                        <h4 className="text-sm font-black text-content uppercase tracking-widest">Configuración de Agua y Equipo</h4>
+                                        <h4 className="text-sm font-black text-content uppercase tracking-widest leading-none mb-1">Configuración de Agua y Equipo</h4>
                                         <p className="text-[10px] text-muted font-bold">Ajusta tu perfil técnico para cálculos precisos.</p>
                                     </div>
                                 </div>
                                 
-                                <select 
-                                    className="p-3 border border-line rounded-xl bg-panel text-content font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500/50 min-w-[200px]"
-                                    value={formData.equipmentId}
-                                    onChange={e => setFormData({...formData, equipmentId: e.target.value})}
-                                >
-                                    <option value="">Seleccionar Perfil de Equipo...</option>
-                                    {(equipment || []).map(e => <option key={e.id} value={e.id}>{e.name} ({e.totalVolume}L)</option>)}
-                                </select>
+                                <div className="flex flex-col gap-2 min-w-[240px]">
+                                    <label className="text-[10px] font-bold text-muted uppercase tracking-widest">Perfil de Equipo</label>
+                                    <select 
+                                        className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+                                        value={formData.equipmentId}
+                                        onChange={e => setFormData({...formData, equipmentId: e.target.value})}
+                                    >
+                                        <option value="">Seleccionar Perfil de Equipo...</option>
+                                        {(equipment || []).map(e => <option key={e.id} value={e.id}>{e.name} ({e.totalVolume}L)</option>)}
+                                    </select>
+                                </div>
                             </div>
 
                             <div className="flex gap-4 pt-2 border-t border-line/30">
@@ -764,28 +812,32 @@ export default function RecipeForm() {
                                                                 </div>
                                                                 <div className="space-y-1">
                                                                     {[
-                                                                        ...formData.malts.filter(m => m.stepId === step.id).map(m => ({ ...m, type: 'malta', initialCategory: 'Malta', icon: <Wheat size={12} />, color: 'text-amber-500', bg: 'bg-amber-500/10', globalIdx: formData.malts.indexOf(m), colName: 'malts' })),
-                                                                        ...formData.hops.filter(h => h.stepId === step.id).map(h => ({ ...h, type: 'lúpulo', initialCategory: 'Lúpulo', icon: <Leaf size={12} />, color: 'text-green-500', bg: 'bg-green-500/10', globalIdx: formData.hops.indexOf(h), colName: 'hops' })),
-                                                                        ...formData.others.filter(o => o.stepId === step.id).map(o => ({ ...o, type: 'aditivo', initialCategory: 'Sales Minerales', icon: <Sparkles size={12} />, color: 'text-purple-500', bg: 'bg-purple-500/10', globalIdx: formData.others.indexOf(o), colName: 'others' }))
+                                                                        ...formData.malts.filter(m => m.stepId === step.id).map(m => ({ ...m, type: 'malta', initialCategory: 'Malta', icon: <Wheat size={14} />, color: 'text-amber-500', bg: 'bg-amber-500/10', globalIdx: formData.malts.indexOf(m), colName: 'malts' })),
+                                                                        ...formData.hops.filter(h => h.stepId === step.id).map(h => ({ ...h, type: 'lúpulo', initialCategory: 'Lúpulo', icon: <Leaf size={14} />, color: 'text-green-500', bg: 'bg-green-500/10', globalIdx: formData.hops.indexOf(h), colName: 'hops' })),
+                                                                        ...formData.others.filter(o => o.stepId === step.id).map(o => ({ ...o, type: 'aditivo', initialCategory: 'Sales Minerales', icon: <Sparkles size={14} />, color: 'text-purple-500', bg: 'bg-purple-500/10', globalIdx: formData.others.indexOf(o), colName: 'others' }))
                                                                     ].map((ing, i) => (
-                                                                            <div key={i} className="flex items-center gap-2 bg-panel p-1.5 rounded-lg border border-line animate-fadeIn">
-                                                                                <div className={`p-1.5 rounded ${ing.bg} ${ing.color}`}>{ing.icon}</div>
-                                                                                <AutocompleteInput className="flex-1 h-8 text-[10px]" value={ing.name} onChange={val => updateArray(ing.colName, ing.globalIdx, 'name', val)} onSelect={item => updateArray(ing.colName, ing.globalIdx, 'unit', item.unit || 'g')} placeholder={`${ing.type}...`} category={ing.category || ing.initialCategory} inventory={inventory} onAddNewItem={onAddInventoryItem} />
-                                                                                <div className="flex items-center bg-surface rounded px-1 h-8 border border-line">
-                                                                                    <input type="number" className="w-10 bg-transparent text-[10px] text-center font-bold" value={ing.amount} onChange={e => updateArray(ing.colName, ing.globalIdx, 'amount', e.target.value)} />
-                                                                                    <span className="text-[8px] font-black text-muted uppercase ml-0.5">{ing.unit || (ing.type === 'malta' ? 'kg' : 'g')}</span>
+                                                                            <div key={i} className="flex items-center gap-3 bg-panel p-2 rounded-xl border border-line shadow-sm animate-fadeIn group/ing">
+                                                                                <div className={`p-2 rounded-lg ${ing.bg} ${ing.color} shadow-inner`}>{ing.icon}</div>
+                                                                                <AutocompleteInput className="flex-1 h-10 text-xs font-bold" value={ing.name} onChange={val => updateArray(ing.colName, ing.globalIdx, 'name', val)} onSelect={item => updateArray(ing.colName, ing.globalIdx, 'unit', item.unit || 'g')} placeholder={`${ing.type}...`} category={ing.category || ing.initialCategory} inventory={inventory} onAddNewItem={onAddInventoryItem} />
+                                                                                <div className="flex items-center bg-surface rounded-xl px-2 h-10 border border-line shadow-inner focus-within:ring-2 focus-within:ring-amber-500/20">
+                                                                                    <input type="number" className="w-12 bg-transparent text-xs text-center font-black" value={ing.amount} onChange={e => updateArray(ing.colName, ing.globalIdx, 'amount', e.target.value)} />
+                                                                                    <span className="text-[9px] font-black text-muted uppercase ml-1 opacity-60">{ing.unit || (ing.type === 'malta' ? 'kg' : 'g')}</span>
                                                                                 </div>
-                                                                                <div className="flex items-center gap-0.5 bg-surface rounded px-1.5 h-8 border border-line group relative overflow-visible" title={stage.id === 'boiling' ? "Hervor: 60=Inicio, 0=Flameout" : "Tiempo de adición en este paso"}>
-                                                                                    <span className="text-[8px] font-black text-muted uppercase mr-1">@</span>
-                                                                                    <input type="number" placeholder="Ti" className="w-14 bg-transparent text-[10px] text-center font-bold" value={ing.additionTime || ''} onChange={e => updateArray(ing.colName, ing.globalIdx, 'additionTime', e.target.value)} onBlur={e => { if (!e.target.value) updateArray(ing.colName, ing.globalIdx, 'additionTime', isCountdownStage(stage.id) ? (step.duration || 0) : 0) }} />
-                                                                                    <select className="bg-transparent text-[8px] font-black text-amber-500 uppercase outline-none" value={ing.additionTimeUnit || 'm'} onChange={e => updateArray(ing.colName, ing.globalIdx, 'additionTimeUnit', e.target.value)}>
+                                                                                <div className="flex items-center gap-1 bg-surface rounded-xl px-2 h-10 border border-line shadow-inner group relative overflow-visible" title={stage.id === 'boiling' ? "Hervor: 60=Inicio, 0=Flameout" : "Tiempo de adición en este paso"}>
+                                                                                    <span className="text-[10px] font-black text-muted uppercase opacity-40">@</span>
+                                                                                    <input type="number" placeholder="Ti" className="w-12 bg-transparent text-xs text-center font-black" value={ing.additionTime || ''} onChange={e => updateArray(ing.colName, ing.globalIdx, 'additionTime', e.target.value)} onBlur={e => { if (!e.target.value) updateArray(ing.colName, ing.globalIdx, 'additionTime', isCountdownStage(stage.id) ? (step.duration || 0) : 0) }} />
+                                                                                    <select className="bg-transparent text-[10px] font-black text-amber-500 uppercase outline-none cursor-pointer" value={ing.additionTimeUnit || 'm'} onChange={e => updateArray(ing.colName, ing.globalIdx, 'additionTimeUnit', e.target.value)}>
                                                                                         <option value="m">m</option>
                                                                                         <option value="h">h</option>
                                                                                         <option value="d">d</option>
                                                                                     </select>
-                                                                                    {stage.id === 'boiling' && <Info size={8} className="absolute -top-1 -right-1 text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" />}
                                                                                 </div>
-                                                                                <button onClick={() => removeArrayItem(ing.colName, ing.globalIdx)} className="text-muted hover:text-red-500 p-1"><Trash2 size={12} /></button>
+                                                                                <button 
+                                                                                    onClick={() => removeArrayItem(ing.colName, ing.globalIdx)}
+                                                                                    className="p-2 text-muted hover:text-red-500 transition-colors opacity-0 group-hover/ing:opacity-100"
+                                                                                >
+                                                                                    <Trash2 size={14} />
+                                                                                </button>
                                                                             </div>
                                                                     ))}
                                                                 </div>
@@ -807,23 +859,29 @@ export default function RecipeForm() {
 
                 {activeStep === 3 && (
                     <div className="space-y-6 animate-fadeIn">
-                        <div className="bg-purple-900/10 p-5 rounded-2xl border border-purple-500/20">
-                            <h4 className="font-black text-sm text-purple-400 uppercase tracking-widest flex items-center gap-2 mb-4"><Activity size={18} /> Perfil de Fermentación</h4>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div><label className="block text-xs font-bold text-muted uppercase mb-1">Levadura Seleccionada</label><AutocompleteInput className="w-full h-12" value={formData.yeast} onChange={val => {
-                                    if (typeof val === 'object' && val !== null) {
-                                        setFormData(prev => ({ 
-                                            ...prev, 
-                                            yeast: val.name, 
-                                            yeastInventoryId: val.id,
-                                            yeastCategory: val.category,
-                                            yeastUnit: val.unit || 'sobre'
-                                        }));
-                                    } else {
-                                        setFormData(prev => ({ ...prev, yeast: val }));
-                                    }
-                                }} category="Levadura" inventory={inventory} onAddNewItem={onAddInventoryItem} placeholder="Ej: SafAle US-05" /></div>
-                                <div><label className="block text-xs font-bold text-muted uppercase mb-1">Tiempo Estimado Bodega</label><input type="text" className="w-full p-3 border border-line rounded-xl bg-panel text-content font-bold" value={formData.fermentationDays} onChange={e => setFormData({ ...formData, fermentationDays: e.target.value })} placeholder="Ej: 14 Días" /></div>
+                        <div className="bg-panel p-6 rounded-2xl border border-line">
+                            <h4 className="font-black text-sm text-purple-500 uppercase tracking-widest flex items-center gap-2 mb-6"><Activity size={18} /> Perfil de Fermentación</h4>
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="flex flex-col gap-2">
+                                    <label className="block text-xs font-bold text-muted uppercase tracking-wider">Levadura Seleccionada</label>
+                                    <AutocompleteInput className="w-full h-12" value={formData.yeast} onChange={val => {
+                                        if (typeof val === 'object' && val !== null) {
+                                            setFormData(prev => ({ 
+                                                ...prev, 
+                                                yeast: val.name, 
+                                                yeastInventoryId: val.id,
+                                                yeastCategory: val.category,
+                                                yeastUnit: val.unit || 'sobre'
+                                            }));
+                                        } else {
+                                            setFormData(prev => ({ ...prev, yeast: val }));
+                                        }
+                                    }} category="Levadura" inventory={inventory} onAddNewItem={onAddInventoryItem} placeholder="Ej: SafAle US-05" />
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <label className="block text-xs font-bold text-muted uppercase tracking-wider">Tiempo Estimado Bodega</label>
+                                    <input type="text" className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold h-12" value={formData.fermentationDays} onChange={e => setFormData({ ...formData, fermentationDays: e.target.value })} placeholder="Ej: 14 Días" />
+                                </div>
                             </div>
                         </div>
 
@@ -1027,16 +1085,32 @@ export default function RecipeForm() {
 
                 {activeStep === 5 && (
                     <div className="space-y-6 animate-fadeIn">
-                        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white p-8 rounded-3xl shadow-xl border-4 border-white/10 relative overflow-hidden">
-                            <Sparkles className="absolute top-4 right-4 opacity-20" size={80} />
-                            <h3 className="text-4xl font-black mb-2 leading-none uppercase tracking-tighter">Resumen Cervecero</h3>
-                            <p className="text-white/80 font-bold text-lg mb-6">{formData.name} • {formData.family} {formData.style} ({formData.subStyle})</p>
+                        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white p-10 rounded-3xl shadow-xl border-4 border-white/10 relative overflow-hidden">
+                            <Sparkles className="absolute -top-4 -right-4 opacity-10 rotate-12" size={160} />
+                            <div className="relative z-10">
+                                <h3 className="text-4xl font-black mb-2 leading-none uppercase tracking-tighter">Resumen Cervecero</h3>
+                                <p className="text-white/90 font-bold text-lg mb-8 flex items-center gap-2">
+                                    {formData.name} <span className="opacity-50">/</span> {formData.family} {formData.style}
+                                </p>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                                <div className="bg-black/10 p-4 rounded-2xl border border-white/10 backdrop-blur-sm"><span className="block text-[10px] uppercase font-black opacity-60">Volumen</span><span className="text-2xl font-black">{formData.targetVolume}L</span></div>
-                                <div className="bg-black/10 p-4 rounded-2xl border border-white/10 backdrop-blur-sm"><span className="block text-[10px] uppercase font-black opacity-60">Alcohol</span><span className="text-2xl font-black">{formData.abv}%</span></div>
-                                <div className="bg-black/10 p-4 rounded-2xl border border-white/10 backdrop-blur-sm"><span className="block text-[10px] uppercase font-black opacity-60">Amargor</span><span className="text-2xl font-black">{formData.ibu} IBU</span></div>
-                                <div className="bg-black/10 p-4 rounded-2xl border border-white/10 backdrop-blur-sm"><span className="block text-[10px] uppercase font-black opacity-60">Etapas Activas</span><span className="text-2xl font-black">{9 - (formData.skippedStages?.length || 0)} / 9</span></div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
+                                        <span className="block text-[10px] uppercase font-black text-white/60 mb-1 tracking-widest text-center">Volumen</span>
+                                        <span className="text-2xl font-black block text-center">{formData.targetVolume}L</span>
+                                    </div>
+                                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
+                                        <span className="block text-[10px] uppercase font-black text-white/60 mb-1 tracking-widest text-center">Alcohol</span>
+                                        <span className="text-2xl font-black block text-center">{formData.abv}%</span>
+                                    </div>
+                                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
+                                        <span className="block text-[10px] uppercase font-black text-white/60 mb-1 tracking-widest text-center">Amargor</span>
+                                        <span className="text-2xl font-black block text-center">{formData.ibu} IBU</span>
+                                    </div>
+                                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
+                                        <span className="block text-[10px] uppercase font-black text-white/60 mb-1 tracking-widest text-center">Eficiencia</span>
+                                        <span className="text-2xl font-black block text-center">75%</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -1052,10 +1126,29 @@ export default function RecipeForm() {
                             </div>
                             <div className="bg-surface p-6 rounded-2xl border border-line">
                                 <h4 className="font-black text-sm uppercase tracking-widest text-muted mb-4 border-b border-line pb-2">Proceso Estructurado</h4>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2 text-xs font-black text-amber-500 uppercase"><Thermometer size={14} /> Cocción: {formData.steps.filter(s => s.phase === 'cooking').length} pasos</div>
-                                    <div className="flex items-center gap-2 text-xs font-black text-purple-500 uppercase"><Activity size={14} /> Fermentación: {formData.steps.filter(s => s.phase === 'fermenting').length} pasos</div>
-                                    <div className="flex items-center gap-2 text-xs font-black text-blue-500 uppercase"><Droplets size={14} /> Envasado: {formData.steps.filter(s => s.phase === 'bottling').length} pasos</div>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-xs font-black text-amber-500 uppercase"><Thermometer size={14} /> Cocción: {formData.steps.filter(s => s.phase === 'cooking').length} pasos</div>
+                                        <div className="flex items-center gap-2 text-xs font-black text-purple-500 uppercase"><Activity size={14} /> Fermentación: {formData.steps.filter(s => s.phase === 'fermenting').length} pasos</div>
+                                        <div className="flex items-center gap-2 text-xs font-black text-blue-500 uppercase"><Droplets size={14} /> Envasado: {formData.steps.filter(s => s.phase === 'bottling').length} pasos</div>
+                                    </div>
+                                    
+                                    <div className="pt-4 border-t border-line">
+                                        <label className="flex items-center justify-between cursor-pointer group">
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-black text-content uppercase tracking-widest flex items-center gap-2">
+                                                    <BookOpen size={14} /> ¿Hacer receta pública?
+                                                </span>
+                                                <span className="text-[10px] text-muted font-bold italic group-hover:text-amber-500 transition-colors">Visible para todos en la Galería</span>
+                                            </div>
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-6 h-6 rounded-lg border-line text-amber-500 focus:ring-amber-500"
+                                                checked={formData.isPublic}
+                                                onChange={e => setFormData({ ...formData, isPublic: e.target.checked })}
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1092,7 +1185,7 @@ export default function RecipeForm() {
                         </button>
                     ) : (
                         <button
-                            onClick={() => { if (!isGuest) handleSave(); else alert(guestTooltip); }}
+                            onClick={() => { if (!isGuest) handleSave(); else addToast(guestTooltip, "info"); }}
                             disabled={isGuest || isSaving}
                             className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-12 py-4 rounded-2xl font-black text-xl hover:from-emerald-600 hover:to-teal-600 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 disabled:opacity-50 flex items-center gap-3 active:scale-95"
                         >

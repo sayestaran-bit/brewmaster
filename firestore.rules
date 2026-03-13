@@ -43,5 +43,18 @@ service cloud.firestore {
                              && request.auth.uid == userId
                              && request.resource.data.keys().size() <= 100;
     }
+
+    // ===================================================================
+    // GALERÍA PÚBLICA
+    // Lectura global, escritura protegida por autoría.
+    // ===================================================================
+    match /publicRecipes/{recipeId} {
+      allow read: if true;
+      allow write: if request.auth != null && (
+        (request.method == 'create' && request.resource.data.authorUid == request.auth.uid) ||
+        (request.method == 'update' && resource.data.authorUid == request.auth.uid) ||
+        (request.method == 'delete' && resource.data.authorUid == request.auth.uid)
+      );
+    }
   }
 }

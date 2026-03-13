@@ -34,6 +34,7 @@ import { CSS } from '@dnd-kit/utilities';
 // Hooks
 import { useRecipes } from '../../hooks/useRecipes';
 import { useInventory } from '../../hooks/useInventory';
+import { useToast } from '../../context/ToastContext';
 import { useHistory } from '../../hooks/useHistory';
 import { useFeasibilityBatch } from '../../hooks/useFeasibility';
 import { useAuth } from '../../context/AuthContext';
@@ -52,10 +53,11 @@ export default function RecipeListView() {
     const isGuest = false; // Deshabilitado temporalmente para pruebas locales: currentUser ? currentUser.isAnonymous : true;
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
 
-    const { recipes, addRecipe, deleteRecipe, updateRecipe } = useRecipes();
+    const { addToast } = useToast();
+    const { recipes, addRecipe, updateRecipe, deleteRecipe } = useRecipes();
     const { inventory, addItem } = useInventory();
     const { history } = useHistory();
-
+    
     const [isUpdatingBase, setIsUpdatingBase] = useState(false);
     const [showFeasibility, setShowFeasibility] = useState(false);
     const [feasibilityVolume, setFeasibilityVolume] = useState(20);
@@ -140,7 +142,11 @@ export default function RecipeListView() {
             if (oldIndex !== -1 && newIndex !== -1) {
                 const newOrder = arrayMove(orderedCategories, oldIndex, newIndex);
                 setCategoryOrder(newOrder);
-                localStorage.setItem('brewmaster_category_order', JSON.stringify(newOrder));
+                try {
+                    localStorage.setItem('brewmaster_category_order', JSON.stringify(newOrder));
+                } catch (e) {
+                    console.error("Error saving to localStorage:", e);
+                }
             }
             return;
         }
@@ -175,7 +181,7 @@ export default function RecipeListView() {
             await Promise.all(updatePromises);
         } catch (error) {
             console.error("Error updating recipe order:", error);
-            alert('Error al guardar el nuevo orden.');
+            addToast('Error al guardar el nuevo orden.', 'error');
         }
     };
 
@@ -223,10 +229,10 @@ export default function RecipeListView() {
                     }
                 }
                 
-                alert('¡Catálogo base actualizado con éxito!');
+                addToast('¡Catálogo base actualizado con éxito!', 'success');
             } catch (err) {
                 console.error('Error actualizando base:', err);
-                alert('Error al actualizar la base: ' + err.message);
+                addToast('Error al actualizar la base.', 'error');
             } finally {
                 setIsUpdatingBase(false);
             }
@@ -235,15 +241,16 @@ export default function RecipeListView() {
 
     const handleDeleteRecipe = async (recipe) => {
         if (isGuest) {
-            alert(guestTooltip);
+            addToast(guestTooltip, 'info');
             return;
         }
         if (window.confirm(`¿Seguro que deseas eliminar: ${recipe.name}?`)) {
             try {
                 await deleteRecipe(recipe.id);
+                addToast('Receta eliminada correctamente.', 'success');
             } catch (error) {
                 console.error("Error deleting recipe:", error);
-                alert("No se pudo eliminar: " + error.message);
+                addToast("No se pudo eliminar la receta.", "error");
             }
         }
     };
@@ -334,10 +341,10 @@ export default function RecipeListView() {
                         return (
                             <SortableCategoryBlock key={category} category={category} theme={theme}>
                                 {category === 'IPA' && ipaSubStyles.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 mb-6 animate-fadeIn">
+                                    <div className="flex flex-wrap gap-3 mb-8 animate-fadeIn">
                                         <button
                                             onClick={() => setSelectedSubStyle(null)}
-                                            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${!selectedSubStyle ? 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20' : 'bg-surface text-muted border-line hover:border-amber-500/50'}`}
+                                            className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border shadow-sm ${!selectedSubStyle ? 'bg-amber-500 text-white border-amber-500 shadow-amber-500/20' : 'bg-surface text-muted border-line hover:border-amber-500/50 hover:bg-slate-50'}`}
                                         >
                                             Todas las IPA
                                         </button>
@@ -345,7 +352,7 @@ export default function RecipeListView() {
                                             <button
                                                 key={sub}
                                                 onClick={() => setSelectedSubStyle(selectedSubStyle === sub ? null : sub)}
-                                                className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${selectedSubStyle === sub ? 'bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/20' : 'bg-surface text-muted border-line hover:border-orange-500/50'}`}
+                                                className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border shadow-sm ${selectedSubStyle === sub ? 'bg-orange-500 text-white border-orange-500 shadow-orange-500/20' : 'bg-surface text-muted border-line hover:border-orange-500/50 hover:bg-slate-50'}`}
                                             >
                                                 {sub}
                                             </button>

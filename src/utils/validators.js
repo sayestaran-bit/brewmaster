@@ -177,8 +177,43 @@ export const LOW_STOCK_THRESHOLDS = {
 export function getLowStockItems(inventory) {
     return (inventory || [])
         .filter(item => {
+            // 1. Priorizar umbral personalizado
+            if (item.minThreshold !== undefined && item.minThreshold !== null) {
+                return Number(item.stock) < Number(item.minThreshold);
+            }
+            // 2. Fallback a umbral por categoría
             const cfg = LOW_STOCK_THRESHOLDS[item.category];
             return cfg && Number(item.stock) < cfg.threshold;
         })
         .sort((a, b) => a.stock - b.stock);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VALIDACIÓN DE INVENTARIO
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function validateInventoryItem(itemData) {
+    const errors = [];
+    
+    if (!itemData?.name?.trim()) {
+        errors.push('El nombre del insumo es obligatorio.');
+    }
+    
+    if (!itemData?.category || !LOW_STOCK_THRESHOLDS[itemData.category]) {
+        errors.push('La categoría no es válida.');
+    }
+    
+    if (itemData?.stock === undefined || itemData?.stock === null || isNaN(Number(itemData.stock))) {
+        errors.push('El stock debe ser un número válido.');
+    }
+    
+    if (itemData?.price !== undefined && itemData?.price !== null && isNaN(Number(itemData.price))) {
+        errors.push('El precio debe ser un número válido.');
+    }
+
+    if (itemData?.minThreshold !== undefined && itemData?.minThreshold !== null && isNaN(Number(itemData.minThreshold))) {
+        errors.push('El umbral de alerta debe ser un número válido.');
+    }
+
+    return { valid: errors.length === 0, errors };
 }

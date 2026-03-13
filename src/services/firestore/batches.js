@@ -8,6 +8,7 @@ import {
     onSnapshot, query, orderBy, writeBatch, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { compactHistoryNotes, calculateEfficiency } from '../../utils/recipeUtils';
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
 const batchesRef = (uid) =>
@@ -118,12 +119,37 @@ export async function completeBatch(uid, batchId, historyEntry) {
     // 1. Eliminar el batch activo
     batch.delete(batchDocRef(uid, batchId));
 
+    // Sanitización: eliminar campos redundantes de sesión activa (bloat)
+    const { 
+        timer, 
+        currentStep, 
+        completedSteps, 
+        deductedHops, 
+        phaseTimestamps,
+        ...sanitizedEntry 
+    } = historyEntry;
+
     // 2. Agregar entrada al historial
     const historyDocRef = doc(historyRef(uid));
+    
+    // Asegurar eficiencia y volumen final si no vienen (calculado post-cocción)
+    const finalVolume = Number(sanitizedEntry.finalVolume || sanitizedEntry.targetVolume || sanitizedEntry.volume || 0);
+    const efficiency = Number(sanitizedEntry.efficiency || (sanitizedEntry.og ? calculateEfficiency(sanitizedEntry.og, finalVolume, sanitizedEntry.ingredients?.malts || []) : 0));
+
+    // Compactar notas de historial si existen
+    if (sanitizedEntry.notes) {
+        sanitizedEntry.notes = compactHistoryNotes(sanitizedEntry.notes, null, 1500);
+    }
+    if (sanitizedEntry.historyNotes) {
+        sanitizedEntry.historyNotes = compactHistoryNotes(sanitizedEntry.historyNotes, null, 1500);
+    }
+
     batch.set(historyDocRef, {
-        ...historyEntry,
-        tasting: null,
-        timestamp: Date.now(), // para ordenamiento eficiente
+        ...sanitizedEntry,
+        finalVolume,
+        efficiency,
+        tasting: sanitizedEntry.tasting || null,
+        timestamp: Date.now(),
         createdAt: serverTimestamp(),
     });
 
@@ -140,9 +166,12 @@ export async function discardBatch(uid, batchId, historyEntry) {
     batch.delete(batchDocRef(uid, batchId));
 
     if (historyEntry) {
+        // Sanitización para abandonos
+        const { timer, currentStep, completedSteps, deductedHops, ...sanitizedEntry } = historyEntry;
+        
         const historyDocRef = doc(historyRef(uid));
         batch.set(historyDocRef, {
-            ...historyEntry,
+            ...sanitizedEntry,
             tasting: null,
             timestamp: Date.now(),
             createdAt: serverTimestamp(),

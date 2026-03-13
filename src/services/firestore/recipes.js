@@ -6,7 +6,7 @@
 
 import {
     collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
-    onSnapshot, query, orderBy, serverTimestamp
+    onSnapshot, query, orderBy, serverTimestamp, writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { sanitizeRecipeForSaving } from '../../utils/helpers';

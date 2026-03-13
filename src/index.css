@@ -11,28 +11,34 @@
     --bg-surface: #F8F9FA;
     --bg-panel: #FFFFFF;
     --text-primary: #1A1614;
-    /* Stout */
     --text-muted: #57534E;
     --border-line: #E5E7EB;
 
+    /* Design Tokens */
+    --radius-3xl: 1.5rem; /* 24px */
+    --radius-2xl: 1rem;   /* 16px */
+    --radius-xl: 0.75rem; /* 12px */
+    --spacing-saas: 2rem; /* 32px or p-8 */
+
     --color-hazy: #F97316;
-    /* Orange/Mango */
     --color-hazy-hover: #EA580C;
     --color-lager: #FBBF24;
-    /* Gold */
     --color-amber: #DC2626;
-    /* Red */
   }
 
   .dark {
     color-scheme: dark;
-    /* STOUT THEME (Dark Mode) */
     --bg-surface: #121212;
     --bg-panel: #1A1614;
     --text-primary: #FDFBF7;
-    /* Foam */
     --text-muted: #A8A29E;
     --border-line: #332C28;
+
+    /* Design Tokens (Shared) */
+    --radius-3xl: 1.5rem;
+    --radius-2xl: 1rem;
+    --radius-xl: 0.75rem;
+    --spacing-saas: 2rem;
 
     --color-hazy: #F97316;
     --color-hazy-hover: #EA580C;
@@ -98,5 +104,22 @@
   /* Glass effect */
   .glass {
     @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20 dark:border-slate-700/30;
+  }
+
+  /* SaaS Design System Utilities */
+  .saas-container {
+    @apply p-6 md:p-8 rounded-[var(--radius-3xl)] bg-panel border border-line shadow-sm;
+  }
+
+  .saas-card {
+    @apply p-5 md:p-6 rounded-[var(--radius-2xl)] bg-surface border border-line transition-all hover:shadow-md;
+  }
+
+  .saas-input {
+    @apply p-3 rounded-[var(--radius-xl)] border border-line bg-surface text-text-primary outline-none focus:ring-2 focus:ring-blue-500 transition-all;
+  }
+
+  .saas-button-icon {
+    @apply p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-all;
   }
 }

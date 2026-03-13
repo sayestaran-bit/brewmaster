@@ -1,44 +1,52 @@
-// /src/hooks/useHistory.js
-//
-// Hook que gestiona el historial de producción desde Firestore.
-// Soporta tanto suscripción en tiempo real como carga paginada.
+/**
+ * /src/context/HistoryContext.jsx
+ * 
+ * Contexto global para gestionar el historial de producción.
+ * Evita suscripciones duplicadas y centraliza los datos para Dashboard y HistoryView.
+ */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAuth } from '../context/AuthContext';
-import {
-    onHistorySnapshot,
-    getHistoryPage as _getPage,
-    updateTasting as _updateTasting,
-    deleteHistoryEntry as _deleteEntry,
-} from '../services/firestore/history';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { useAuth } from './AuthContext';
+import { onHistorySnapshot, getHistoryPage as _getPage, updateTasting as _updateTasting, deleteHistoryEntry as _deleteEntry } from '../services/firestore/history';
 import { calculateEfficiency } from '../utils/recipeUtils';
 
-export function useHistory(pageSize = 50) {
+const HistoryContext = createContext();
+
+export const HistoryProvider = ({ children }) => {
     const { currentUser } = useAuth();
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Suscripción en tiempo real (últimas `pageSize` entradas)
     useEffect(() => {
         if (!currentUser) {
             setHistory([]);
             setLoading(false);
             return;
         }
+
         setLoading(true);
-        const unsub = onHistorySnapshot(
+        // Suscribirse a los últimos 100 registros para cubrir Dashboard y vista inicial de Historial
+        const unsubscribe = onHistorySnapshot(
             currentUser.uid,
-            (data) => { setHistory(data); setLoading(false); setError(null); },
-            (err) => { console.error('useHistory:', err); setError(err.message); setLoading(false); },
-            pageSize
+            (data) => {
+                setHistory(data);
+                setLoading(false);
+                setError(null);
+            },
+            (err) => {
+                console.error('HistoryContext Error:', err);
+                setError(err.message);
+                setLoading(false);
+            },
+            100 
         );
-        return unsub;
-    }, [currentUser, pageSize]);
+
+        return () => unsubscribe();
+    }, [currentUser]);
 
     /**
      * "Cura" y enriquece los datos históricos para asegurar que todos tengan eficiencia y volumen final.
-     * Útil para registros antiguos o lotes donde no se capturaron todos los datos técnicos.
      */
     const enrichedHistory = useMemo(() => {
         return history.map(entry => {
@@ -59,7 +67,6 @@ export function useHistory(pageSize = 50) {
 
     /**
      * Calcula estadísticas globales basadas en el historial enriquecido.
-     * Optimizado vía useMemo para no recalcular en cada renderizado.
      */
     const stats = useMemo(() => {
         if (enrichedHistory.length === 0) return { avgEfficiency: 0, totalVolume: 0, avgCostPerLiter: 0, batchCount: 0 };
@@ -86,11 +93,6 @@ export function useHistory(pageSize = 50) {
         };
     }, [enrichedHistory]);
 
-    /**
-     * Carga una página de historial (para vistas de análisis con "Cargar más").
-     * @param {DocumentSnapshot|null} lastDoc - cursor de la página anterior
-     * @returns {Promise<{ entries, lastDoc, hasMore }>}
-     */
     const loadPage = useCallback(async (lastDoc = null) => {
         return await _getPage(currentUser.uid, 20, lastDoc);
     }, [currentUser]);
@@ -103,15 +105,29 @@ export function useHistory(pageSize = 50) {
         await _deleteEntry(currentUser.uid, historyId);
     }, [currentUser]);
 
-    return { 
-        history: enrichedHistory, 
+    const value = useMemo(() => ({
+        history: enrichedHistory,
         rawHistory: history,
         stats,
-        loading, 
-        error, 
-        loadPage, 
-        updateTasting, 
-        deleteEntry 
-    };
-}
+        loading,
+        error,
+        loadPage,
+        updateTasting,
+        deleteEntry
+    }), [enrichedHistory, history, stats, loading, error, loadPage, updateTasting, deleteEntry]);
 
+
+    return (
+        <HistoryContext.Provider value={value}>
+            {children}
+        </HistoryContext.Provider>
+    );
+};
+
+export const useHistoryContext = () => {
+    const context = useContext(HistoryContext);
+    if (!context) {
+        throw new Error('useHistoryContext debe usarse dentro de un HistoryProvider');
+    }
+    return context;
+};

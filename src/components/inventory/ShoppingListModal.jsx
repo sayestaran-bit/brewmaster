@@ -6,11 +6,20 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import Button from '../ui/Button';
 import { useInventory } from '../../hooks/useInventory';
+import { useToast } from '../../context/ToastContext';
 
-export default function ShoppingListModal({ isOpen, onClose, recipes, inventory }) {
+export default function ShoppingListModal({ isOpen, onClose, recipes, inventory, loading = false }) {
     const { addShoppingList } = useInventory();
+    const { addToast } = useToast();
     const [selectedRecipes, setSelectedRecipes] = useState([]);
     const [manualItems, setManualItems] = useState([]);
+
+    // Pre-poblar con la primera receta si se abre y está vacío
+    React.useEffect(() => {
+        if (isOpen && selectedRecipes.length === 0 && recipes?.length > 0) {
+            addRecipeSelection();
+        }
+    }, [isOpen, recipes]);
 
     const addRecipeSelection = () => {
         const safeRecipes = Array.isArray(recipes) ? recipes : [];
@@ -215,7 +224,7 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
             doc.save(`Plan_Compra_${new Date().toISOString().slice(0, 10)}.pdf`);
         } catch (err) {
             console.error("PDF Export Error:", err);
-            alert("No se pudo generar el PDF.");
+            addToast("No se pudo generar el PDF.", "error");
         }
     };
 
@@ -237,11 +246,11 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
                     return { name: r?.name, volume: s.volume };
                 })
             });
-            alert('¡Lista guardada como borrador!');
+            addToast('¡Lista guardada como borrador!', 'success');
             onClose();
         } catch (error) {
             console.error("Error saving shopping list:", error);
-            alert('Error al guardar la lista.');
+            addToast('Error al guardar la lista.', 'error');
         }
     };
 
@@ -276,7 +285,7 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
             XLSX.writeFile(wb, `Plan_Compra_${new Date().toISOString().slice(0, 10)}.xlsx`);
         } catch (err) {
             console.error("Excel Export Error:", err);
-            alert("No se pudo generar el Excel.");
+            addToast("No se pudo generar el Excel.", "error");
         }
     };
 
@@ -325,9 +334,17 @@ export default function ShoppingListModal({ isOpen, onClose, recipes, inventory 
                             </div>
                         </div>
 
-                        {selectedRecipes.length === 0 ? (
+                        {loading ? (
+                            <div className="flex flex-col items-center justify-center p-12 space-y-4">
+                                <div className="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                                <p className="text-slate-500 font-bold animate-pulse text-sm uppercase tracking-widest">Cargando recetas...</p>
+                            </div>
+                        ) : selectedRecipes.length === 0 ? (
                             <div className="border-2 border-dashed border-gray-200 dark:border-slate-800 rounded-2xl p-8 text-center bg-gray-50/50 dark:bg-slate-800/50">
                                 <p className="text-slate-400 font-bold italic">Selecciona las cervezas que quieres fabricar para calcular los insumos.</p>
+                                {recipes?.length === 0 && (
+                                    <p className="text-amber-500 text-xs mt-2 font-bold uppercase">No se encontraron recetas guardadas.</p>
+                                )}
                             </div>
                         ) : (
                             <div className="space-y-3">

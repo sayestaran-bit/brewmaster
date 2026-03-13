@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit3, Check, Thermometer, Clock, CheckCircle2, Activity, Play, Star, BookOpen, Droplets, Info, FileClock, Loader2, BrainCircuit, Wand2, Sparkles, Banknote, Scale, Wheat, Leaf, Beaker, ChevronDown, ChevronUp, X, Trash2, Save, Printer, History, Calendar, ChevronRight, Lock, Settings, AlertTriangle } from 'lucide-react';
-import { getThemeForCategory, getSrmColor, baseWater } from '../../utils/helpers';
+import { getThemeForCategory, getSrmColor, baseWater, WATER_STYLE_CONFIG } from '../../utils/helpers';
 import { formatCurrency, getFormattedDate } from '../../utils/formatters';
 import { getEffectivePhase, getSafeAdditionTime, calculateRequiredSalts, MINERAL_SALTS } from '../../utils/recipeUtils';
 import { generateRecipeDiff } from '../../utils/recipeDiff';
@@ -14,6 +14,8 @@ import { useEquipment } from '../../hooks/useEquipment';
 import { useAuth } from '../../context/AuthContext';
 import { useActiveBatches } from '../../hooks/useActiveBatches';
 import { calculateWater } from '../../utils/brewMath';
+import { useToast } from '../../context/ToastContext';
+import { generateRecipeLabel } from '../../utils/pdfGenerator';
 
 export default function RecipeDetailView() {
     const { id } = useParams();
@@ -23,6 +25,7 @@ export default function RecipeDetailView() {
     const guestTooltip = "Regístrate para crear recetas ilimitadas y más!";
     const { recipes, deleteRecipe, updateRecipe } = useRecipes();
     const { inventory } = useInventory();
+    const { addToast } = useToast();
 
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [targetVol, setTargetVol] = useState(20);
@@ -73,7 +76,7 @@ export default function RecipeDetailView() {
             navigate(`/brew/${batchId}?phase=cooking`);
         } catch (error) {
             console.error("Error starting batch:", error);
-            alert("Error al iniciar el lote: " + error.message);
+            addToast("Error al iniciar el lote: " + error.message, "error");
         } finally {
             setIsStartingBrew(false);
         }
@@ -81,7 +84,7 @@ export default function RecipeDetailView() {
 
     const handleDelete = async () => {
         if (isGuest) {
-            alert(guestTooltip);
+            addToast(guestTooltip, "info");
             return;
         }
         if (window.confirm(`¿Seguro que deseas eliminar la receta: ${selectedRecipe.name}? Esta acción no se puede deshacer.`)) {
@@ -90,7 +93,7 @@ export default function RecipeDetailView() {
                 navigate('/recipes');
             } catch (error) {
                 console.error("Error deleting recipe:", error);
-                alert("Error al eliminar la receta: " + error.message);
+                addToast("Error al eliminar la receta.", "error");
             }
         }
     };
@@ -173,7 +176,15 @@ export default function RecipeDetailView() {
         if (selectedRecipe.waterProfile) {
             const totalWaterLiters = Number(water.strike) + Number(water.sparge);
             if (totalWaterLiters > 0) {
-                waterCalcResult = calculateRequiredSalts(selectedRecipe.waterProfile, localTapWater, totalWaterLiters);
+                const subStyle = selectedRecipe.subStyle || '';
+                const category = selectedRecipe.category || '';
+                let styleKey = 'Balanced';
+                
+                if (subStyle.includes('Hazy') || category.includes('Hazy')) styleKey = 'Hazy IPA';
+                else if (subStyle.includes('Lager') || category.includes('Lager') || category.includes('Pilsner')) styleKey = 'Lager (Clásica/Pilsner)';
+                else if (subStyle.includes('Stout') || category.includes('Stout') || category.includes('Porter')) styleKey = 'Stout';
+                
+                waterCalcResult = calculateRequiredSalts(selectedRecipe.waterProfile, localTapWater, totalWaterLiters, styleKey);
                 if (waterCalcResult?.salts) {
                     const dynamicSalts = waterCalcResult.salts.map(s => ({
                         ...s,
@@ -223,9 +234,10 @@ export default function RecipeDetailView() {
         
         try {
             await updateRecipe(selectedRecipe.id, { modifications: newMods });
+            addToast("Nota actualizada correctamente.", "success");
             setEditingModIdx(null);
         } catch (err) {
-            alert("Error al actualizar la nota: " + err.message);
+            addToast("Error al actualizar la nota.", "error");
         }
     };
 
@@ -255,7 +267,7 @@ export default function RecipeDetailView() {
             });
         } catch (error) {
             console.error("Error saving water profile:", error);
-            alert("No se pudo guardar el perfil de agua.");
+            addToast("No se pudo guardar el perfil de agua.", "error");
         } finally {
             setIsSavingWater(false);
         }
@@ -293,7 +305,7 @@ export default function RecipeDetailView() {
                 </button>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => { if (!isGuest) navigate(`/recipes/${id}/edit`); else alert(guestTooltip); }}
+                        onClick={() => { if (!isGuest) navigate(`/recipes/${id}/edit`); else addToast(guestTooltip, "info"); }}
                         disabled={isGuest}
                         title={isGuest ? guestTooltip : undefined}
                         className="flex items-center gap-2 text-white font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -307,6 +319,12 @@ export default function RecipeDetailView() {
                         className="flex items-center gap-2 text-red-500 font-bold bg-red-500/10 hover:bg-red-500/20 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Trash2 size={18} /> Eliminar
+                    </button>
+                    <button
+                        onClick={() => generateRecipeLabel(scaledRecipe)}
+                        className="flex items-center gap-2 text-blue-500 font-bold bg-blue-500/10 hover:bg-blue-500/20 px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 border border-blue-500/30"
+                    >
+                        <Printer size={18} /> Etiqueta PDF
                     </button>
                 </div>
             </div>
@@ -324,6 +342,21 @@ export default function RecipeDetailView() {
                         <span className="bg-white/40 px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm backdrop-blur-md border border-white/20" title="Sub-estilo / Categoría">
                             {scaledRecipe.subStyle || scaledRecipe.category}
                         </span>
+                        <button 
+                            onClick={async () => {
+                                if (isGuest) return addToast(guestTooltip, "info");
+                                try {
+                                    await updateRecipe(selectedRecipe.id, { isPublic: !selectedRecipe.isPublic });
+                                    addToast(selectedRecipe.isPublic ? "Receta ahora es privada" : "Receta ahora es pública", "success");
+                                } catch (e) {
+                                    addToast("Error al cambiar privacidad", "error");
+                                }
+                            }}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm backdrop-blur-md border transition-all ${selectedRecipe.isPublic ? 'bg-emerald-500/40 border-emerald-400 text-white' : 'bg-white/20 border-white/10 text-white/70'}`}
+                        >
+                            {selectedRecipe.isPublic ? <Check size={14} /> : <Lock size={14} />}
+                            {selectedRecipe.isPublic ? 'Pública' : 'Privada'}
+                        </button>
                     </div>
                     <h2 className="text-5xl md:text-6xl font-black mb-3 leading-[0.9] drop-shadow-md tracking-tighter">{scaledRecipe.name || 'Receta Sin Nombre'}</h2>
 
@@ -392,7 +425,7 @@ export default function RecipeDetailView() {
                 )}
             </div>
 
-            <div className="bg-panel p-6 md:p-10 rounded-b-[2.5rem] shadow-sm border border-t-0 border-line mt-0">
+            <div className="bg-panel p-8 md:p-12 rounded-b-[2.5rem] shadow-sm border border-t-0 border-line mt-0">
 
                 {/* TAB: RECETA */}
                 {activeTab === 'recipe' && (
@@ -481,13 +514,13 @@ export default function RecipeDetailView() {
                                         const stockItem = costInfo.ingredients.find(i => i.category === 'Malta' && i.name === (malt.name || 'Malta desconocida'));
                                         const invItem = Array.isArray(inventory) ? inventory.find(i => i.category === 'Malta' && (i.name || '').toLowerCase().trim() === (malt.name || '').toLowerCase().trim()) : null;
                                         return (
-                                            <li key={idx} className="flex justify-between items-center text-lg border-b border-amber-100 dark:border-amber-900/30 pb-4">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex items-center gap-1 group/tooltip relative">
-                                                        <span className="font-bold text-content">{malt.name || 'Malta'}</span>
+                                            <li key={idx} className="flex justify-between items-center bg-surface/50 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/20 group hover:shadow-md transition-all">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="flex items-center gap-2 group/tooltip relative">
+                                                        <span className="font-extrabold text-content text-lg">{malt.name || 'Malta'}</span>
                                                         {invItem?.description && (
                                                             <>
-                                                                <Info size={16} className="text-blue-400 cursor-help ml-1" />
+                                                                <Info size={16} className="text-blue-400 cursor-help" />
                                                                 <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl z-50 pointer-events-none whitespace-normal">
                                                                     {invItem.description}
                                                                 </div>
@@ -502,7 +535,10 @@ export default function RecipeDetailView() {
                                                                 : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌ Sin stock</span>
                                                     )}
                                                 </div>
-                                                <span className="bg-panel border border-amber-200 dark:border-slate-700 text-amber-800 dark:text-amber-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{malt.amount} {malt.unit || 'kg'}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-muted text-xs font-bold uppercase tracking-widest">{malt.unit || 'kg'}</span>
+                                                    <span className="bg-panel border border-line text-content px-4 py-2 rounded-xl font-black shadow-sm text-lg min-w-[80px] text-center">{malt.amount}</span>
+                                                </div>
                                             </li>
                                         );
                                     })}
@@ -549,14 +585,14 @@ export default function RecipeDetailView() {
                                         const stockItem = costInfo.ingredients.find(i => i.category === 'Lúpulo' && i.name === (hop.name || 'Lúpulo desconocido'));
                                         const invItem = Array.isArray(inventory) ? inventory.find(i => i.category === 'Lúpulo' && (i.name || '').toLowerCase().trim() === (hop.name || '').toLowerCase().trim()) : null;
                                         return (
-                                            <li key={idx} className="flex flex-col border-b border-green-100 dark:border-green-900/30 pb-4 last:border-0 relative">
-                                                <div className="flex justify-between items-center mb-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="flex items-center gap-1 group/tooltip relative">
-                                                            <span className="font-bold text-slate-800 dark:text-slate-200 text-xl">{hop.name || 'Lúpulo'}</span>
+                                            <li key={idx} className="bg-surface/50 p-4 rounded-2xl border border-green-100 dark:border-green-900/20 group hover:shadow-md transition-all flex flex-col gap-3">
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="flex items-center gap-2 group/tooltip relative">
+                                                            <span className="font-extrabold text-content text-lg">{hop.name || 'Lúpulo'}</span>
                                                             {invItem?.description && (
                                                                 <>
-                                                                    <Info size={16} className="text-blue-400 cursor-help ml-1" />
+                                                                    <Info size={16} className="text-blue-400 cursor-help" />
                                                                     <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl z-50 pointer-events-none whitespace-normal">
                                                                         {invItem.description}
                                                                     </div>
@@ -565,22 +601,27 @@ export default function RecipeDetailView() {
                                                         </div>
                                                         {stockItem && (
                                                             stockItem.hasEnough
-                                                                ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-black">✅</span>
+                                                                ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-black">✅ Stock OK</span>
                                                                 : stockItem.inInventory
-                                                                    ? <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-black">⚠️</span>
-                                                                    : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌</span>
+                                                                    ? <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-black">⚠️ Bajo Stock</span>
+                                                                    : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌ Sin Stock</span>
                                                         )}
                                                     </div>
-                                                    <span className="bg-panel border border-green-200 dark:border-slate-700 text-green-800 dark:text-green-400 px-4 py-1.5 rounded-xl font-black shadow-sm">{hop.amount} {hop.unit || 'g'}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-muted text-xs font-bold uppercase tracking-widest">{hop.unit || 'g'}</span>
+                                                        <span className="bg-panel border border-line text-content px-4 py-2 rounded-xl font-black shadow-sm text-lg min-w-[80px] text-center">{hop.amount}</span>
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     {(hop.additionTime !== undefined || hop.time) && (
-                                                        <span className="text-green-700 dark:text-green-300 font-bold text-sm flex items-center gap-1 bg-green-100/50 dark:bg-green-900/40 w-fit px-3 py-1.5 rounded-lg border border-green-200/50 dark:border-green-800">
-                                                            <Clock size={16} /> {hop.additionTime !== undefined ? `${hop.additionTime}${hop.additionTimeUnit || 'm'}` : hop.time} | {hop.use || hop.stage || 'Hervor'}
+                                                        <span className="text-green-700 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider flex items-center gap-2 bg-green-500/10 px-3 py-1.5 rounded-lg border border-green-500/20">
+                                                            <Clock size={14} /> {hop.additionTime !== undefined ? `${hop.additionTime}${hop.additionTimeUnit || 'm'}` : hop.time} • {hop.use || hop.stage || 'Hervor'}
                                                         </span>
                                                     )}
                                                     {hop.phase === 'fermenting' && (
-                                                        <span className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 bg-purple-100/50 dark:bg-purple-900/40 px-3 py-1.5 rounded-lg border border-purple-200/50 dark:border-purple-800"><Activity size={14} className="inline mr-1" />DH</span>
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-purple-600 dark:text-purple-400 bg-purple-500/10 px-3 py-1.5 rounded-lg border border-purple-500/20 shadow-sm flex items-center gap-2">
+                                                            <Activity size={14} /> DRY HOP
+                                                        </span>
                                                     )}
                                                 </div>
                                             </li>
@@ -591,16 +632,18 @@ export default function RecipeDetailView() {
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-8">
-                            <div className="bg-surface p-8 rounded-3xl border border-line flex flex-col items-start gap-6 shadow-sm justify-center">
-                                <div className="flex items-center gap-4 border-b border-line pb-4 w-full">
-                                    <div className="bg-white dark:bg-slate-700 p-4 rounded-2xl text-slate-600 dark:text-white shadow-md border border-slate-200 dark:border-slate-600">
+                            <div className="bg-surface p-8 rounded-3xl border border-line flex flex-col items-center gap-6 shadow-sm justify-center group hover:shadow-md transition-all">
+                                <div className="flex items-center gap-4 border-b border-line pb-4 w-full justify-center">
+                                    <div className="bg-amber-500/10 p-4 rounded-2xl text-amber-600 dark:text-amber-500 shadow-sm border border-amber-500/20">
                                         <Beaker size={28} />
                                     </div>
                                     <h4 className="font-black text-muted uppercase tracking-widest text-sm">Levadura Recomendada</h4>
                                 </div>
-                                <p className="text-content font-black text-3xl">{scaledRecipe.ingredients.yeast.amount} <span className="text-xl font-bold text-muted">{scaledRecipe.ingredients.yeast.unit || 'sobre'}</span></p>
+                                <div className="flex flex-col items-center gap-1">
+                                    <p className="text-content font-black text-4xl">{scaledRecipe.ingredients.yeast.amount} <span className="text-xl font-bold text-muted uppercase tracking-tighter">{scaledRecipe.ingredients.yeast.unit || 'sobre'}</span></p>
+                                </div>
                                 <div className="group/tooltip relative w-full">
-                                    <p className="flex justify-center items-center gap-2 text-amber-600 dark:text-amber-500 font-bold text-2xl bg-amber-50 dark:bg-amber-900/10 px-4 py-2 rounded-xl w-full text-center border border-amber-100 dark:border-amber-900/30">
+                                    <p className="flex justify-center items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-2xl bg-amber-500/5 dark:bg-amber-900/10 px-6 py-4 rounded-2xl w-full text-center border border-amber-500/20 shadow-inner">
                                         {scaledRecipe.ingredients.yeast.name || 'Genérica'}
                                         {Array.isArray(inventory) && inventory.find(i => i.category === 'Levadura' && (i.name || '').toLowerCase().trim() === (scaledRecipe.ingredients.yeast.name || '').toLowerCase().trim())?.description && (
                                             <>
@@ -624,31 +667,40 @@ export default function RecipeDetailView() {
                                             const stockItem = costInfo.ingredients.find(i => i.category === (other.category || 'Aditivos') && i.name === (other.name || 'Aditivo desconocido'));
                                             const invItem = Array.isArray(inventory) ? inventory.find(i => i.category === (other.category || 'Aditivos') && (i.name || '').toLowerCase().trim() === (other.name || '').toLowerCase().trim()) : null;
                                             return (
-                                                <li key={idx} className="flex flex-col border-b border-purple-100 dark:border-purple-900/30 pb-4 last:border-0 relative">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="flex items-center gap-1 group/tooltip relative">
-                                                                <span className="font-bold text-slate-800 dark:text-slate-200 text-lg">{other.name || 'Aditivo'}</span>
+                                                <li key={idx} className="bg-surface/50 p-4 rounded-2xl border border-purple-100 dark:border-purple-900/20 group hover:shadow-md transition-all flex flex-col gap-3">
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="flex items-center gap-2 group/tooltip relative">
+                                                                <span className="font-extrabold text-content text-lg">{other.name || 'Aditivo'}</span>
                                                                 {other.isDynamic && (
-                                                                    <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-black px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 flex items-center gap-1 ml-2">
+                                                                    <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[9px] font-black px-2 py-0.5 rounded-lg border border-blue-500/20 flex items-center gap-1 uppercase tracking-widest">
                                                                         <Sparkles size={10} /> Ajuste Sales
                                                                     </span>
                                                                 )}
                                                                 {invItem?.description && (
                                                                     <>
-                                                                        <Info size={16} className="text-blue-400 cursor-help ml-1" />
+                                                                        <Info size={16} className="text-blue-400 cursor-help" />
                                                                         <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl z-50 pointer-events-none whitespace-normal">
                                                                             {invItem.description}
                                                                         </div>
                                                                     </>
                                                                 )}
                                                             </div>
-                                                            {stockItem && (stockItem.hasEnough ? <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black">✅</span> : stockItem.inInventory ? <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-black">⚠️</span> : <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-black">❌</span>)}
+                                                            {stockItem && (
+                                                                stockItem.hasEnough 
+                                                                    ? <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-black">✅</span> 
+                                                                    : stockItem.inInventory 
+                                                                        ? <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-black">⚠️</span> 
+                                                                        : <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-black">❌</span>
+                                                            )}
                                                         </div>
-                                                        <span className="bg-panel border border-purple-200 dark:border-slate-700 text-purple-800 dark:text-purple-400 px-3 py-1 rounded-xl font-black shadow-sm text-sm">{other.amount} {other.unit || 'g'}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-muted text-xs font-bold uppercase tracking-widest">{other.unit || 'g'}</span>
+                                                            <span className="bg-panel border border-line text-content px-4 py-2 rounded-xl font-black shadow-sm text-lg min-w-[80px] text-center">{other.amount}</span>
+                                                        </div>
                                                     </div>
-                                                    <span className="text-purple-700 dark:text-purple-300 font-bold text-[11px] flex items-center w-fit px-2 py-1 rounded-md border border-purple-200/50 dark:border-purple-800 bg-purple-100/50 dark:bg-purple-900/40 uppercase tracking-widest">
-                                                        {other.phase === 'fermenting' ? 'Fermentación' : other.phase === 'bottling' ? 'Embotellado' : 'Cocción'}
+                                                    <span className="text-purple-700 dark:text-purple-400 font-bold text-[10px] flex items-center gap-2 w-fit px-3 py-1.5 rounded-lg border border-purple-500/20 bg-purple-500/10 uppercase tracking-widest">
+                                                        <Clock size={14} /> {other.phase === 'fermenting' ? 'Fermentación' : other.phase === 'bottling' ? 'Embotellado' : 'Cocción'}
                                                     </span>
                                                 </li>
                                             );
@@ -670,307 +722,376 @@ export default function RecipeDetailView() {
                             </div>
                         </div>
 
-                        {[
-                            { id: 'cooking', title: 'Fases de Cocción', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'cooking' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Thermometer size={24} />, colorClass: 'text-amber-600 dark:text-amber-500', bgClass: 'bg-amber-50/50 dark:bg-amber-900/10' },
-                            { id: 'fermenting', title: 'Fases de Fermentación', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'fermenting' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Activity size={24} />, colorClass: 'text-purple-600 dark:text-purple-500', bgClass: 'bg-purple-50/50 dark:bg-purple-900/10' },
-                            { id: 'bottling', title: 'Fase de Envasado', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'bottling' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Clock size={24} />, colorClass: 'text-blue-600 dark:text-blue-500', bgClass: 'bg-blue-50/50 dark:bg-blue-900/10' }
-                        ].map(phaseGrp => phaseGrp.steps.length > 0 && (
-                            <div key={phaseGrp.id} className={`p-8 rounded-3xl border border-line shadow-sm mb-8 ${phaseGrp.bgClass}`}>
-                                <h4 className={`text-2xl font-black flex items-center gap-3 mb-6 ${phaseGrp.colorClass} border-b border-gray-200/50 dark:border-slate-700/50 pb-4`}>
-                                    {phaseGrp.icon} {phaseGrp.title}
-                                </h4>
+                        {(() => {
+                            const phases = [
+                                { id: 'cooking', title: 'Fases de Cocción', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'cooking' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Thermometer size={24} />, colorClass: 'text-amber-600 dark:text-amber-500', bgClass: 'bg-amber-50/50 dark:bg-amber-900/10' },
+                                { id: 'fermenting', title: 'Fases de Fermentación', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'fermenting' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Activity size={24} />, colorClass: 'text-purple-600 dark:text-purple-500', bgClass: 'bg-purple-50/50 dark:bg-purple-900/10' },
+                                { id: 'bottling', title: 'Fase de Envasado', steps: (scaledRecipe.steps || []).filter(s => getEffectivePhase(s) === 'bottling' && !scaledRecipe.skippedStages?.includes(s.stageId)), icon: <Clock size={24} />, colorClass: 'text-blue-600 dark:text-blue-500', bgClass: 'bg-blue-50/50 dark:bg-blue-900/10' }
+                            ];
 
-                                {/* Mostrar Insumos de esta fase */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                    {scaledRecipe.ingredients.hops.filter(h => getEffectivePhase(h) === phaseGrp.id && (!h.stageId || !scaledRecipe.skippedStages?.includes(h.stageId))).map((h, i) => (
-                                        <div key={`h-${i}`} className="bg-surface p-4 rounded-2xl border border-line flex justify-between items-center shadow-sm">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`p-2 rounded-lg ${phaseGrp.id === 'cooking' ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'}`}><Leaf size={16} /></div>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-content text-sm">{h.name}</span>
-                                                        <span className="text-[10px] text-muted uppercase font-black">
-                                                            {h.additionTime !== undefined ? 
-                                                                (h.additionTime === (scaledRecipe.steps.find(s => s.stageId === 'boiling')?.duration || 60) ? 'INICIO' : `@ ${h.additionTime}${h.additionTimeUnit || 'm'}`) 
-                                                                : (h.time || 'Adición')}
-                                                        </span>
-                                                    </div>
-                                            </div>
-                                            <span className="font-black text-content">{h.amount} g</span>
-                                        </div>
-                                    ))}
-                                    {scaledRecipe.ingredients.others.filter(o => getEffectivePhase(o) === phaseGrp.id && o.category === 'Sales Minerales' && (!o.stageId || !scaledRecipe.skippedStages?.includes(o.stageId))).map((o, i) => (
-                                        <div key={`s-${i}`} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/20 flex justify-between items-center shadow-sm">
-                                            <div className="flex items-center gap-3">
-                                                <div className="bg-blue-500 text-white p-2 rounded-lg shadow-sm"><Sparkles size={16} /></div>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-blue-900 dark:text-blue-100 text-sm">{o.name}</span>
-                                                        <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase font-black">
-                                                            {o.additionTime !== undefined ? (o.additionTime === 0 ? 'INICIO' : `@ ${o.additionTime}${o.additionTimeUnit || 'm'}`) : (o.time || 'Start')} | Sal Mineral
-                                                        </span>
-                                                    </div>
-                                            </div>
-                                            <span className="font-black text-blue-900 dark:text-blue-100">{o.amount} {o.unit || 'g'}</span>
-                                        </div>
-                                    ))}
-                                </div>
+                            const hasAnySteps = phases.some(p => p.steps.length > 0);
 
-                                <div className="space-y-4">
-                                    {phaseGrp.steps.map((step, localIdx) => {
-                                        const globalId = step.id || `${phaseGrp.id}-${localIdx}`;
-                                        return (
-                                            <div key={globalId} className="flex flex-col group">
-                                                <div
-                                                    onClick={() => toggleStep(globalId)}
-                                                    className={`p-6 md:p-8 rounded-t-2xl md:rounded-2xl border cursor-pointer transition-all duration-300 flex items-start gap-4 md:gap-5 select-none ${completedSteps.includes(globalId) ? 'border-green-400/50 bg-green-50/30 dark:bg-green-900/10 opacity-70' : 'border-line bg-panel shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600'} ${expandedStep === globalId ? 'rounded-b-none border-b-0' : ''}`}
-                                                    style={{ WebkitTapHighlightColor: 'transparent' }}
-                                                >
-                                                    <button className={`mt-0.5 rounded-full flex-shrink-0 transition-colors ${completedSteps.includes(globalId) ? 'text-green-500' : 'text-gray-300 dark:text-slate-600 group-hover:text-amber-400'}`}>
-                                                        <CheckCircle2 size={32} className={completedSteps.includes(globalId) ? 'fill-green-100 dark:fill-green-900' : ''} />
-                                                    </button>
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-3 mb-1">
-                                                            <h3 className={`font-black text-xl md:text-2xl ${completedSteps.includes(globalId) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-content'}`}>
-                                                                {step.title || 'Paso'}
-                                                            </h3>
-                                                            {step.duration && (
-                                                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-2 py-1 rounded-lg border border-line whitespace-nowrap">
-                                                                    <Clock size={12} className="inline mr-1" />
-                                                                    {step.duration} {step.timeUnit || (['fermenting', 'bottling'].includes(getEffectivePhase(step)) ? 'd' : 'm')}
-                                                                </span>
-                                                            )}
+                            if (!hasAnySteps) {
+                                return (
+                                    <div className="p-20 text-center bg-panel rounded-[3rem] shadow-inner border border-line border-dashed m-6">
+                                        <Activity size={64} className="mx-auto text-muted/30 mb-6" />
+                                        <p className="font-black text-muted text-2xl uppercase tracking-tighter">Bitácora de Proceso Vacía</p>
+                                        <p className="text-muted/60 mt-2 font-medium">No se han definido pasos detallados para esta configuración.</p>
+                                    </div>
+                                );
+                            }
+
+                            return phases.map(phaseGrp => phaseGrp.steps.length > 0 && (
+                                <div key={phaseGrp.id} className={`p-8 rounded-3xl border border-line shadow-sm mb-8 ${phaseGrp.bgClass}`}>
+                                    <h4 className={`text-2xl font-black flex items-center gap-3 mb-6 ${phaseGrp.colorClass} border-b border-gray-200/50 dark:border-slate-700/50 pb-4`}>
+                                        {phaseGrp.icon} {phaseGrp.title}
+                                    </h4>
+
+                                    {/* Mostrar Insumos de esta fase */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                        {scaledRecipe.ingredients.hops.filter(h => getEffectivePhase(h) === phaseGrp.id && (!h.stageId || !scaledRecipe.skippedStages?.includes(h.stageId))).map((h, i) => (
+                                            <div key={`h-${i}`} className="bg-surface p-4 rounded-2xl border border-line flex justify-between items-center shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`p-2 rounded-lg ${phaseGrp.id === 'cooking' ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'}`}><Leaf size={16} /></div>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-content text-sm">{h.name}</span>
+                                                            <span className="text-[10px] text-muted uppercase font-black">
+                                                                {h.additionTime !== undefined ? 
+                                                                    (h.additionTime === (scaledRecipe.steps.find(s => s.stageId === 'boiling')?.duration || 60) ? 'INICIO' : `@ ${h.additionTime}${h.additionTimeUnit || 'm'}`) 
+                                                                    : (h.time || 'Adición')}
+                                                            </span>
                                                         </div>
-                                                        <p className={`text-base md:text-lg leading-relaxed font-medium ${completedSteps.includes(globalId) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
-                                                            {step.desc || ''}
-                                                        </p>
+                                                </div>
+                                                <span className="font-black text-content">{h.amount} g</span>
+                                            </div>
+                                        ))}
+                                        {scaledRecipe.ingredients.others.filter(o => getEffectivePhase(o) === phaseGrp.id && o.category === 'Sales Minerales' && (!o.stageId || !scaledRecipe.skippedStages?.includes(o.stageId))).map((o, i) => (
+                                            <div key={`s-${i}`} className="bg-blue-500/5 p-4 rounded-2xl border border-line flex justify-between items-center shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="bg-blue-500 text-white p-2 rounded-lg shadow-sm"><Sparkles size={16} /></div>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-blue-900 dark:text-blue-100 text-sm">{o.name}</span>
+                                                            <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase font-black">
+                                                                {o.additionTime !== undefined ? (o.additionTime === 0 ? 'INICIO' : `@ ${o.additionTime}${o.additionTimeUnit || 'm'}`) : (o.time || 'Start')} | Sal Mineral
+                                                            </span>
+                                                        </div>
+                                                </div>
+                                                <span className="font-black text-blue-900 dark:text-blue-100">{o.amount} {o.unit || 'g'}</span>
+                                            </div>
+                                        ))}
+                                    </div>
 
-                                                        {/* Insumos vinculados a este paso */}
-                                                        {(() => {
-                                                            const stepMalts = scaledRecipe.ingredients.malts.filter(m => m.stepId === step.id);
-                                                            const stepHops = scaledRecipe.ingredients.hops.filter(h => h.stepId === step.id);
-                                                            const stepOthers = scaledRecipe.ingredients.others.filter(o => o.stepId === step.id);
-                                                            
-                                                            if (stepMalts.length === 0 && stepHops.length === 0 && stepOthers.length === 0) return null;
-
-                                                            return (
-                                                                <div className="mt-4 flex flex-wrap gap-2">
-                                                                    {stepMalts.map((m, i) => (
-                                                                        <span key={`m-${i}`} className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black px-2 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1">
-                                                                            <Wheat size={10} /> {m.name} ({m.amount} {m.unit || 'kg'})
-                                                                            {(m.additionTime !== undefined || m.time || true) && (
-                                                                                <span className="opacity-60 ml-1">@ {getSafeAdditionTime(m, step)}{m.additionTimeUnit || 'm'}</span>
-                                                                            )}
-                                                                        </span>
-                                                                    ))}
-                                                                    {stepHops.map((h, i) => (
-                                                                        <span key={`h-${i}`} className="bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-black px-2 py-1 rounded-lg border border-green-500/20 flex items-center gap-1">
-                                                                            <Leaf size={10} /> {h.name} ({h.amount} {h.unit || 'g'})
-                                                                            {(h.additionTime !== undefined || h.time || true) && (
-                                                                                <span className="opacity-60 ml-1">@ {getSafeAdditionTime(h, step)}{h.additionTimeUnit || 'm'}</span>
-                                                                            )}
-                                                                        </span>
-                                                                    ))}
-                                                                    {stepOthers.map((o, i) => (
-                                                                        <span key={`o-${i}`} className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-black px-2 py-1 rounded-lg border border-purple-500/20 flex items-center gap-1">
-                                                                            <Sparkles size={10} /> {o.name} ({o.amount} {o.unit || 'g'})
-                                                                            {(o.additionTime !== undefined || o.time || true) && (
-                                                                                <span className="opacity-60 ml-1">@ {getSafeAdditionTime(o, step)}{o.additionTimeUnit || 'm'}</span>
-                                                                            )}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                    {step.details && typeof step.details === 'string' && (
-                                                        <button
-                                                            onClick={(e) => toggleStepDetails(e, globalId)}
-                                                            className="ml-auto text-gray-400 hover:text-amber-600 p-2 flex flex-col items-center justify-center transition-colors bg-surface rounded-xl hover:bg-amber-50 dark:hover:bg-slate-700"
-                                                            title="Ver detalle del paso"
-                                                        >
-                                                            {expandedStep === globalId ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+                                    <div className="space-y-4">
+                                        {phaseGrp.steps.map((step, localIdx) => {
+                                            const globalId = step.id || `${phaseGrp.id}-${localIdx}`;
+                                            return (
+                                                <div key={globalId} className="flex flex-col group">
+                                                    <div
+                                                        onClick={() => toggleStep(globalId)}
+                                                        className={`p-6 md:p-8 rounded-t-2xl md:rounded-2xl border cursor-pointer transition-all duration-300 flex items-start gap-4 md:gap-5 select-none ${completedSteps.includes(globalId) ? 'border-green-400/50 bg-green-50/30 dark:bg-green-900/10 opacity-70' : 'border-line bg-panel shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600'} ${expandedStep === globalId ? 'rounded-b-none border-b-0' : ''}`}
+                                                        style={{ WebkitTapHighlightColor: 'transparent' }}
+                                                    >
+                                                        <button className={`mt-0.5 rounded-full flex-shrink-0 transition-colors ${completedSteps.includes(globalId) ? 'text-green-500' : 'text-gray-300 dark:text-slate-600 group-hover:text-amber-400'}`}>
+                                                            <CheckCircle2 size={32} className={completedSteps.includes(globalId) ? 'fill-green-100 dark:fill-green-900' : ''} />
                                                         </button>
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-3 mb-1">
+                                                                <h3 className={`font-black text-xl md:text-2xl ${completedSteps.includes(globalId) ? 'text-green-800 dark:text-green-400 line-through decoration-green-400 decoration-2' : 'text-content'}`}>
+                                                                    {step.title || 'Paso'}
+                                                                </h3>
+                                                                {step.duration && (
+                                                                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-2 py-1 rounded-lg border border-line whitespace-nowrap">
+                                                                        <Clock size={12} className="inline mr-1" />
+                                                                        {step.duration} {step.timeUnit || (['fermenting', 'bottling'].includes(getEffectivePhase(step)) ? 'd' : 'm')}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className={`text-base md:text-lg leading-relaxed font-medium ${completedSteps.includes(globalId) ? 'text-green-700 dark:text-green-500' : 'text-slate-600 dark:text-slate-400'}`}>
+                                                                {step.desc || ''}
+                                                            </p>
+
+                                                            {/* Insumos vinculados a este paso */}
+                                                            {(() => {
+                                                                const stepMalts = scaledRecipe.ingredients.malts.filter(m => m.stepId === step.id);
+                                                                const stepHops = scaledRecipe.ingredients.hops.filter(h => h.stepId === step.id);
+                                                                const stepOthers = scaledRecipe.ingredients.others.filter(o => o.stepId === step.id);
+                                                                
+                                                                if (stepMalts.length === 0 && stepHops.length === 0 && stepOthers.length === 0) return null;
+
+                                                                return (
+                                                                    <div className="mt-4 flex flex-wrap gap-2">
+                                                                        {stepMalts.map((m, i) => (
+                                                                            <span key={`m-${i}`} className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black px-3 py-1.5 rounded-xl border border-amber-500/20 flex items-center gap-2 shadow-sm transition-all hover:scale-105">
+                                                                                <Wheat size={12} /> {m.name} ({m.amount} {m.unit || 'kg'})
+                                                                            </span>
+                                                                        ))}
+                                                                        {stepHops.map((h, i) => (
+                                                                            <span key={`h-${i}`} className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black px-3 py-1.5 rounded-xl border border-emerald-500/20 flex items-center gap-2 shadow-sm transition-all hover:scale-105">
+                                                                                <Leaf size={12} /> {h.name} ({h.amount} {h.unit || 'g'})
+                                                                                {(h.additionTime !== undefined || h.time) && (
+                                                                                    <span className="opacity-60 ml-1 font-bold">@ {getSafeAdditionTime(h, step)}{h.additionTimeUnit || 'm'}</span>
+                                                                                )}
+                                                                            </span>
+                                                                        ))}
+                                                                        {stepOthers.map((o, i) => (
+                                                                            <span key={`o-${i}`} className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-black px-3 py-1.5 rounded-xl border border-purple-500/20 flex items-center gap-2 shadow-sm transition-all hover:scale-105">
+                                                                                <Sparkles size={12} /> {o.name} ({o.amount} {o.unit || 'g'})
+                                                                                {(o.additionTime !== undefined || o.time) && (
+                                                                                    <span className="opacity-60 ml-1 font-bold">@ {getSafeAdditionTime(o, step)}{o.additionTimeUnit || 'm'}</span>
+                                                                                )}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                        {step.details && typeof step.details === 'string' && (
+                                                            <button
+                                                                onClick={(e) => toggleStepDetails(e, globalId)}
+                                                                className={`ml-auto p-4 rounded-2xl flex items-center justify-center transition-all ${expandedStep === globalId ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'bg-panel text-muted hover:text-content border border-line hover:border-amber-500/30'}`}
+                                                                title="Ver detalle del paso"
+                                                            >
+                                                                {expandedStep === globalId ? <ChevronUp size={24} strokeWidth={3} /> : <ChevronDown size={24} strokeWidth={3} />}
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    {expandedStep === globalId && step.details && typeof step.details === 'string' && (
+                                                        <div className="p-8 md:p-12 bg-slate-500/[0.03] dark:bg-slate-900/40 border-x border-b border-line rounded-b-[2.5rem] animate-fadeIn shadow-inner">
+                                                            <div className="flex items-start gap-8">
+                                                                <div className="bg-amber-500/10 p-5 rounded-[2rem] border border-amber-500/20 text-amber-600 dark:text-amber-500 shadow-sm">
+                                                                    <Info size={32} />
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted mb-6 flex items-center gap-3">
+                                                                        <div className="w-8 h-px bg-line"></div>
+                                                                        Protocolo Maestro de Operación
+                                                                    </h4>
+                                                                    <div className="text-content font-medium whitespace-pre-line leading-relaxed text-lg md:text-xl border-l-4 border-amber-500/30 pl-8">
+                                                                        {step.details}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     )}
                                                 </div>
-
-                                                {expandedStep === globalId && step.details && typeof step.details === 'string' && (
-                                                    <div className="p-6 md:p-8 bg-surface/80 border border-t-0 border-line rounded-b-2xl text-slate-800 dark:text-slate-200 animate-fadeIn text-sm md:text-base shadow-inner">
-                                                        <h4 className="font-black flex items-center gap-2 mb-4 text-amber-700 dark:text-amber-500 uppercase tracking-wider text-[10px] bg-amber-500/5 w-fit px-3 py-1.5 rounded-lg border border-amber-500/10">
-                                                            <Info size={16} /> Guía Técnica y Control Pro:
-                                                        </h4>
-                                                        <div className="pl-5 border-l-4 border-amber-300 dark:border-amber-700/50 font-medium whitespace-pre-line text-slate-700 dark:text-slate-300 leading-relaxed">
-                                                            {step.details}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-
-                        {(!scaledRecipe.steps || scaledRecipe.steps.length === 0) && (
-                            <div className="p-10 text-center text-muted bg-panel rounded-3xl shadow-sm border border-line">
-                                <p className="font-bold text-lg italic">No hay pasos detallados para esta receta.</p>
-                            </div>
-                        )}
+                            ));
+                        })()}
                     </div>
-                )
-                }
+                )}
 
                 {/* TAB: AGUA */}
                 {activeTab === 'water' && (
-                    <div className="space-y-8 animate-fadeIn">
-                        <div className="bg-blue-50/50 dark:bg-blue-900/10 p-8 md:p-10 rounded-3xl border border-blue-100 dark:border-blue-800 shadow-sm relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 text-blue-500 pointer-events-none">
-                                <Droplets size={200} />
+                    <div className="space-y-12 animate-fadeIn p-2 md:p-6">
+                        <div className="bg-panel p-8 md:p-12 rounded-[2.5rem] border border-line shadow-sm relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-8 opacity-[0.03] dark:opacity-[0.05] text-blue-500 pointer-events-none group-hover:scale-110 transition-transform duration-700">
+                                <Droplets size={240} />
                             </div>
-                            <h3 className="text-3xl font-black text-blue-900 dark:text-blue-400 mb-2 flex items-center gap-3 relative z-10">
-                                <Droplets size={32} className="text-blue-500" /> Perfil Mineral Objetivo
-                            </h3>
-                            <p className="text-blue-800 dark:text-blue-300 text-lg mb-8 font-medium relative z-10 max-w-2xl">
-                                Ajustar el agua es el secreto para transformar una buena cerveza en una cerveza de campeonato mundial.
-                            </p>
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 relative z-10">
+                                <div>
+                                    <h3 className="text-3xl font-black text-content mb-2 flex items-center gap-3">
+                                        <Droplets size={32} className="text-blue-500" /> Perfil Mineral Objetivo
+                                    </h3>
+                                    <p className="text-muted font-medium text-lg max-w-2xl leading-relaxed">
+                                        El perfil iónico objetivo optimizado para el estilo <span className="text-blue-500 dark:text-blue-400 font-black px-2 bg-blue-500/10 rounded-lg">{scaledRecipe.category || 'Base'}</span>.
+                                    </p>
+                                </div>
+                            </div>
 
                             {scaledRecipe.waterProfile ? (
-                                <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-5 text-center relative z-10">
+                                <div className="grid grid-cols-3 md:grid-cols-6 gap-4 md:gap-6 relative z-10">
                                     {['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].map(ion => (
-                                        <div key={ion} className="bg-panel p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-slate-700 flex flex-col transition-transform hover:-translate-y-1">
-                                            <span className="block font-black text-slate-400 text-[10px] md:text-sm uppercase tracking-widest mb-2">{ion}</span>
-                                            <span className="text-blue-600 dark:text-blue-400 font-black text-2xl md:text-4xl">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
+                                        <div key={ion} className="bg-surface p-6 rounded-2xl shadow-sm border border-line flex flex-col items-center group/ion hover:border-blue-500/30 transition-all">
+                                            <span className="block font-black text-muted text-xs uppercase tracking-[0.2em] mb-3 group-hover/ion:text-blue-500 transition-colors">{ion}</span>
+                                            <span className="text-content font-black text-3xl md:text-4xl tabular-nums">{scaledRecipe.waterProfile[ion] ?? '-'}</span>
+                                            <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase">ppm</span>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="bg-panel p-8 rounded-2xl text-center text-muted font-bold border border-blue-100 dark:border-slate-700 relative z-10 text-lg">
+                                <div className="bg-surface p-10 rounded-3xl text-center text-muted font-bold border border-dashed border-line relative z-10 text-lg">
                                     No hay un perfil estricto para esta receta.
                                 </div>
                             )}
                         </div>
 
-                        <div className="bg-panel p-8 md:p-10 rounded-3xl border border-line shadow-sm">
-                            <div className="flex justify-between items-center mb-8">
-                                <h4 className="font-black text-content text-2xl flex items-center gap-3">Tu Agua de la Llave (Base)</h4>
+                        <div className="bg-panel p-8 md:p-12 rounded-[2.5rem] border border-line shadow-sm overflow-hidden group">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+                                <div>
+                                    <h4 className="font-black text-content text-2xl flex items-center gap-3">
+                                        <Activity size={24} className="text-emerald-500" /> Agua Base Reconocida
+                                    </h4>
+                                    <p className="text-muted text-sm font-medium mt-1">Valores actuales de tu suministro (ppm).</p>
+                                </div>
                                 {hasWaterChanges && (
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-3 bg-surface p-2 rounded-2xl border border-line shadow-inner">
                                         <button 
                                             onClick={() => setLocalTapWater(selectedRecipe.tapWaterProfile || baseWater)}
-                                            className="px-4 py-2 text-xs font-black uppercase text-muted hover:text-red-500 transition-colors"
+                                            className="px-6 py-3 text-xs font-black uppercase text-muted hover:text-red-500 transition-colors rounded-xl font-black"
                                         >
                                             Restablecer
                                         </button>
                                         <button 
                                             onClick={handleSaveWater}
                                             disabled={isSavingWater}
-                                            className="bg-emerald-500 text-white px-5 py-2 rounded-xl text-xs font-black uppercase shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-2"
+                                            className="bg-emerald-500 text-white px-8 py-3 rounded-xl text-xs font-black uppercase shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-3 hover:scale-[1.03] active:scale-95"
                                         >
-                                            {isSavingWater ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                                            Guardar Cambios
+                                            {isSavingWater ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                            Guardar Configuración
                                         </button>
                                     </div>
                                 )}
                             </div>
-                            <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-6">
+                            <div className="grid grid-cols-3 md:grid-cols-6 gap-4 md:gap-6">
                                 {['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].map(ion => (
-                                    <div key={ion}>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">{ion}</label>
-                                        <input
-                                            type="number"
-                                            value={localTapWater[ion] || 0}
-                                            onChange={(e) => setLocalTapWater(prev => ({ ...prev, [ion]: Number(e.target.value) || 0 }))}
-                                            className="w-full p-4 md:p-5 border border-line rounded-2xl text-center font-black text-xl md:text-2xl outline-none bg-surface text-content transition-all shadow-inner focus:ring-2 focus:ring-blue-500/30"
-                                        />
+                                    <div key={ion} className="group/input relative">
+                                        <label className="block text-[10px] font-black text-muted uppercase tracking-[0.2em] mb-4 text-center group-focus-within/input:text-blue-500 transition-colors">{ion}</label>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                value={localTapWater[ion] || 0}
+                                                onChange={(e) => setLocalTapWater(prev => ({ ...prev, [ion]: Number(e.target.value) || 0 }))}
+                                                className="w-full p-5 md:p-6 border border-line rounded-2xl text-center font-black text-2xl md:text-3xl outline-none bg-surface text-content transition-all shadow-inner focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50"
+                                            />
+                                            <div className="absolute inset-0 rounded-2xl pointer-events-none border-2 border-transparent group-focus-within/input:border-blue-500/20 transition-all"></div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
                         {scaledRecipe.waterCalc && scaledRecipe.waterCalc.salts && (
-                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-8 md:p-12 rounded-3xl border border-amber-200 dark:border-amber-900/50 shadow-xl relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 text-amber-500 pointer-events-none">
-                                    <Sparkles size={200} />
+                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800/50 dark:to-slate-900/50 p-8 md:p-12 rounded-[3.5rem] border border-blue-100 dark:border-blue-900/30 shadow-xl relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-8 opacity-[0.03] dark:opacity-[0.05] text-blue-600 pointer-events-none group-hover:rotate-12 transition-transform duration-1000">
+                                    <Sparkles size={240} />
                                 </div>
                                 
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 relative z-10">
-                                    <h4 className="font-black text-amber-900 dark:text-amber-500 text-3xl md:text-4xl flex items-center gap-3">
-                                        <Scale size={40} className="text-amber-600" /> Adición de Sales
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8 relative z-10">
+                                    <h4 className="font-black text-content text-3xl md:text-4xl flex items-center gap-4">
+                                        <div className="bg-blue-500 text-white p-3 rounded-2xl shadow-lg shadow-blue-500/20">
+                                            <Scale size={32} />
+                                        </div>
+                                        Ajuste de Sales
                                     </h4>
-                                    <span className="bg-amber-600 text-white px-6 py-3 rounded-2xl text-lg font-black shadow-md flex items-center gap-2">
-                                        <Droplets size={20} /> Para {((Number(scaledRecipe.ingredients.water.strike) + Number(scaledRecipe.ingredients.water.sparge))).toFixed(1)} L (Total)
-                                    </span>
+                                    <div className="bg-surface/80 backdrop-blur-md border border-line px-8 py-4 rounded-3xl shadow-sm flex items-center gap-4 group/water">
+                                        <Droplets size={24} className="text-blue-500 group-hover/water:animate-bounce" />
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-muted uppercase tracking-widest">Volumen Total</span>
+                                            <span className="text-content font-black text-xl leading-none">{((Number(scaledRecipe.ingredients.water.strike) + Number(scaledRecipe.ingredients.water.sparge))).toFixed(1)} Litros</span>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                {/* Banner "Paso Cero" */}
-                                <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 rounded-2xl text-white mb-10 shadow-lg shadow-amber-500/20 flex items-center gap-5 relative z-10 border border-white/20 animate-pulse-slow">
-                                    <div className="bg-white/20 p-3 rounded-xl backdrop-blur-md">
+                                {/* Banner "Paso Cero" Premium */}
+                                <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 p-8 rounded-[2.5rem] text-content mb-12 shadow-sm flex flex-col md:flex-row items-center gap-8 relative z-10 border border-amber-500/20 hover:border-amber-500/40 transition-all group/banner overflow-hidden">
+                                    <div className="absolute top-0 right-0 bottom-0 w-32 bg-gradient-to-l from-amber-500/5 to-transparent pointer-events-none"></div>
+                                    <div className="bg-amber-500 text-white p-5 rounded-[2rem] shadow-xl shadow-amber-500/20 relative group-hover/banner:scale-110 transition-transform duration-500">
                                         <Info size={32} />
+                                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-white rounded-full animate-ping"></div>
                                     </div>
-                                    <div>
-                                        <h5 className="font-black text-xl uppercase tracking-tighter">PASO CERO: Preparación del Agua</h5>
-                                        <p className="font-medium opacity-90 leading-tight">Mezcla las sales indicadas a continuación <span className="underline font-black">AL INICIO</span> de la maceración para asegurar el pH y la extracción enzimática óptima.</p>
+                                    <div className="flex-1 text-center md:text-left">
+                                        <h5 className="font-black text-2xl uppercase tracking-tighter text-amber-600 dark:text-amber-500 mb-2">Paso Cero: Preparación del Agua</h5>
+                                        <p className="font-medium text-muted-foreground leading-relaxed text-lg max-w-3xl">
+                                            Mezcle las sales indicadas <span className="underline decoration-amber-500/50 decoration-4 underline-offset-4 font-black text-content">AL INICIO</span> de la maceración. Un agua equilibrada garantiza el pH correcto y la máxima eficiencia enzimática.
+                                        </p>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10 relative z-10">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 relative z-10">
                                     {scaledRecipe.waterCalc.salts.map((salt, idx) => {
                                         const isCalcium = salt.name.toLowerCase().includes('calcio');
                                         const isMagnesium = salt.name.toLowerCase().includes('magnesio');
                                         const isSodium = salt.name.toLowerCase().includes('sodio');
                                         
                                         return (
-                                            <div key={idx} className="bg-panel p-6 md:p-8 rounded-3xl border border-line text-center shadow-md relative overflow-hidden transition-all duration-500 hover:scale-105 group">
-                                                <div className={`absolute top-0 left-0 w-full h-2 transition-all group-hover:h-3 ${
+                                            <div key={idx} className="bg-surface p-8 rounded-[2rem] border border-line text-center shadow-md relative overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-2 group/salt">
+                                                <div className={`absolute top-0 left-0 w-full h-2 transition-all group-hover/salt:h-3 ${
                                                     isCalcium ? 'bg-blue-400' : 
-                                                    isMagnesium ? 'bg-green-400' : 
+                                                    isMagnesium ? 'bg-emerald-400' : 
                                                     isSodium ? 'bg-purple-400' : 'bg-amber-400'
                                                 }`}></div>
-                                                <div className="absolute -right-2 -top-2 opacity-5 scale-150 rotate-12 group-hover:scale-[2] group-hover:rotate-0 transition-all duration-700">
-                                                    <Sparkles size={80} />
+                                                <div className="mb-4">
+                                                    <span className="text-[10px] font-black text-muted uppercase tracking-[0.2em] block mb-2">{salt.name}</span>
+                                                    <div className="h-px bg-gradient-to-r from-transparent via-line to-transparent w-full opacity-50"></div>
                                                 </div>
-                                                <span className="block font-black text-content text-5xl mb-3 tabular-nums transition-all duration-500">
-                                                    {salt.amount}g
-                                                </span>
-                                                <span className="text-xs md:text-sm font-black text-muted uppercase tracking-widest block bg-surface/50 py-2 rounded-xl border border-line/50">{salt.name}</span>
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className="text-content font-black text-5xl tabular-nums tracking-tighter">
+                                                        {salt.amount}
+                                                    </span>
+                                                    <span className="text-sm font-bold text-muted uppercase">gramos</span>
+                                                </div>
                                             </div>
                                         );
                                     })}
                                 </div>
 
-                                <div className="bg-white dark:bg-slate-950 p-8 md:p-10 rounded-3xl border border-amber-200 dark:border-slate-700 shadow-inner relative z-10">
-                                    <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                                        <h5 className="font-black text-sm text-slate-400 uppercase tracking-widest text-center md:text-left">Perfil Final Estimado vs Objetivo</h5>
+                                <div className="bg-surface p-8 md:p-12 rounded-[2.5rem] border border-line shadow-inner relative z-10 overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/[0.02] dark:bg-blue-500/[0.05] rounded-full blur-3xl -mr-32 -mt-32"></div>
+                                    
+                                    <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-8">
+                                        <div className="flex flex-col items-center md:items-start">
+                                            <h5 className="font-black text-xs text-muted uppercase tracking-[0.2em] mb-2">Simulación de Perfil Final</h5>
+                                            <div className="h-1 w-12 bg-blue-500 rounded-full"></div>
+                                        </div>
                                         
-                                        {/* Sulfate/Chloride Ratio Indicator */}
+                                        {/* Sulfate/Chloride Ratio Indicator Premium */}
                                         {(() => {
+                                            const subStyle = scaledRecipe.subStyle || '';
+                                            const category = selectedRecipe.category || '';
+                                            let styleKey = 'Balanced';
+                                            
+                                            if (subStyle.includes('Hazy') || category.includes('Hazy')) styleKey = 'Hazy IPA';
+                                            else if (subStyle.includes('Lager') || category.includes('Lager') || category.includes('Pilsner')) styleKey = 'Lager (Clásica/Pilsner)';
+                                            else if (subStyle.includes('Stout') || category.includes('Stout') || category.includes('Porter')) styleKey = 'Stout';
+                                            
+                                            const styleConfig = WATER_STYLE_CONFIG[styleKey] || WATER_STYLE_CONFIG['Balanced'];
+                                            
                                             const so4 = scaledRecipe.waterCalc.finalProfile.SO4;
                                             const cl = scaledRecipe.waterCalc.finalProfile.Cl;
-                                            const ratio = cl > 0 ? (so4 / cl).toFixed(2) : so4.toFixed(2);
-                                            let label = "Equilibrado";
-                                            let color = "text-amber-500";
-                                            let position = "50%";
+                                            const ratio = cl > 0 ? (so4 / cl) : so4;
+                                            const ideal = styleConfig.idealRatio || 1.0;
+                                            
+                                            let position = 50;
+                                            if (ratio <= ideal) {
+                                                position = (ratio / ideal) * 50;
+                                            } else {
+                                                const maxRatio = ideal * 4;
+                                                position = 50 + ((ratio - ideal) / (maxRatio - ideal)) * 50;
+                                            }
+                                            position = Math.max(5, Math.min(95, position));
 
-                                            if (ratio > 2) { label = "Muy Amarga / Seca"; color = "text-red-500"; position = "90%"; }
-                                            else if (ratio > 1.3) { label = "Amargor Resaltado"; color = "text-orange-500"; position = "70%"; }
-                                            else if (ratio < 0.5) { label = "Cuerpo Pleno / Sedosa"; color = "text-blue-500"; position = "10%"; }
-                                            else if (ratio < 0.77) { label = "Malteado / Dulzor"; color = "text-cyan-500"; position = "30%"; }
+                                            let label = "Equilibrado";
+                                            let color = "bg-amber-500";
+                                            let textColor = "text-amber-500";
+                                            
+                                            const diff = ratio / ideal;
+                                            if (diff > 2) { label = styleConfig.labels.bitter + " (Nivel Alto)"; color = "bg-red-500"; textColor = "text-red-500"; }
+                                            else if (diff > 1.3) { label = styleConfig.labels.bitter; color = "bg-orange-500"; textColor = "text-orange-500"; }
+                                            else if (diff < 0.5) { label = styleConfig.labels.malty + " (Nivel Alto)"; color = "bg-blue-500"; textColor = "text-blue-500"; }
+                                            else if (diff < 0.77) { label = styleConfig.labels.malty; color = "bg-cyan-500"; textColor = "text-cyan-500"; }
 
                                             return (
-                                                <div className="bg-surface p-3 px-6 rounded-2xl border border-line flex flex-col items-center min-w-[200px]">
-                                                    <span className="text-[10px] font-black text-muted uppercase tracking-tighter mb-1">Ratio SO4 / Cl</span>
-                                                    <div className="w-full h-1.5 bg-line rounded-full mb-2 relative overflow-hidden">
-                                                        <div className={`absolute top-0 h-full w-2 ${color.replace('text', 'bg')} transition-all duration-1000`} style={{ left: `calc(${position} - 4px)` }}></div>
+                                                <div className="bg-panel p-5 px-8 rounded-3xl border border-line flex flex-col items-center min-w-[280px] shadow-sm">
+                                                    <span className="text-[10px] font-black text-muted uppercase tracking-widest mb-3">Balance SO4 / Cl [ {ratio.toFixed(2)} ]</span>
+                                                    <div className="w-full h-3 bg-line rounded-full mb-3 relative overflow-hidden shadow-inner">
+                                                        <div className="absolute top-0 left-1/2 w-0.5 h-full bg-slate-300 dark:bg-slate-600 z-0"></div>
+                                                        <div className={`absolute top-0 h-full w-4 ${color} transition-all duration-1000 z-10 rounded-full shadow-lg`} style={{ left: `calc(${position}% - 8px)` }}></div>
                                                     </div>
-                                                    <div className="flex justify-between w-full text-[8px] font-black text-muted-foreground opacity-50 uppercase mb-1">
-                                                        <span>Malty</span>
-                                                        <span>Bitter</span>
+                                                    <div className="flex justify-between w-full text-[9px] font-black text-muted opacity-60 uppercase mb-2 px-1">
+                                                        <span>{styleConfig.labels.malty}</span>
+                                                        <span>{styleConfig.labels.bitter}</span>
                                                     </div>
-                                                    <span className={`${color} font-black text-xs uppercase`}>{label} ({ratio})</span>
+                                                    <span className={`${textColor} font-black text-xs uppercase tracking-widest bg-${color.split('-')[1]}-500/10 px-4 py-1.5 rounded-xl border border-${color.split('-')[1]}-500/20`}>{label}</span>
                                                 </div>
                                             );
                                         })()}
                                     </div>
 
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-12">
                                         {['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].map(ion => {
                                             const final = Math.round(scaledRecipe.waterCalc.finalProfile[ion]);
                                             const target = scaledRecipe.waterProfile[ion];
@@ -979,13 +1100,13 @@ export default function RecipeDetailView() {
                                             const isWarning = error > 15;
                                             
                                             return (
-                                                <div key={ion} className="flex flex-col items-center group relative">
-                                                    <span className="text-muted text-[10px] uppercase tracking-widest mb-2 font-black group-hover:text-amber-500 transition-colors">{ion}</span>
-                                                    <div className={`relative flex items-center justify-center w-20 h-20 md:w-24 md:h-24 rounded-full border-4 transition-all duration-500 ${
-                                                        isPerfect ? 'border-emerald-500 bg-emerald-500/5' : 
-                                                        isWarning ? 'border-red-500/30 bg-red-500/5' : 'border-line bg-surface'
+                                                <div key={ion} className="flex flex-col items-center group/sim relative">
+                                                    <span className="text-muted text-[10px] uppercase tracking-widest mb-4 font-black group-hover/sim:text-blue-500 transition-colors">{ion}</span>
+                                                    <div className={`relative flex items-center justify-center w-24 h-24 md:w-28 md:h-28 rounded-[2rem] border-2 transition-all duration-500 group-hover/sim:rotate-6 group-hover/sim:scale-105 ${
+                                                        isPerfect ? 'border-emerald-500 bg-emerald-500/5 shadow-lg shadow-emerald-500/10' : 
+                                                        isWarning ? 'border-red-500/30 bg-red-500/5' : 'border-line bg-panel shadow-sm'
                                                     }`}>
-                                                        <span className={`text-2xl md:text-3xl font-black tabular-nums ${
+                                                        <span className={`text-2xl md:text-4xl font-black tabular-nums ${
                                                             isPerfect ? 'text-emerald-600' : 
                                                             isWarning ? 'text-red-500' : 'text-content'
                                                         }`}>
@@ -993,27 +1114,27 @@ export default function RecipeDetailView() {
                                                         </span>
                                                         
                                                         {isPerfect && (
-                                                            <div className="absolute -top-2 -right-2 bg-emerald-500 text-white p-1 rounded-full shadow-lg border-2 border-white dark:border-slate-900 animate-bounce-subtle">
-                                                                <Check size={12} />
+                                                            <div className="absolute -top-3 -right-3 bg-emerald-500 text-white p-2 rounded-xl shadow-xl border-4 border-surface animate-bounce-subtle z-20">
+                                                                <Check size={14} strokeWidth={4} />
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="mt-3 flex flex-col items-center">
-                                                        <span className="text-[10px] text-muted-foreground font-black uppercase opacity-60">Objetivo</span>
-                                                        <span className="text-xs font-bold text-content">{target} ppm</span>
+                                                    <div className="mt-5 flex flex-col items-center group-hover/sim:translate-y-1 transition-transform">
+                                                        <span className="text-[10px] text-muted font-black uppercase opacity-60 mb-0.5">Objetivo</span>
+                                                        <span className="text-sm font-black text-content">{target || 0} <span className="text-muted font-bold">ppm</span></span>
                                                     </div>
-                                                    
-                                                    {isPerfect && (
-                                                        <span className="absolute -bottom-6 text-[8px] font-black text-emerald-500 uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">¡CLAVADO! Precision Hit</span>
-                                                    )}
                                                 </div>
                                             );
                                         })}
                                     </div>
                                     
-                                    {/* Alerta de Desviación Crítica */}
+                                    {/* Alerta de Desviación Crítica Premium */}
                                     {(() => {
+                                        const styleConfig = WATER_STYLE_CONFIG[scaledRecipe.subStyle] || WATER_STYLE_CONFIG['Balanced'];
+                                        const ignored = styleConfig.ignoredWarnings || [];
+
                                         const criticalIons = ['Ca', 'Mg', 'SO4', 'Cl', 'Na', 'HCO3'].filter(ion => {
+                                            if (ignored.includes(ion)) return false;
                                             const error = Math.abs(scaledRecipe.waterCalc.finalProfile[ion] - (scaledRecipe.waterProfile[ion] || 0));
                                             const target = scaledRecipe.waterProfile[ion];
                                             return target > 0 && (error / target) * 100 > 25 && error > 15;
@@ -1021,13 +1142,14 @@ export default function RecipeDetailView() {
 
                                         if (criticalIons.length > 0) {
                                             return (
-                                                <div className="mt-12 p-5 bg-red-500/10 border border-red-500/30 rounded-3xl flex items-center gap-5 animate-pulse-slow">
-                                                    <div className="bg-red-500 text-white p-3 rounded-2xl shadow-lg ring-4 ring-red-500/20"><AlertTriangle size={24} /></div>
-                                                    <div className="text-left">
-                                                        <h6 className="font-black text-red-600 dark:text-red-400 text-lg uppercase tracking-tighter">Saturación Mineral Crítica</h6>
-                                                        <p className="text-sm font-medium text-red-500/80">
-                                                            Los iones <span className="font-black">{criticalIons.join(', ')}</span> se desvían drásticamente. 
-                                                            Esto suele ocurrir cuando el agua base ya es muy dura o las sales requeridas saturan el perfil.
+                                                <div className="mt-16 p-8 bg-red-500/5 border border-red-500/20 rounded-[2.5rem] flex flex-col md:flex-row items-center gap-8 animate-pulse-slow">
+                                                    <div className="bg-red-500 text-white p-5 rounded-[2rem] shadow-xl shadow-red-500/20 flex-shrink-0 animate-bounce-subtle">
+                                                        <AlertTriangle size={32} />
+                                                    </div>
+                                                    <div className="text-center md:text-left flex-1">
+                                                        <h6 className="font-black text-red-600 dark:text-red-400 text-2xl uppercase tracking-tighter mb-2">Desviación Mineral Crítica</h6>
+                                                        <p className="text-lg font-medium text-red-500/80 leading-relaxed max-w-2xl">
+                                                            Los iones <span className="bg-red-500/10 px-3 py-1 rounded-lg font-black">{criticalIons.join(', ')}</span> presentan diferencias significativas respecto al objetivo del estilo. Verifique su agua base o ajuste la carga de sales compensatorias.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1036,10 +1158,13 @@ export default function RecipeDetailView() {
                                         return null;
                                     })()}
                                 </div>
-                                <p className="text-center text-xs text-muted/60 mt-8 italic font-bold relative z-10">
-                                    * El motor de cálculo optimiza las sales para minimizar el error cuadrático medio. 
-                                    Los desviaciones menores son normales debido al acoplamiento iónico.
-                                </p>
+                                <div className="mt-12 flex items-center justify-center gap-4 text-muted/50">
+                                    <div className="h-px w-12 bg-line"></div>
+                                    <p className="text-xs italic font-bold uppercase tracking-widest text-center">
+                                        Motor de Optimización WLS Rev. 4.2 • Error Minmizado
+                                    </p>
+                                    <div className="h-px w-12 bg-line"></div>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1133,21 +1258,27 @@ export default function RecipeDetailView() {
                                     return (
                                         <div key={idx} className="relative group">
                                             {/* Punto de la línea de tiempo */}
-                                            <div className="absolute -left-[54px] md:-left-[78px] top-2 bg-white dark:bg-slate-900 border-4 border-slate-300 dark:border-slate-600 w-8 h-8 rounded-full shadow-md z-10 flex items-center justify-center transition-colors group-hover:border-blue-500 timeline-dot">
+                                            <div className="absolute -left-[54px] md:-left-[78px] top-2 bg-white dark:bg-slate-900 border-4 border-slate-300 dark:border-slate-600 w-8 h-8 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.1)] z-10 flex items-center justify-center transition-all group-hover:border-blue-500 group-hover:scale-110 timeline-dot">
                                                 <div className="w-2.5 h-2.5 bg-slate-400 dark:bg-slate-500 rounded-full group-hover:bg-blue-500 transition-colors"></div>
                                             </div>
 
                                             {/* Fecha y Autor */}
-                                            <div className="flex items-center gap-3 mb-3 no-print">
-                                                <Calendar size={14} className="text-slate-400" />
-                                                <span className="text-sm font-black text-slate-400 tracking-widest uppercase">{mod.date || new Date(mod.timestamp).toLocaleDateString()}</span>
-                                                <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full text-[10px] font-bold text-slate-500 border border-slate-200 dark:border-slate-700">Versión {scaledRecipe.modifications.length - idx}</span>
-                                                <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{mod.author || 'Productor'}</span>
+                                            <div className="flex items-center gap-3 mb-4 no-print">
+                                                <div className="bg-blue-500/10 p-1.5 rounded-lg border border-blue-500/20">
+                                                    <Calendar size={12} className="text-blue-500" />
+                                                </div>
+                                                <span className="text-xs font-black text-slate-400 tracking-widest uppercase">{mod.date || new Date(mod.timestamp).toLocaleDateString()}</span>
+                                                <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full text-[9px] font-black text-slate-500 border border-line uppercase tracking-tighter">V {scaledRecipe.modifications.length - idx}</span>
+                                                <div className="flex items-center gap-1.5 border-l border-line pl-3">
+                                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                                    <span className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">{mod.author || 'Productor'}</span>
+                                                </div>
                                             </div>
 
                                             {/* Card del Cambio */}
-                                            <div className="bg-panel p-6 md:p-8 rounded-[2rem] border border-line shadow-sm transition-all hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900/50">
-                                                <div className="flex justify-between items-start mb-4 gap-4">
+                                            <div className="bg-panel p-8 md:p-10 rounded-[2.5rem] border border-line shadow-sm transition-all duration-300 hover:shadow-2xl hover:border-blue-500/30 group/card relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/[0.02] rounded-full blur-3xl -mr-16 -mt-16"></div>
+                                                <div className="flex justify-between items-start mb-6 gap-6 relative z-10">
                                                     {editingModIdx === idx ? (
                                                         <div className="flex-1 flex flex-col gap-2">
                                                             <textarea 
@@ -1272,61 +1403,52 @@ export default function RecipeDetailView() {
                         </div>
                     </div>
                 )}
+            </div>
 
-            </div >
+            {showBrewModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 md:p-8 animate-fadeIn">
+                    <div className="bg-panel w-full max-w-xl rounded-[2.5rem] shadow-2xl border border-line overflow-hidden relative">
+                        <div className="p-8 border-b border-line flex justify-between items-center">
+                            <h4 className="text-xl font-bold">Iniciar Lote de Producción</h4>
+                            <button onClick={() => setShowBrewModal(false)} className="text-muted hover:text-content transition-colors">
+                                <X size={24} />
+                            </button>
+                        </div>
 
-            {/* MODAL DE COCINAR LOTE */}
-            {
-                showBrewModal && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-                        <div className="bg-panel w-full max-w-md rounded-3xl shadow-2xl border border-line overflow-hidden" onClick={e => e.stopPropagation()}>
-                            <div className="px-6 py-5 border-b border-line flex justify-between items-center bg-black/5 dark:bg-white/5">
-                                <h3 className="font-black text-content text-xl flex items-center gap-2">
-                                    <Play size={24} className="text-amber-500 fill-amber-500" /> Nuevo Lote
-                                </h3>
-                                <button onClick={() => setShowBrewModal(false)} className="p-2 text-muted hover:text-content hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors">
-                                    <X size={20} />
-                                </button>
+                        <div className="p-8 space-y-6">
+                            <div>
+                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Volumen a Cocinar (L)</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={targetVol}
+                                    onChange={(e) => setTargetVol(Number(e.target.value))}
+                                    className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors text-center font-bold text-lg"
+                                />
                             </div>
-                            <div className="p-6 space-y-5">
-                                <div>
-                                    <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre de la Receta</label>
-                                    <div className="w-full p-3 border border-line rounded-xl bg-surface text-content font-bold">{selectedRecipe.name}</div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Volumen a Cocinar (L)</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={targetVol}
-                                        onChange={(e) => setTargetVol(Number(e.target.value))}
-                                        className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors text-center font-bold text-lg"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Lote / ID (Opcional)</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: Lote #42 / IPA Especial"
-                                        value={batchIdentity}
-                                        onChange={(e) => setBatchIdentity(e.target.value)}
-                                        className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors font-medium"
-                                    />
-                                </div>
-
-                                <button
-                                    onClick={handleStartBrew}
-                                    disabled={targetVol <= 0 || isStartingBrew}
-                                    className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-xl shadow-lg transition-transform hover:-translate-y-1 flex items-center justify-center gap-2 mt-2"
-                                >
-                                    {isStartingBrew ? <Loader2 className="animate-spin" size={20} /> : <Thermometer size={20} />}
-                                    {isStartingBrew ? 'Preparando equipo...' : 'Iniciar Producción'}
-                                </button>
+                            <div>
+                                <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Nombre del Lote / ID (Opcional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Lote #42 / IPA Especial"
+                                    value={batchIdentity}
+                                    onChange={(e) => setBatchIdentity(e.target.value)}
+                                    className="w-full p-3 border border-line rounded-xl outline-none bg-surface focus:bg-panel text-content focus:border-amber-500 transition-colors font-medium"
+                                />
                             </div>
+
+                            <button
+                                onClick={handleStartBrew}
+                                disabled={targetVol <= 0 || isStartingBrew}
+                                className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-xl shadow-lg transition-transform hover:-translate-y-1 flex items-center justify-center gap-2 mt-2"
+                            >
+                                {isStartingBrew ? <Loader2 className="animate-spin" size={20} /> : <Thermometer size={20} />}
+                                {isStartingBrew ? 'Preparando equipo...' : 'Iniciar Producción'}
+                            </button>
                         </div>
                     </div>
-                )
-            }
-        </div >
+                </div>
+            )}
+        </div>
     );
 }
