@@ -33,9 +33,10 @@ export default function InventoryView() {
         isSyncing 
     } = useInventory();
     
-    const { isLowStock } = useInventoryAlerts(inventory);
+    const { isLowStock, isExpired, getStockStatus } = useInventoryAlerts(inventory);
     const [newInvItem, setNewInvItem] = useState({ 
-        category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' 
+        category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '',
+        minThreshold: '', expiryDate: ''
     });
     const [showInvForm, setShowInvForm] = useState(false);
     const [isShoppingListOpen, setIsShoppingListOpen] = useState(false);
@@ -57,7 +58,10 @@ export default function InventoryView() {
             stock: stockValue, 
             price: Number(newInvItem.price) 
         });
-        setNewInvItem({ category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '' });
+        setNewInvItem({ 
+            category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '',
+            minThreshold: '', expiryDate: ''
+        });
         setShowInvForm(false);
     };
 
@@ -294,21 +298,28 @@ export default function InventoryView() {
                             <table className="w-full text-left text-sm whitespace-nowrap">
                                 <thead className="text-xs text-muted uppercase bg-panel border-b border-line">
                                     <tr>
-                                        <th className="px-6 py-5 font-bold tracking-wider text-left w-1/3">Ingrediente</th>
-                                        <th className="px-6 py-5 font-bold tracking-wider text-left w-1/4">Stock Actual</th>
-                                        <th className="px-6 py-5 font-bold tracking-wider text-left w-1/4">Costo Unidad</th>
+                                        <th className="px-6 py-5 font-bold tracking-wider text-left w-1/4">Ingrediente</th>
+                                        <th className="px-6 py-5 font-bold tracking-wider text-left">Stock Actual</th>
+                                        <th className="px-6 py-5 font-bold tracking-wider text-left">Costo Unidad</th>
+                                        <th className="px-6 py-5 font-bold tracking-wider text-left">Umbral</th>
+                                        <th className="px-6 py-5 font-bold tracking-wider text-left">Vencimiento</th>
                                         <th className="px-6 py-5 text-center w-16">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-line">
                                     {categoryItems.map((item) => {
                                         const low = isLowStock(item);
+                                        const expired = isExpired(item);
 
                                         return (
-                                            <tr key={item.id} className="hover:bg-black/5 dark:hover:bg-white/5 group transition-colors">
-                                                <td className={`px-6 py-5 font-bold ${low ? 'text-red-500' : 'text-content'} relative group/tooltip`}>
+                                            <tr key={item.id} className={`hover:bg-black/5 dark:hover:bg-white/5 group transition-colors ${expired ? 'bg-red-500/5' : low ? 'bg-amber-500/5' : ''}`}>
+                                                <td className={`px-6 py-5 font-bold relative group/tooltip`}>
                                                     <div className="flex items-center gap-2">
-                                                        {low && <AlertTriangle size={16} className="text-red-500 animate-pulse" />}
+                                                        {expired ? (
+                                                            <X size={16} className="text-red-500" />
+                                                        ) : low ? (
+                                                            <AlertTriangle size={16} className="text-amber-500 animate-pulse" />
+                                                        ) : null}
                                                         <input 
                                                             type="text"
                                                             defaultValue={item.name}
@@ -317,11 +328,11 @@ export default function InventoryView() {
                                                                     updateItemAndSync(item.id, { name: e.target.value });
                                                                 }
                                                             }}
-                                                            className={`bg-transparent border-none outline-none focus:ring-0 p-0 font-bold ${low ? 'text-red-500' : 'text-content'} w-full focus:bg-white/5 rounded px-1 -ml-1 transition-all`}
+                                                            className={`bg-transparent border-none outline-none focus:ring-0 p-0 font-bold ${expired ? 'text-red-500' : low ? 'text-amber-600' : 'text-content'} w-full focus:bg-white/5 rounded px-1 -ml-1 transition-all`}
                                                         />
                                                         {item.description && (
                                                             <div className="relative flex items-center shrink-0">
-                                                                <Info size={16} className={`${low ? 'text-red-400' : 'text-blue-400'} cursor-help`} />
+                                                                <Info size={16} className={`${expired ? 'text-red-400' : low ? 'text-amber-400' : 'text-blue-400'} cursor-help`} />
                                                                 <div className="absolute left-6 top-1/2 -translate-y-1/2 w-48 bg-slate-800 text-white text-xs p-3 rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all shadow-xl pointer-events-none whitespace-normal z-[60]">
                                                                     {item.description}
                                                                 </div>
@@ -344,7 +355,7 @@ export default function InventoryView() {
                                                                 const val = Math.max(0, parseFloat(Number(e.target.value).toFixed(4)) || 0);
                                                                 updateItem(item.id, { stock: val });
                                                             }}
-                                                            className={`w-full max-w-[100px] p-2 border ${low ? 'border-red-500/50 focus:ring-red-500' : 'border-line focus:ring-blue-500'} rounded-lg text-center outline-none font-medium bg-surface focus:bg-panel ${low ? 'text-red-600' : 'text-content'} transition-all disabled:opacity-75 disabled:cursor-not-allowed`}
+                                                            className={`w-full max-w-[100px] p-2 border ${expired ? 'border-red-500/50' : low ? 'border-amber-500/50 focus:ring-amber-500' : 'border-line focus:ring-blue-500'} rounded-lg text-center outline-none font-medium bg-surface focus:bg-panel ${expired ? 'text-red-600' : low ? 'text-amber-600' : 'text-content'} transition-all disabled:opacity-75 disabled:cursor-not-allowed`}
                                                         />
                                                         <input
                                                             type="text"
@@ -354,7 +365,7 @@ export default function InventoryView() {
                                                                     updateItem(item.id, { unit: e.target.value });
                                                                 }
                                                             }}
-                                                            className={`w-12 p-1 bg-transparent border-none outline-none text-muted font-bold text-center focus:bg-white/5 rounded focus:ring-1 focus:ring-blue-500/30 ${low ? 'text-red-400' : ''}`}
+                                                            className={`w-12 p-1 bg-transparent border-none outline-none text-muted font-bold text-center focus:bg-white/5 rounded focus:ring-1 focus:ring-blue-500/30 ${expired ? 'text-red-400' : low ? 'text-amber-500' : ''}`}
                                                         />
                                                     </div>
                                                 </td>
@@ -371,6 +382,26 @@ export default function InventoryView() {
                                                         />
                                                         <span className="text-xs shrink-0">/ {item.unit}</span>
                                                     </div>
+                                                </td>
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="number"
+                                                            placeholder="Auto"
+                                                            defaultValue={item.minThreshold || ''}
+                                                            onBlur={(e) => updateItem(item.id, { minThreshold: e.target.value ? Number(e.target.value) : null })}
+                                                            className="w-full max-w-[80px] p-2 border border-line rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-content bg-surface focus:bg-panel text-center transition-all"
+                                                        />
+                                                        <span className="text-[10px] font-black text-muted uppercase">{item.unit}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5">
+                                                    <input
+                                                        type="date"
+                                                        defaultValue={item.expiryDate || ''}
+                                                        onBlur={(e) => updateItem(item.id, { expiryDate: e.target.value || null })}
+                                                        className={`p-2 border border-line rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-xs font-bold ${expired ? 'text-red-500' : 'text-content'} bg-surface focus:bg-panel transition-all`}
+                                                    />
                                                 </td>
                                                 <td className="px-6 py-5 text-center">
                                                     <button

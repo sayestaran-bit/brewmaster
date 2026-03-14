@@ -201,6 +201,9 @@ export default function RecipeListView() {
                 // Helper for name matching
                 const normalizeName = (name) => (name || '').toLowerCase().trim().replace(/\s+/g, ' ');
 
+                let addedRecipesCount = 0;
+                let addedItemsCount = 0;
+
                 // 1. Inyectar Recetas (Evitar duplicados por nombre)
                 for (const recipe of initialRecipes) {
                     const normalizedNewName = normalizeName(recipe.name);
@@ -209,6 +212,7 @@ export default function RecipeListView() {
                     if (!exists) {
                         const { id, ...recipeData } = recipe;
                         await addRecipe(recipeData, id); 
+                        addedRecipesCount++;
                     }
                 }
 
@@ -226,10 +230,15 @@ export default function RecipeListView() {
                             stock: finalStock, 
                             price: Number(itemData.price) 
                         }, id);
+                        addedItemsCount++;
                     }
                 }
                 
-                addToast('¡Catálogo base actualizado con éxito!', 'success');
+                if (addedRecipesCount === 0 && addedItemsCount === 0) {
+                    addToast('Tu catálogo ya está al día.', 'info');
+                } else {
+                    addToast(`Se agregaron ${addedRecipesCount} recetas y ${addedItemsCount} insumos nuevos.`, 'success');
+                }
             } catch (err) {
                 console.error('Error actualizando base:', err);
                 addToast('Error al actualizar la base.', 'error');
@@ -399,7 +408,7 @@ const SortableRecipeCard = React.memo(function SortableRecipeCard(props) {
             <div
                 {...attributes}
                 {...listeners}
-                className="absolute top-4 right-4 z-20 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 p-2 rounded-lg cursor-grab active:cursor-grabbing opacity-0 group-hover/sortable:opacity-100 transition-opacity backdrop-blur-sm"
+                className="absolute top-4 left-4 z-20 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 p-2 rounded-lg cursor-grab active:cursor-grabbing opacity-0 group-hover/sortable:opacity-100 transition-opacity backdrop-blur-sm"
                 title="Arrastrar para reordenar"
             >
                 <GripVertical size={20} className="text-slate-500 dark:text-slate-400" />

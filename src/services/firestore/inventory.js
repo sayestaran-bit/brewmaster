@@ -476,23 +476,68 @@ export async function deleteShoppingList(uid, listId) {
 
 /**
  * Incrementa el stock del inventario basado en una lista de compras confirmada.
+ * Si un ítem no tiene inventoryId, intenta buscarlo por nombre y categoría o lo crea.
  */
 export async function convertPurchaseToStock(uid, listId, confirmedItems) {
     const batch = writeBatch(db);
     const listRef = shoppingListDocRef(uid, listId);
     
-    confirmedItems.forEach(item => {
+    // 1. Obtener inventario actual para resolución de nombres
+    const invSnap = await getDocs(inventoryRef(uid));
+    const inventoryMap = new Map(); // key: "name|category" -> id
+    
+    const normalize = (s) => (s || '').toLowerCase().trim();
+    
+    invSnap.forEach(doc => {
+        const data = doc.data();
+        const key = `${normalize(data.name)}|${normalize(data.category)}`;
+        if (!inventoryMap.has(key)) {
+            inventoryMap.set(key, doc.id);
+        }
+    });
+
+    const updatedItems = [...confirmedItems];
+
+    for (let i = 0; i < updatedItems.length; i++) {
+        const item = updatedItems[i];
         const amountToAdd = Number(item.amount) || 0;
-        if (item.inventoryId && amountToAdd > 0) {
-            const itemRef = inventoryDocRef(uid, item.inventoryId);
+        if (amountToAdd <= 0) continue;
+
+        let targetId = item.inventoryId;
+        const key = `${normalize(item.name)}|${normalize(item.category)}`;
+
+        if (!targetId && inventoryMap.has(key)) {
+            targetId = inventoryMap.get(key);
+            updatedItems[i] = { ...item, inventoryId: targetId };
+        }
+
+        if (targetId) {
+            // Actualizar existente
+            const itemRef = inventoryDocRef(uid, targetId);
             batch.update(itemRef, {
                 stock: increment(amountToAdd),
                 updatedAt: serverTimestamp()
             });
+        } else {
+            // Crear nuevo
+            const newRef = doc(inventoryRef(uid));
+            const newItemData = {
+                name: item.name,
+                category: item.category || 'Malta',
+                unit: item.unit || 'kg',
+                stock: amountToAdd,
+                price: Number(item.price) || 0,
+                updatedAt: serverTimestamp()
+            };
+            batch.set(newRef, newItemData);
+            targetId = newRef.id;
+            updatedItems[i] = { ...item, inventoryId: targetId };
         }
-    });
+    }
     
+    // Actualizar la lista de compras con el nuevo estado e IDs sincronizados
     batch.update(listRef, {
+        items: updatedItems,
         status: 'purchased',
         updatedAt: serverTimestamp()
     });
