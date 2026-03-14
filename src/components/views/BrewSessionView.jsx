@@ -11,6 +11,8 @@ import { useEquipment } from '../../hooks/useEquipment';
 import { useToast } from '../../context/ToastContext';
 import { Settings, Loader2 as LoaderIcon } from 'lucide-react';
 
+import { haptics } from '../../utils/haptics';
+
 function ElapsedTimer({ startTime, label, colorClass = "text-slate-400" }) {
     const [elapsed, setElapsed] = useState(0);
 
@@ -243,6 +245,12 @@ export default function BrewSessionView() {
         const newRunning = !brewState.isRunning;
         const now = Date.now();
 
+        if (newRunning) {
+            haptics.medium();
+        } else {
+            haptics.light();
+        }
+
         let currentBatchId = batch?.id;
         if (!batch && currentPhase === 'cooking') {
             const activeProfile = equipment?.find(e => e.id === recipe.equipmentId) || equipment?.find(e => e.isDefault);
@@ -336,6 +344,11 @@ export default function BrewSessionView() {
         setIsProcessingIngredient(prev => ({ ...prev, [key]: true }));
         try {
             await toggleIngredient(batch.id, ingredient, isConsumed, targetVolume, recipe.targetVolume);
+            if (isConsumed) {
+                haptics.success();
+            } else {
+                haptics.light();
+            }
             addToast(isConsumed ? `${ingredient.name} marcado como añadido.` : `${ingredient.name} desmarcado.`, "success");
         } catch (err) {
             console.error("Error toggling ingredient:", err);
@@ -362,6 +375,8 @@ export default function BrewSessionView() {
                 });
             }
         }
+
+        haptics.medium();
 
         if (isLastStep) {
             if (currentPhase === 'cooking') {
@@ -766,10 +781,13 @@ export default function BrewSessionView() {
                     )}
                 </div>
                 <div className="flex items-center gap-3 self-end md:self-center">
-                    <span className="bg-blue-900/30 text-blue-400 px-3 py-1.5 rounded-full font-black text-sm">{targetVolume}L</span>
-                    <span className="bg-slate-800 text-slate-300 px-4 py-2 rounded-full font-black text-xs md:text-sm uppercase">Paso {safeStepIdx + 1}: {step?.title}</span>
-                    <button onClick={handleAbandon} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 p-2 md:px-4 md:py-2 rounded-full border border-transparent hover:border-red-500/50 flex items-center gap-2 font-bold text-sm">
-                        <Trash2 size={18} /> <span className="hidden md:inline">Abandonar</span>
+                    <span className="bg-blue-900/30 text-blue-400 px-4 py-3 rounded-2xl font-black text-sm">{targetVolume}L</span>
+                    <span className="bg-slate-800 text-slate-300 px-5 py-3 rounded-2xl font-black text-xs md:text-sm uppercase tracking-wide border border-slate-700">Paso {safeStepIdx + 1}: {step?.title}</span>
+                    <button 
+                        onClick={(e) => { haptics.warning(); handleAbandon(e); }} 
+                        className="bg-red-500/10 hover:bg-red-500/20 text-red-500 p-4 md:px-6 md:py-3 rounded-2xl border border-transparent hover:border-red-500/50 flex items-center gap-2 font-bold text-sm active:scale-95 transition-all"
+                    >
+                        <Trash2 size={24} /> <span className="hidden md:inline">Abandonar</span>
                     </button>
                 </div>
             </div>

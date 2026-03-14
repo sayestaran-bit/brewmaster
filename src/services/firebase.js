@@ -44,7 +44,7 @@ export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
     localCache: persistentLocalCache({
         tabManager: persistentMultipleTabManager(),
-        cacheSizeBytes: 40 * 1024 * 1024 // 40MB
+        cacheSizeBytes: 100 * 1024 * 1024 // 100MB for "Modo Tanque"
     })
 });
 

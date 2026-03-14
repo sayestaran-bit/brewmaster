@@ -14,6 +14,7 @@ import PageHeader from '../ui/PageHeader';
 import Button from '../ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import ShoppingListModal from '../inventory/ShoppingListModal';
+import { haptics } from '../../utils/haptics';
 
 export default function InventoryView() {
     const navigate = useNavigate();
@@ -58,6 +59,7 @@ export default function InventoryView() {
             stock: stockValue, 
             price: Number(newInvItem.price) 
         });
+        haptics.success();
         setNewInvItem({ 
             category: 'Malta', name: '', stock: 0, unit: 'kg', price: 0, description: '',
             minThreshold: '', expiryDate: ''
@@ -67,6 +69,7 @@ export default function InventoryView() {
 
     const handleDeleteInvItem = async (id) => {
         if (window.confirm('¿Seguro que deseas eliminar este insumo?')) {
+            haptics.warning();
             await deleteItem(id);
         }
     };
@@ -156,8 +159,8 @@ export default function InventoryView() {
                                 <Button 
                                     size="sm" 
                                     variant="primary" 
-                                    className="w-full text-[10px] uppercase font-black tracking-widest"
-                                    onClick={() => setCheckInList(list)}
+                                    className="w-full py-4 text-[10px] uppercase font-black tracking-widest active:scale-95 transition-all"
+                                    onClick={() => { haptics.light(); setCheckInList(list); }}
                                 >
                                     Realizar Check-in
                                 </Button>
@@ -529,8 +532,9 @@ function CheckInModal({ list, onClose, onConfirm }) {
                     <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
                     <Button 
                         variant="primary" 
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20" 
+                        className="flex-1 py-5 bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all" 
                         onClick={() => {
+                            haptics.success();
                             const confirmed = list.items.map((item, idx) => ({
                                 ...item,
                                 amount: quantities[idx]

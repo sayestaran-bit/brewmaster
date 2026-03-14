@@ -482,6 +482,13 @@ export async function convertPurchaseToStock(uid, listId, confirmedItems) {
     const batch = writeBatch(db);
     const listRef = shoppingListDocRef(uid, listId);
     
+    // 0. Check idempotency: If already purchased, abort to avoid duplicates
+    const listSnap = await getDoc(listRef);
+    if (listSnap.exists() && listSnap.data().status === 'purchased') {
+        console.warn(`[Inventario] La lista ${listId} ya fue procesada. Abortando para evitar duplicados.`);
+        return;
+    }
+
     // 1. Obtener inventario actual para resolución de nombres
     const invSnap = await getDocs(inventoryRef(uid));
     const inventoryMap = new Map(); // key: "name|category" -> id

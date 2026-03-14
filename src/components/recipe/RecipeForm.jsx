@@ -17,6 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Lock, Settings, FileSearch } from 'lucide-react';
 import { processRecipeFile } from '../../utils/importRecipe';
 import { useToast } from '../../context/ToastContext';
+import { haptics } from '../../utils/haptics';
 
 export default function RecipeForm() {
     const { id } = useParams();
@@ -433,10 +434,12 @@ export default function RecipeForm() {
 
         if (isEditing) {
             await updateRecipe(formData.id, recipeData);
+            haptics.success();
             setModNote('');
             navigate(`/recipes/${formData.id}`);
         } else {
             await addRecipe(recipeData);
+            haptics.success();
             setModNote('');
             navigate('/recipes');
         }
